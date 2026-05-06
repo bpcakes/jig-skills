@@ -1,0 +1,33 @@
+{
+  "name": "jig-swift",
+  "version": "0.1.0",
+  "description": "Swift 6 iOS refinement skill for behavior-preserving SwiftUI, UIKit, and concurrency-aware cleanup.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/featherenvy/jig-skills",
+  "repository": "https://github.com/featherenvy/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "swift",
+    "ios",
+    "swiftui",
+    "uikit",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig Swift",
+    "shortDescription": "Swift 6 iOS refinement skill",
+    "longDescription": "Swift-focused Codex skill for refining recently touched Swift 6 iOS code while preserving UI behavior, actor isolation, concurrency semantics, and public API contracts.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Simplify my current Swift changes"
+    ]
+  }
+}

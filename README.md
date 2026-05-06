@@ -1,67 +1,112 @@
 # jig-skills
 
-Jig Skills are standalone agent skills for Codex and Claude. Jig integration is optional.
+Portable Codex skills for code review, refinement, and execution planning.
 
-This repository keeps portable skills under `skills/`. Each skill uses a `SKILL.md`
-entrypoint with YAML frontmatter and Markdown instructions, which keeps the source
-usable in both Codex and Claude skill directories.
+This repository is packaged as a Codex plugin marketplace. The marketplace contains
+four plugins, grouped by workflow area:
 
-## Skills
+- `jig-rust`
+- `jig-swift`
+- `jig-typescript`
+- `jig-exec-plans`
 
-Rust:
+Each plugin exposes one or more skills through its own `skills/` directory. The
+same skill sources can still be copied directly into Codex or Claude with
+`scripts/install.sh`.
 
-- `rust-architecture-review`: reviews module, crate, workspace, public API, trait hierarchy, data-flow, and structural error architecture concerns in modified Rust code.
-- `rust-test-quality-review`: reviews whether tests prove changed Rust behavior, including a changed-units map, assertion quality, edge cases, regression coverage, and property-test opportunities.
-- `rust-error-handling-review`: audits changed Rust error paths for swallowed errors, missing context, panic paths, error type design, resilience, async task failures, and `#[must_use]` gaps.
+## Install With Codex
+
+Add this repository as a Codex plugin marketplace:
+
+```sh
+codex plugin marketplace add featherenvy/jig-skills
+```
+
+You can also use the Git URL directly:
+
+```sh
+codex plugin marketplace add git@github.com:featherenvy/jig-skills.git
+```
+
+The marketplace file marks all four plugins as `INSTALLED_BY_DEFAULT` so a Codex
+client that honors that policy can make the full skill set available from one
+marketplace command.
+
+If your Codex version registers the marketplace but does not automatically enable
+the plugins, enable these plugin IDs in the plugin UI or config:
+
+- `jig-rust@jig-skills`
+- `jig-swift@jig-skills`
+- `jig-typescript@jig-skills`
+- `jig-exec-plans@jig-skills`
+
+## Plugins
+
+### Jig Rust
+
+Path: `plugins/jig-rust`
+
 - `rust-simplify`: refines recently modified Rust code for clarity and idiomatic structure while preserving exact behavior.
-- `rust-source-reorg`: reorganizes Rust files without behavior changes using canonical item ordering, precise `use` grouping/merging, attribute ordering, and the detailed rules in `skills/rust-source-reorg/references/rust-source-reorg-rules.md`.
+- `rust-source-reorg`: reorganizes Rust files without behavior changes. Covers item ordering, `use` grouping and merging, attribute ordering, and the rules in `plugins/jig-rust/skills/rust-source-reorg/references/rust-source-reorg-rules.md`.
+- `rust-architecture-review`: reviews module boundaries, crate/workspace structure, public APIs, trait hierarchy, data flow, and structural error architecture.
+- `rust-error-handling-review`: audits changed error paths for swallowed errors, missing context, panic paths, error type design, resilience, async task failures, and `#[must_use]` gaps.
+- `rust-test-quality-review`: checks whether tests prove changed behavior. Covers changed units, assertion quality, edge cases, regression coverage, and property-test opportunities.
 
-Swift:
+### Jig Swift
 
-- `swift-simplify`: refines recently modified Swift 6 iOS code for clarity, consistency, SwiftUI/UIKit correctness, and concurrency safety while preserving exact behavior.
+Path: `plugins/jig-swift`
 
-TypeScript:
+- `swift-simplify`: refines recently modified Swift 6 iOS code for clarity, SwiftUI/UIKit correctness, and concurrency safety while preserving exact behavior.
+
+### Jig TypeScript
+
+Path: `plugins/jig-typescript`
 
 - `typescript-simplify`: refines recently modified TypeScript or React code for clarity and project-standard style while preserving behavior.
-- `typescript-type-system-review`: reviews TypeScript type-system quality. If TypeScript code is pasted directly, it reviews only that code; otherwise it uses the normal scoped-change workflow.
+- `typescript-type-system-review`: reviews TypeScript type safety, type clarity, generics, utility types, and public API shapes. If code is pasted directly, it reviews only that code; otherwise it uses the scoped-change workflow.
 
-Generic:
+### Jig ExecPlans
 
-- `write-exec-plan`: writes a self-contained ExecPlan that follows PLANS.md-style requirements, including living-document sections, observable acceptance, validation, idempotence, and durable-state lifecycle coverage.
-- `improve-exec-plan`: improves an existing ExecPlan without changing its intent. It requires either a named plan file or a recent ExecPlan in chat, verifies plan claims against repository evidence, and rewrites file targets in place.
+Path: `plugins/jig-exec-plans`
+
+- `write-exec-plan`: writes a self-contained ExecPlan that follows PLANS.md-style requirements. Covers living-document sections, observable acceptance, validation, idempotence, and durable-state lifecycle coverage.
+- `improve-exec-plan`: improves an existing ExecPlan without changing its intent. Requires either a named plan file or a recent ExecPlan in chat, verifies claims against repository evidence, and rewrites file targets in place.
 
 ## Scope
 
-Most Rust, Swift, and TypeScript skills accept a review or edit scope:
+Most Rust, Swift, and TypeScript skills can work against one of these scopes:
 
-- `current working changes`: default. Inspect unstaged and staged changes.
-- `feature branch`: compare the current branch to the merge base with the default branch.
-- `base ref`: compare a named base ref, tag, or commit to `HEAD`.
+- `current working changes`: the default. Inspect unstaged and staged changes.
+- `feature branch`: compare the current branch with the merge base of the default branch.
+- `base ref`: compare a named ref, tag, or commit with `HEAD`.
 
-If the user names files or directories, treat those as an additional scope constraint.
+Named files or directories further narrow the scope.
 
-Some skills add target-specific behavior:
+Some skills have extra target rules:
 
-- `swift-simplify` focuses on uncommitted Swift code and directly related tests or support files.
-- `typescript-type-system-review` reviews pasted TypeScript code when code is supplied directly in the prompt.
-- `improve-exec-plan` requires a concrete ExecPlan target: either a file path or a recent ExecPlan from the chat.
-- `write-exec-plan` should read repository planning guidance such as `.agent/PLANS.md` when available and produce a fully self-contained plan.
+- `swift-simplify` focuses on uncommitted Swift code plus directly related tests or support files.
+- `typescript-type-system-review` reviews pasted TypeScript when code is supplied in the prompt.
+- `improve-exec-plan` requires a concrete ExecPlan target: a file path or a recent ExecPlan from chat.
+- `write-exec-plan` reads repository planning guidance such as `.agent/PLANS.md` when available and produces a fully self-contained plan.
 
-## Install
+## Direct Skill Copy
 
-Install all skills into Codex:
+The plugin marketplace is the preferred distribution path. For environments that
+only support direct skills, use the installer script.
+
+Install every skill into Codex:
 
 ```sh
 scripts/install.sh codex
 ```
 
-Install all skills into Claude:
+Install every skill into Claude:
 
 ```sh
 scripts/install.sh claude
 ```
 
-Install one skill, replacing an existing copy:
+Install one skill and replace any existing copy:
 
 ```sh
 scripts/install.sh codex --force rust-simplify

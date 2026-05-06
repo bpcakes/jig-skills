@@ -1,0 +1,33 @@
+{
+  "name": "jig-exec-plans",
+  "version": "0.1.0",
+  "description": "ExecPlan authoring and improvement skills for self-contained implementation plans.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/featherenvy/jig-skills",
+  "repository": "https://github.com/featherenvy/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "planning",
+    "execplan",
+    "implementation-plan",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig ExecPlans",
+    "shortDescription": "Write and improve executable plans",
+    "longDescription": "Codex skills for writing and improving self-contained ExecPlans with observable acceptance, validation, idempotence, and durable-state lifecycle coverage.",
+    "developerName": "Jig",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Write an ExecPlan for this change",
+      "Improve this ExecPlan against the codebase"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "jig-rust",
+  "version": "0.1.0",
+  "description": "Rust simplification, source reorganization, architecture review, error handling review, and test quality review skills.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/featherenvy/jig-skills",
+  "repository": "https://github.com/featherenvy/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "rust",
+    "review",
+    "refactor",
+    "testing",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig Rust",
+    "shortDescription": "Rust review and refinement skills",
+    "longDescription": "Rust-focused Codex skills for behavior-preserving simplification, source reorganization, architecture review, error handling audits, and test quality review.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Simplify my current Rust changes",
+      "Review Rust error handling in this diff",
+      "Review whether these Rust tests prove behavior"
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "name": "jig-skills",
+  "interface": {
+    "displayName": "Jig Skills"
+  },
+  "plugins": [
+    {
+      "name": "jig-rust",
+      "source": {
+        "source": "local",
+        "path": "./plugins/jig-rust"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Coding"
+    },
+    {
+      "name": "jig-swift",
+      "source": {
+        "source": "local",
+        "path": "./plugins/jig-swift"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Coding"
+    },
+    {
+      "name": "jig-typescript",
+      "source": {
+        "source": "local",
+        "path": "./plugins/jig-typescript"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Coding"
+    },
+    {
+      "name": "jig-exec-plans",
+      "source": {
+        "source": "local",
+        "path": "./plugins/jig-exec-plans"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

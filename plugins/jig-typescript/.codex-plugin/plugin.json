@@ -1,0 +1,34 @@
+{
+  "name": "jig-typescript",
+  "version": "0.1.0",
+  "description": "TypeScript simplification and type-system review skills.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/featherenvy/jig-skills",
+  "repository": "https://github.com/featherenvy/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "typescript",
+    "react",
+    "review",
+    "types",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig TypeScript",
+    "shortDescription": "TypeScript simplification and type review",
+    "longDescription": "TypeScript-focused Codex skills for behavior-preserving simplification and type-system review across type safety, API shape, generics, utility types, and clarity.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Simplify my current TypeScript changes",
+      "Review the TypeScript types in this diff"
+    ]
+  }
+}

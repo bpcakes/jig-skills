@@ -5,7 +5,7 @@ usage() {
     cat <<'EOF'
 Usage: scripts/install.sh codex|claude [--force] [skill-name...]
 
-Installs skills from this repository into the selected agent's skill directory.
+Installs skills from this repository's plugins into the selected agent's skill directory.
 If no skill names are provided, all skills are installed.
 EOF
 }
@@ -45,19 +45,27 @@ fi
 
 script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
 repo_root=$(CDPATH= cd "$script_dir/.." && pwd)
-skills_dir="$repo_root/skills"
+plugins_dir="$repo_root/plugins"
 
 if [ "$#" -eq 0 ]; then
-    set -- $(find "$skills_dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+    set -- $(find "$plugins_dir" -path '*/skills/*/SKILL.md' -type f \
+        -exec sh -c 'for file do basename "$(dirname "$file")"; done' sh {} + | sort)
 fi
 
 mkdir -p "$dest"
 
 for skill in "$@"; do
-    source="$skills_dir/$skill"
+    source=
+    for candidate in "$plugins_dir"/*/skills/"$skill"; do
+        if [ -d "$candidate" ]; then
+            source=$candidate
+            break
+        fi
+    done
+
     target="$dest/$skill"
 
-    if [ ! -d "$source" ]; then
+    if [ -z "$source" ]; then
         printf 'Unknown skill: %s\n' "$skill" >&2
         exit 1
     fi
@@ -76,4 +84,3 @@ for skill in "$@"; do
 done
 
 printf '%s\n' "$restart_message"
-
