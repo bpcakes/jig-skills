@@ -28,17 +28,29 @@ You can also use the Git URL directly:
 codex plugin marketplace add git@github.com:featherenvy/jig-skills.git
 ```
 
-The marketplace file marks all four plugins as `INSTALLED_BY_DEFAULT` so a Codex
-client that honors that policy can make the full skill set available from one
-marketplace command.
+The marketplace file marks all four plugins as `INSTALLED_BY_DEFAULT`. In Codex
+0.128.0, adding the marketplace records the marketplace first, and the
+interactive client may install the default plugins when Codex next starts.
 
-If your Codex version registers the marketplace but does not automatically enable
-the plugins, enable these plugin IDs in the plugin UI or config:
+If Codex prints messages such as `Installed Jig Rust plugin` during startup,
+quit that session and start Codex again before relying on `$plugin:skill`
+autocomplete. The installed plugin is available to the model immediately, but
+the interactive skill autocomplete index can lag behind first-time plugin
+installation.
+
+If your Codex version registers the marketplace but does not enable the plugins,
+enable these plugin IDs in the plugin UI or config:
 
 - `jig-rust@jig-skills`
 - `jig-swift@jig-skills`
 - `jig-typescript@jig-skills`
 - `jig-exec-plans@jig-skills`
+
+After the plugins are enabled, Codex exposes the skills with plugin-qualified
+names. For example, the Rust simplification skill is
+`jig-rust:rust-simplify`. In the Codex composer, typing `$jig-rust:` should
+open the Rust skill submenu; choose one of the listed skills to insert the full
+skill name.
 
 ## Plugins
 
@@ -52,11 +64,23 @@ Path: `plugins/jig-rust`
 - `rust-error-handling-review`: audits changed error paths for swallowed errors, missing context, panic paths, error type design, resilience, async task failures, and `#[must_use]` gaps.
 - `rust-test-quality-review`: checks whether tests prove changed behavior. Covers changed units, assertion quality, edge cases, regression coverage, and property-test opportunities.
 
+Plugin-qualified skill names:
+
+- `jig-rust:rust-simplify`
+- `jig-rust:rust-source-reorg`
+- `jig-rust:rust-architecture-review`
+- `jig-rust:rust-error-handling-review`
+- `jig-rust:rust-test-quality-review`
+
 ### Jig Swift
 
 Path: `plugins/jig-swift`
 
 - `swift-simplify`: refines recently modified Swift 6 iOS code for clarity, SwiftUI/UIKit correctness, and concurrency safety while preserving exact behavior.
+
+Plugin-qualified skill name:
+
+- `jig-swift:swift-simplify`
 
 ### Jig TypeScript
 
@@ -65,12 +89,22 @@ Path: `plugins/jig-typescript`
 - `typescript-simplify`: refines recently modified TypeScript or React code for clarity and project-standard style while preserving behavior.
 - `typescript-type-system-review`: reviews TypeScript type safety, type clarity, generics, utility types, and public API shapes. If code is pasted directly, it reviews only that code; otherwise it uses the scoped-change workflow.
 
+Plugin-qualified skill names:
+
+- `jig-typescript:typescript-simplify`
+- `jig-typescript:typescript-type-system-review`
+
 ### Jig ExecPlans
 
 Path: `plugins/jig-exec-plans`
 
 - `write-exec-plan`: writes a self-contained ExecPlan that follows PLANS.md-style requirements. Covers living-document sections, observable acceptance, validation, idempotence, and durable-state lifecycle coverage.
 - `improve-exec-plan`: improves an existing ExecPlan without changing its intent. Requires either a named plan file or a recent ExecPlan in chat, verifies claims against repository evidence, and rewrites file targets in place.
+
+Plugin-qualified skill names:
+
+- `jig-exec-plans:write-exec-plan`
+- `jig-exec-plans:improve-exec-plan`
 
 ## Scope
 
