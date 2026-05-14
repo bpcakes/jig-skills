@@ -6,8 +6,19 @@ usage() {
 Usage: scripts/install.sh codex|claude [--force] [skill-name...]
 
 Installs skills from this repository's plugins into the selected agent's skill directory.
-If no skill names are provided, all skills are installed.
+If no skill names are provided, all compatible skills are installed.
 EOF
+}
+
+is_codex_only_skill() {
+    case "$1" in
+        comprehensive-review)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 if [ "$#" -lt 1 ]; then
@@ -50,11 +61,27 @@ plugins_dir="$repo_root/plugins"
 if [ "$#" -eq 0 ]; then
     set -- $(find "$plugins_dir" -path '*/skills/*/SKILL.md' -type f \
         -exec sh -c 'for file do basename "$(dirname "$file")"; done' sh {} + | sort)
+    if [ "$target_agent" = "claude" ]; then
+        filtered=
+        for skill in "$@"; do
+            if is_codex_only_skill "$skill"; then
+                continue
+            fi
+            filtered="$filtered $skill"
+        done
+        # shellcheck disable=SC2086
+        set -- $filtered
+    fi
 fi
 
 mkdir -p "$dest"
 
 for skill in "$@"; do
+    if [ "$target_agent" = "claude" ] && is_codex_only_skill "$skill"; then
+        printf 'Unsupported for Claude direct install: %s\n' "$skill" >&2
+        exit 1
+    fi
+
     source=
     for candidate in "$plugins_dir"/*/skills/"$skill"; do
         if [ -d "$candidate" ]; then

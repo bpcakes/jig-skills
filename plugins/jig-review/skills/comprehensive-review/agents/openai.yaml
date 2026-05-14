@@ -1,0 +1,7 @@
+interface:
+  display_name: "Comprehensive Review"
+  short_description: "Merge Claude and Codex review findings"
+  default_prompt: "Use $comprehensive-review to run Claude Code and Codex reviews, then merge the findings."
+
+policy:
+  allow_implicit_invocation: true

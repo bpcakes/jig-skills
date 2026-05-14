@@ -41,6 +41,18 @@
       "category": "Coding"
     },
     {
+      "name": "jig-review",
+      "source": {
+        "source": "local",
+        "path": "./plugins/jig-review"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Coding"
+    },
+    {
       "name": "jig-exec-plans",
       "source": {
         "source": "local",

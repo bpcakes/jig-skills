@@ -1,0 +1,31 @@
+{
+  "name": "jig-review",
+  "version": "0.1.0",
+  "description": "Comprehensive review skill that merges Claude Code and Codex findings.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/featherenvy/jig-skills",
+  "repository": "https://github.com/featherenvy/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "review",
+    "claude-code",
+    "codex",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig Review",
+    "shortDescription": "Combined Claude Code and Codex reviews",
+    "longDescription": "Codex skill for running Claude Code and native Codex review passes over the same scope, then deduplicating and merging findings into one consolidated report. Requires the Claude Code plugin for the Claude review pass.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Run a comprehensive review of my current changes"
+    ]
+  }
+}

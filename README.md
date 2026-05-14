@@ -3,16 +3,18 @@
 Portable Codex skills for code review, refinement, and execution planning.
 
 This repository is packaged as a Codex plugin marketplace. The marketplace contains
-four plugins, grouped by workflow area:
+five plugins, grouped by workflow area:
 
 - `jig-rust`
 - `jig-swift`
 - `jig-typescript`
+- `jig-review`
 - `jig-exec-plans`
 
-Each plugin exposes one or more skills through its own `skills/` directory. The
-same skill sources can still be copied directly into Codex or Claude with
-`scripts/install.sh`.
+Each plugin exposes one or more skills through its own `skills/` directory. Most
+skill sources can still be copied directly into Codex or Claude with
+`scripts/install.sh`; `comprehensive-review` is Codex-oriented and expects the
+Claude Code plugin for its Claude review pass.
 
 ## Install With Codex
 
@@ -28,7 +30,7 @@ You can also use the Git URL directly:
 codex plugin marketplace add git@github.com:featherenvy/jig-skills.git
 ```
 
-The marketplace file marks all four plugins as `INSTALLED_BY_DEFAULT`. In Codex
+The marketplace file marks all five plugins as `INSTALLED_BY_DEFAULT`. In Codex
 0.128.0, adding the marketplace records the marketplace first, and the
 interactive client may install the default plugins when Codex next starts.
 
@@ -44,6 +46,7 @@ enable these plugin IDs in the plugin UI or config:
 - `jig-rust@jig-skills`
 - `jig-swift@jig-skills`
 - `jig-typescript@jig-skills`
+- `jig-review@jig-skills`
 - `jig-exec-plans@jig-skills`
 
 After the plugins are enabled, Codex exposes the skills with plugin-qualified
@@ -94,6 +97,16 @@ Plugin-qualified skill names:
 - `jig-typescript:typescript-simplify`
 - `jig-typescript:typescript-type-system-review`
 
+### Jig Review
+
+Path: `plugins/jig-review`
+
+- `comprehensive-review`: runs a Claude Code review with `$cc:review`, independently performs a native Codex review over the same scope, then deduplicates and merges actionable findings into one report. Requires the Claude Code plugin for the Claude review pass.
+
+Plugin-qualified skill name:
+
+- `jig-review:comprehensive-review`
+
 ### Jig ExecPlans
 
 Path: `plugins/jig-exec-plans`
@@ -126,15 +139,17 @@ Some skills have extra target rules:
 ## Direct Skill Copy
 
 The plugin marketplace is the preferred distribution path. For environments that
-only support direct skills, use the installer script.
+only support direct skills, use the installer script. `comprehensive-review` is
+intended for Codex direct-skill installs, not Claude direct-skill installs,
+because it references Codex's native review behavior and `$cc:review`.
 
-Install every skill into Codex:
+Install every compatible skill into Codex:
 
 ```sh
 scripts/install.sh codex
 ```
 
-Install every skill into Claude:
+Install every Claude-compatible skill into Claude:
 
 ```sh
 scripts/install.sh claude
