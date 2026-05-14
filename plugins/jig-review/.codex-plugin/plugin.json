@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "Jig Review",
     "shortDescription": "Combined Claude Code and Codex reviews",
-    "longDescription": "Codex skill for running Claude Code and native Codex review passes over the same scope, then deduplicating and merging findings into one consolidated report. Requires the Claude Code plugin for the Claude review pass.",
+    "longDescription": "Codex skill for running Claude Code and native Codex review passes over the same scope, then deduplicating and merging findings into one consolidated report. Requires cc-plugin-codex for the Claude review pass: https://github.com/sendbird/cc-plugin-codex.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [
