@@ -70,9 +70,10 @@ Path: `plugins/jig-typescript`
 - `typescript-type-system-review` — reviews type safety, generics, utility types, and public API shapes. Pass code directly in the prompt to review a snippet instead of a diff.
 - `react-hooks-effects-review` — reviews React hooks, Effects, refs, custom hooks, render purity, dependency correctness, stale closures, cleanup, and state synchronization.
 - `react-state-data-flow-review` — reviews React state ownership, derived state, reducers, context, server/client data boundaries, async state modeling, external stores, optimistic updates, and cache synchronization.
+- `react-test-quality-review` — reviews React tests for user-visible behavior, accessible queries, interaction coverage, async assertions, mocking boundaries, snapshots, and regression confidence.
 - `react-hooks-component-api-review` — reviews React component and hook APIs for prop modeling, controlled/uncontrolled contracts, children typing, callback types, polymorphic components, invalid states, and reusable UI boundaries.
 
-Plugin-qualified names: `jig-typescript:typescript-simplify`, `jig-typescript:typescript-type-system-review`, `jig-typescript:react-hooks-effects-review`, `jig-typescript:react-state-data-flow-review`, `jig-typescript:react-hooks-component-api-review`
+Plugin-qualified names: `jig-typescript:typescript-simplify`, `jig-typescript:typescript-type-system-review`, `jig-typescript:react-hooks-effects-review`, `jig-typescript:react-state-data-flow-review`, `jig-typescript:react-test-quality-review`, `jig-typescript:react-hooks-component-api-review`
 
 ### Jig Review
 
