@@ -1,7 +1,7 @@
 {
   "name": "jig-typescript",
   "version": "0.1.0",
-  "description": "TypeScript, React hooks, state/data flow, test quality, component API, and type-system review skills.",
+  "description": "TypeScript, React hooks, state/data flow, render performance, test quality, component API, and type-system review skills.",
   "author": {
     "name": "Jig"
   },
@@ -15,6 +15,8 @@
     "hooks",
     "state",
     "data-flow",
+    "performance",
+    "render-performance",
     "testing",
     "test-quality",
     "effects",
@@ -27,7 +29,7 @@
   "interface": {
     "displayName": "Jig TypeScript",
     "shortDescription": "TypeScript and React review skills",
-    "longDescription": "TypeScript-focused Codex skills for behavior-preserving simplification, type-system review, React hooks/effects lifecycle review, React state/data-flow review, React test-quality review, and React component/hook API review across type safety, API shape, render purity, state ownership, cache flow, test assertions, accessible queries, reusable UI contracts, prop modeling, cleanup, and stale closures.",
+    "longDescription": "TypeScript-focused Codex skills for behavior-preserving simplification, type-system review, React hooks/effects lifecycle review, React state/data-flow review, React render-performance review, React test-quality review, and React component/hook API review across type safety, API shape, render purity, state ownership, cache flow, render costs, context invalidation, memoization boundaries, test assertions, accessible queries, reusable UI contracts, prop modeling, cleanup, and stale closures.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [
@@ -39,6 +41,7 @@
       "Review the TypeScript types in this diff",
       "Review React hooks and effects in this diff",
       "Review React state and data flow in this diff",
+      "Review React render performance in this diff",
       "Review React test quality in this diff",
       "Review React component and hook APIs in this diff"
     ]
