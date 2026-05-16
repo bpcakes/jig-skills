@@ -1,7 +1,7 @@
 {
   "name": "jig-typescript",
   "version": "0.1.0",
-  "description": "TypeScript simplification and type-system review skills.",
+  "description": "TypeScript, React hooks, and type-system review skills.",
   "author": {
     "name": "Jig"
   },
@@ -11,6 +11,8 @@
   "keywords": [
     "typescript",
     "react",
+    "hooks",
+    "effects",
     "review",
     "types",
     "codex-skills"
@@ -18,8 +20,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Jig TypeScript",
-    "shortDescription": "TypeScript simplification and type review",
-    "longDescription": "TypeScript-focused Codex skills for behavior-preserving simplification and type-system review across type safety, API shape, generics, utility types, and clarity.",
+    "shortDescription": "TypeScript and React review skills",
+    "longDescription": "TypeScript-focused Codex skills for behavior-preserving simplification, type-system review, and React hooks/effects lifecycle review across type safety, API shape, render purity, dependency correctness, cleanup, and stale closures.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [
@@ -28,7 +30,8 @@
     ],
     "defaultPrompt": [
       "Simplify my current TypeScript changes",
-      "Review the TypeScript types in this diff"
+      "Review the TypeScript types in this diff",
+      "Review React hooks and effects in this diff"
     ]
   }
 }
