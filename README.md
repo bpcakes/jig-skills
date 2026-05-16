@@ -49,10 +49,13 @@ Path: `plugins/jig-rust`
 - `rust-simplify` — refines recently modified Rust code for clarity and idiomatic structure while preserving exact behavior.
 - `rust-source-reorg` — reorganizes Rust files without behavior changes: item ordering, `use` grouping and merging, attribute ordering, and the rules in `plugins/jig-rust/skills/rust-source-reorg/references/rust-source-reorg-rules.md`.
 - `rust-architecture-review` — reviews module boundaries, crate/workspace structure, public APIs, trait hierarchy, data flow, and structural error architecture.
+- `rust-security-boundary-review` — reviews Rust security boundaries around secrets, auth/authz, untrusted input reaching sensitive sinks, CORS, cookies, tokens, rate limiting, and public error leakage.
+- `sqlx-query-safety-review` — reviews Rust database access code for SQLx compile-time checking, bind-parameter safety, dynamic SQL risk, nullability, fetch semantics, row counts, N+1 queries, and DB/API DTO boundaries.
+- `sql-transaction-consistency-review` — reviews SQL-backed Rust state changes for transaction boundaries, isolation assumptions, SELECT-before-INSERT races, side effects around commits, retries, and connection lifetime safety.
 - `rust-error-handling-review` — audits changed error paths for swallowed errors, missing context, panic paths, error type design, resilience, async task failures, and `#[must_use]` gaps.
 - `rust-test-quality-review` — checks whether tests prove changed behavior: assertion quality, edge cases, regression coverage, and property-test opportunities.
 
-Plugin-qualified names: `jig-rust:rust-simplify`, `jig-rust:rust-source-reorg`, `jig-rust:rust-architecture-review`, `jig-rust:rust-error-handling-review`, `jig-rust:rust-test-quality-review`
+Plugin-qualified names: `jig-rust:rust-simplify`, `jig-rust:rust-source-reorg`, `jig-rust:rust-architecture-review`, `jig-rust:rust-security-boundary-review`, `jig-rust:sqlx-query-safety-review`, `jig-rust:sql-transaction-consistency-review`, `jig-rust:rust-error-handling-review`, `jig-rust:rust-test-quality-review`
 
 ### Jig Swift
 
