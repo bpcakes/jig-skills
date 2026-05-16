@@ -1,7 +1,7 @@
 {
   "name": "jig-typescript",
   "version": "0.1.0",
-  "description": "TypeScript, React hooks, component API, and type-system review skills.",
+  "description": "TypeScript, React hooks, state/data flow, component API, and type-system review skills.",
   "author": {
     "name": "Jig"
   },
@@ -13,6 +13,8 @@
     "react",
     "components",
     "hooks",
+    "state",
+    "data-flow",
     "effects",
     "component-api",
     "review",
@@ -23,7 +25,7 @@
   "interface": {
     "displayName": "Jig TypeScript",
     "shortDescription": "TypeScript and React review skills",
-    "longDescription": "TypeScript-focused Codex skills for behavior-preserving simplification, type-system review, React hooks/effects lifecycle review, and React component/hook API review across type safety, API shape, render purity, dependency correctness, reusable UI contracts, prop modeling, cleanup, and stale closures.",
+    "longDescription": "TypeScript-focused Codex skills for behavior-preserving simplification, type-system review, React hooks/effects lifecycle review, React state/data-flow review, and React component/hook API review across type safety, API shape, render purity, state ownership, cache flow, reusable UI contracts, prop modeling, cleanup, and stale closures.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [
@@ -34,6 +36,7 @@
       "Simplify my current TypeScript changes",
       "Review the TypeScript types in this diff",
       "Review React hooks and effects in this diff",
+      "Review React state and data flow in this diff",
       "Review React component and hook APIs in this diff"
     ]
   }
