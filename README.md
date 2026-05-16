@@ -17,13 +17,13 @@ Distributed as a Codex plugin marketplace across five plugins. Skills can also b
 Add this repository as a Codex plugin marketplace:
 
 ```sh
-codex plugin marketplace add featherenvy/jig-skills
+codex plugin marketplace add bpcakes/jig-skills
 ```
 
 Or use the Git URL directly:
 
 ```sh
-codex plugin marketplace add git@github.com:featherenvy/jig-skills.git
+codex plugin marketplace add git@github.com:bpcakes/jig-skills.git
 ```
 
 All five plugins are marked `INSTALLED_BY_DEFAULT`. Codex may install them during the next startup — see [Troubleshooting](#troubleshooting) if the skill autocomplete index doesn't reflect them immediately.
