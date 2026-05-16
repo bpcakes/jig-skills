@@ -69,8 +69,9 @@ Path: `plugins/jig-typescript`
 - `typescript-simplify` — refines recently modified TypeScript or React code for clarity and project-standard style while preserving behavior.
 - `typescript-type-system-review` — reviews type safety, generics, utility types, and public API shapes. Pass code directly in the prompt to review a snippet instead of a diff.
 - `react-hooks-effects-review` — reviews React hooks, Effects, refs, custom hooks, render purity, dependency correctness, stale closures, cleanup, and state synchronization.
+- `react-hooks-component-api-review` — reviews React component and hook APIs for prop modeling, controlled/uncontrolled contracts, children typing, callback types, polymorphic components, invalid states, and reusable UI boundaries.
 
-Plugin-qualified names: `jig-typescript:typescript-simplify`, `jig-typescript:typescript-type-system-review`, `jig-typescript:react-hooks-effects-review`
+Plugin-qualified names: `jig-typescript:typescript-simplify`, `jig-typescript:typescript-type-system-review`, `jig-typescript:react-hooks-effects-review`, `jig-typescript:react-hooks-component-api-review`
 
 ### Jig Review
 
