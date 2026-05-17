@@ -1,14 +1,15 @@
 # jig-skills
 
-Specialized code review and refactoring skills for Rust, Swift, and TypeScript.
+Specialized code review, refactoring, planning, and privacy-audit skills for Rust, Swift, TypeScript, and encrypted-product review.
 
 Each skill targets a specific engineering concern — error handling, type safety, test quality, architecture — rather than running a broad, generic pass. *Jig* in the machinist sense: a guide that holds work at the exact angle for a precise cut.
 
-Distributed as a Codex plugin marketplace across five plugins. Skills can also be installed directly into Claude Code.
+Distributed as a Codex plugin marketplace across six plugins. Skills can also be installed directly into Claude Code.
 
 ## Requirements
 
 - Codex ≥ 0.128.0 — for plugin marketplace install
+- Python ≥ 3.10 — for `jig-privacy-audit` helper scripts
 - [Claude Code](https://claude.ai/code) — for direct skill install and the `$cc:review` step in `comprehensive-review`
 - [Claude Code plugin for Codex](https://github.com/sendbird/cc-plugin-codex) — required only for `jig-review:comprehensive-review`
 
@@ -26,7 +27,7 @@ Or use the Git URL directly:
 codex plugin marketplace add git@github.com:bpcakes/jig-skills.git
 ```
 
-All five plugins are marked `INSTALLED_BY_DEFAULT`. Codex may install them during the next startup — see [Troubleshooting](#troubleshooting) if the skill autocomplete index doesn't reflect them immediately.
+All six plugins are marked `INSTALLED_BY_DEFAULT`. Codex may install them during the next startup — see [Troubleshooting](#troubleshooting) if the skill autocomplete index doesn't reflect them immediately.
 
 If your Codex version registers the marketplace but does not enable the plugins, enable these IDs in the plugin UI or config:
 
@@ -36,6 +37,7 @@ jig-swift@jig-skills
 jig-typescript@jig-skills
 jig-review@jig-skills
 jig-exec-plans@jig-skills
+jig-privacy-audit@jig-skills
 ```
 
 In the Codex composer, typing `$jig-rust:` opens the Rust skill submenu. The full qualified name format is `$plugin:skill` — for example, `$jig-rust:rust-simplify`.
@@ -96,6 +98,28 @@ Path: `plugins/jig-exec-plans`
 
 Plugin-qualified names: `jig-exec-plans:write-exec-plan`, `jig-exec-plans:improve-exec-plan`
 
+### Jig Privacy Audit
+
+Path: `plugins/jig-privacy-audit`
+
+- `audit-intake-and-evidence-map` — scopes privacy, zero-knowledge, and E2EE audits and produces an evidence map.
+- `privacy-claims-field-classifier` — builds a field-level privacy matrix from schemas, APIs, code, and traces.
+- `threat-model-and-dataflow-builder` — produces evidence-focused security and privacy threat models.
+- `network-payload-zero-knowledge-test` — scans HAR/network captures for controlled sentinels in requests, responses, telemetry, and third-party traffic.
+- `client-encryption-boundary-audit` — traces whether protected plaintext is encrypted before serialization, upload, local persistence, logs, or telemetry.
+- `crypto-architecture-review` — reviews key hierarchy, primitives, nonce strategy, recovery, sharing, and server influence.
+- `crypto-implementation-static-review` — statically scans cryptographic API use, randomness, KDFs, envelope fields, and plaintext sinks.
+- `server-decryptability-and-plaintext-path-audit` — inspects backend decryptability, plaintext stores, queues, logs, support tools, and admin paths.
+- `metadata-leakage-inventory` — inventories visible metadata and maps privacy risks and claim conflicts.
+- `telemetry-crash-logs-support-leakage-audit` — checks logs, traces, crash reporters, analytics, and support tooling for sensitive leakage.
+- `vulnerability-disclosure-and-retest-manager` — normalizes findings, tracks remediation status, and produces retest summaries.
+
+`audit-common` is a support skill used by the privacy-audit skills for shared severity, confidence, evidence, and redaction rules.
+
+Plugin-qualified names use the `jig-privacy-audit:` prefix, for example `jig-privacy-audit:network-payload-zero-knowledge-test`.
+
+When changing the privacy-audit helper scripts, run `plugins/jig-privacy-audit/scripts/test_fixtures.sh`.
+
 ## Scope
 
 Most Rust, Swift, and TypeScript skills operate against one of three scopes:
@@ -107,6 +131,8 @@ Most Rust, Swift, and TypeScript skills operate against one of three scopes:
 | `base ref` | A named ref, tag, or commit vs. `HEAD`. |
 
 Named files or directories further narrow the scope.
+
+Privacy-audit skills use claim-and-evidence scope instead: product claims, repositories, docs, test accounts, captures, storage/log artifacts, and explicit authorization boundaries.
 
 Per-skill exceptions:
 - `swift-simplify` — focuses on uncommitted Swift code plus directly related tests or support files.

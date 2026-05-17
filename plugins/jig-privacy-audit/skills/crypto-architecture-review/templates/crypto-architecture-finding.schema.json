@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bpcakes/jig-skills/main/plugins/jig-privacy-audit/skills/crypto-architecture-review/templates/crypto-architecture-finding.schema.json",
+  "title": "Crypto Architecture Finding",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "id",
+    "title",
+    "severity",
+    "confidence",
+    "audit_skill",
+    "surface",
+    "affected_claims",
+    "crypto_surface",
+    "evidence",
+    "impact",
+    "recommended_fix",
+    "retest_steps",
+    "limitations"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^CRYPTO-ARCH-[0-9]{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "enum": ["critical", "high", "medium", "low", "informational"]
+    },
+    "confidence": {
+      "enum": ["high", "medium", "low"]
+    },
+    "audit_skill": {
+      "const": "crypto-architecture-review"
+    },
+    "surface": {
+      "type": "string",
+      "minLength": 1
+    },
+    "affected_claims": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "crypto_surface": {
+      "enum": [
+        "key-hierarchy",
+        "aead-and-binding",
+        "nonce-iv",
+        "kdf",
+        "key-wrapping",
+        "multi-device",
+        "recovery-reset",
+        "sharing-revocation",
+        "server-influence",
+        "metadata",
+        "other"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["type", "description", "location", "excerpt_or_summary"],
+        "properties": {
+          "type": { "type": "string" },
+          "description": { "type": "string" },
+          "file": { "type": "string" },
+          "location": { "type": "string" },
+          "excerpt_or_summary": { "type": "string" },
+          "redaction_note": { "type": "string" }
+        }
+      }
+    },
+    "reproduction": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "impact": {
+      "type": "string"
+    },
+    "root_cause_hypothesis": {
+      "type": "string"
+    },
+    "recommended_fix": {
+      "type": "string"
+    },
+    "retest_steps": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "needs_human_cryptographer_review": {
+      "type": "boolean"
+    }
+  }
+}

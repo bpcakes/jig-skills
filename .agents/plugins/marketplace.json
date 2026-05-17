@@ -63,6 +63,18 @@
         "authentication": "ON_USE"
       },
       "category": "Productivity"
+    },
+    {
+      "name": "jig-privacy-audit",
+      "source": {
+        "source": "local",
+        "path": "./plugins/jig-privacy-audit"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Coding"
     }
   ]
 }

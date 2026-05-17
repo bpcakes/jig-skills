@@ -1,0 +1,104 @@
+{
+  "audit": {
+    "product": "unknown",
+    "objective": "unknown",
+    "requested_by": "unknown",
+    "prepared_by": "Codex",
+    "dates": {
+      "prepared": "YYYY-MM-DD"
+    },
+    "environment": "unknown",
+    "authorization": {
+      "status": "unknown",
+      "approved_by": "unknown",
+      "permitted_targets": [],
+      "prohibited_targets": [],
+      "notes": []
+    },
+    "scope": {
+      "in_scope": [],
+      "out_of_scope": [],
+      "assumptions": []
+    }
+  },
+  "claims": [
+    {
+      "id": "CLM-001",
+      "statement": "unknown",
+      "source": "unknown",
+      "source_location": "unknown",
+      "status": "needs_clarification",
+      "audit_questions": []
+    }
+  ],
+  "data_classes": [
+    {
+      "id": "DAT-001",
+      "name": "unknown",
+      "examples": [],
+      "sensitivity": "unknown",
+      "notes": ""
+    }
+  ],
+  "flows": [
+    {
+      "id": "FLW-001",
+      "name": "unknown",
+      "description": "",
+      "claim_ids": [],
+      "data_class_ids": [],
+      "status": "unknown"
+    }
+  ],
+  "evidence_requests": [
+    {
+      "id": "EVR-001",
+      "artifact": "unknown",
+      "owner_or_source": "unknown",
+      "status": "unknown",
+      "sensitivity": "unknown",
+      "redaction_notes": "",
+      "related_claim_ids": [],
+      "related_flow_ids": []
+    }
+  ],
+  "evidence_map": [
+    {
+      "id": "EVM-001",
+      "evidence_request_id": "EVR-001",
+      "artifact": "unknown",
+      "mapped_to": {
+        "claim_ids": [],
+        "flow_ids": [],
+        "data_class_ids": []
+      },
+      "next_skill": "unknown",
+      "notes": ""
+    }
+  ],
+  "limitations": [
+    {
+      "id": "LIM-001",
+      "description": "Authorization and evidence availability are not yet confirmed.",
+      "impact": "Audit conclusions must remain provisional until scope and evidence are confirmed.",
+      "mitigation": "Confirm authorization and collect requested artifacts before deeper testing."
+    }
+  ],
+  "failure_signals": [
+    {
+      "id": "SIG-001",
+      "signal": "A privacy, zero-knowledge, or E2EE claim cannot be mapped to available evidence.",
+      "severity_preview": "unknown",
+      "related_claim_ids": [],
+      "evidence_needed": []
+    }
+  ],
+  "recommended_next_skills": [
+    {
+      "skill": "unknown",
+      "reason": "Select after intake based on highest-risk claims and available evidence.",
+      "prerequisites": [],
+      "priority": "medium"
+    }
+  ]
+}

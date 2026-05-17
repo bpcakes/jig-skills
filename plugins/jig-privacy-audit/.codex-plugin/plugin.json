@@ -1,0 +1,40 @@
+{
+  "name": "jig-privacy-audit",
+  "version": "0.1.0",
+  "description": "Privacy, zero-knowledge, and E2EE audit-support skills for scoped evidence collection and review.",
+  "author": {
+    "name": "bpcakes"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "privacy",
+    "zero-knowledge",
+    "e2ee",
+    "audit",
+    "cryptography",
+    "security",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig Privacy Audit",
+    "shortDescription": "Privacy and E2EE audit-support skills",
+    "longDescription": "Codex skills for scoped, evidence-focused privacy, zero-knowledge, client encryption, cryptographic architecture, metadata, telemetry, and remediation audit workflows.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Scope a privacy audit for this encrypted app",
+      "Audit whether encrypted fields cross the network in plaintext",
+      "Review this app's zero-knowledge claims",
+      "Build a privacy field matrix for this app",
+      "Audit telemetry and crash logs for leakage",
+      "Build a privacy threat model for this app"
+    ]
+  }
+}

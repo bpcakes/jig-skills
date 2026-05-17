@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "tool": "zknet_scan.py",
+    "audit_skill": "network-payload-zero-knowledge-test",
+    "run_id": "fixture",
+    "seeded": true
+  },
+  "sentinels": [
+    {
+      "id": "body-001",
+      "value": "ZKNET::DO-NOT-USE::FIXTURE::PLAINTEXT_CONTENT::FixtureSentinel123",
+      "category": "plaintext_content",
+      "use": "Network scanner fixture sentinel"
+    }
+  ]
+}

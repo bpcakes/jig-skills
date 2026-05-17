@@ -1,0 +1,34 @@
+{
+  "run_id": "tcls-local-001",
+  "created_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "scope": {
+    "product": "",
+    "environment": "",
+    "account": "",
+    "commit_or_build": ""
+  },
+  "sentinels": [
+    {
+      "id": "content-001",
+      "class": "user_content",
+      "value": "TCLS::RUN::CONTENT::unique-token",
+      "flow": "content create/edit/error"
+    },
+    {
+      "id": "metadata-001",
+      "class": "sensitive_metadata",
+      "value": "TCLS::RUN::METADATA::unique-token",
+      "flow": "title filename tag search"
+    },
+    {
+      "id": "support-001",
+      "class": "support_access_artifact",
+      "value": "TCLS::RUN::SUPPORT::unique-token",
+      "flow": "support ticket export debug bundle"
+    }
+  ],
+  "notes": [
+    "Replace values per audit run and do not commit real sentinels.",
+    "Search exact, normalized, encoded, truncated, hashed, tokenized, URL-encoded, base64/base64url, JSON-escaped, and stack-trace-rendered forms."
+  ]
+}

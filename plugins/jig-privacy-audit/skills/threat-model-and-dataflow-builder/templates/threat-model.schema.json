@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bpcakes/jig-skills/main/plugins/jig-privacy-audit/skills/threat-model-and-dataflow-builder/templates/threat-model.schema.json",
+  "title": "Threat Model and Dataflow Builder Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scope",
+    "sources_reviewed",
+    "assumptions",
+    "limitations",
+    "assets",
+    "actors",
+    "components",
+    "data_stores",
+    "entry_points",
+    "trust_boundaries",
+    "data_flows",
+    "stride_threats",
+    "linddun_threats",
+    "required_controls"
+  ],
+  "properties": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "environment", "included", "excluded"],
+      "properties": {
+        "system": { "type": "string" },
+        "environment": { "type": "string" },
+        "date": { "type": "string" },
+        "reviewer": { "type": "string" },
+        "included": { "type": "array", "items": { "type": "string" } },
+        "excluded": { "type": "array", "items": { "type": "string" } },
+        "claims_assessed": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "sources_reviewed": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/statement" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/statement" }
+    },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "actors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/actor" }
+    },
+    "components": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "data_stores": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/data_store" }
+    },
+    "entry_points": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry_point" }
+    },
+    "trust_boundaries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/trust_boundary" }
+    },
+    "data_flows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/data_flow" }
+    },
+    "stride_threats": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/stride_threat" }
+    },
+    "linddun_threats": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/linddun_threat" }
+    },
+    "required_controls": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/control" }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding_summary" },
+      "default": []
+    },
+    "retest_plan": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/retest_step" },
+      "default": []
+    },
+    "diagram": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": { "enum": ["mermaid", "plantuml", "text"] },
+        "content": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "description"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "coverage": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "statement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement"],
+      "properties": {
+        "id": { "type": "string" },
+        "statement": { "type": "string" },
+        "validity": { "enum": ["unconfirmed", "confirmed", "rejected", "unknown"] },
+        "impact": { "type": "string" },
+        "needed_to_resolve": { "type": "string" }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "sensitivity"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "data_class": { "type": "string" },
+        "sensitivity": { "enum": ["public", "internal", "confidential", "restricted", "unknown"] },
+        "created_at": { "type": "array", "items": { "type": "string" } },
+        "stored_at": { "type": "array", "items": { "type": "string" } },
+        "concerns": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "enum": ["human", "service", "third_party", "operator", "attacker", "automated_agent", "unknown"] },
+        "trust_level": { "type": "string" },
+        "capabilities": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "type": "string" },
+        "owner_or_boundary": { "type": "string" },
+        "data_classes": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "data_store": {
+      "allOf": [{ "$ref": "#/$defs/component" }]
+    },
+    "entry_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "exposed_to"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "exposed_to": { "type": "array", "items": { "type": "string" } },
+        "authn_authz": { "type": "string" },
+        "data_accepted": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "trust_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "from", "to"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "crossing_flows": { "type": "array", "items": { "type": "string" } },
+        "required_controls": { "type": "array", "items": { "type": "string" } },
+        "evidence": { "type": "string" }
+      }
+    },
+    "data_flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "destination", "data_classes"],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string" },
+        "destination": { "type": "string" },
+        "channel": { "type": "string" },
+        "data_classes": { "type": "array", "items": { "type": "string" } },
+        "transformations": { "type": "array", "items": { "type": "string" } },
+        "auth_context": { "type": "string" },
+        "encryption_state": { "enum": ["plaintext", "tls_only", "application_encrypted", "e2ee", "hashed", "pseudonymized", "unknown", "mixed"] },
+        "retention_logging": { "type": "string" },
+        "boundary_crossed": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "stride_threat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "statement", "affected_element", "asset"],
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "enum": ["spoofing", "tampering", "repudiation", "information_disclosure", "denial_of_service", "elevation_of_privilege"] },
+        "statement": { "type": "string" },
+        "affected_element": { "type": "string" },
+        "asset": { "type": "string" },
+        "evidence_level": { "enum": ["high", "medium", "low", "unknown"] },
+        "severity": { "enum": ["critical", "high", "medium", "low", "informational", "unknown"] },
+        "required_controls": { "type": "array", "items": { "type": "string" } },
+        "status": { "enum": ["confirmed", "hypothesis", "assumption", "gap"] }
+      }
+    },
+    "linddun_threat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "statement", "affected_element", "data_subject_or_class"],
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "enum": ["linking", "identifying", "non_repudiation", "detecting", "data_disclosure", "unawareness_unintervenability", "non_compliance"] },
+        "statement": { "type": "string" },
+        "affected_element": { "type": "string" },
+        "data_subject_or_class": { "type": "string" },
+        "evidence_level": { "enum": ["high", "medium", "low", "unknown"] },
+        "severity": { "enum": ["critical", "high", "medium", "low", "informational", "unknown"] },
+        "required_controls": { "type": "array", "items": { "type": "string" } },
+        "status": { "enum": ["confirmed", "hypothesis", "assumption", "gap"] }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "control", "type", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "control": { "type": "string" },
+        "type": { "enum": ["preventive", "detective", "corrective", "governance", "privacy_rights", "unknown"] },
+        "linked_threats": { "type": "array", "items": { "type": "string" } },
+        "status": { "enum": ["present", "partial", "missing", "unknown", "not_applicable"] },
+        "owner": { "type": "string" },
+        "evidence": { "type": "string" },
+        "retest": { "type": "string" }
+      }
+    },
+    "finding_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "title", "severity", "confidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["finding", "hypothesis", "gap", "positive_evidence"] },
+        "title": { "type": "string" },
+        "severity": { "enum": ["critical", "high", "medium", "low", "informational"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "evidence": { "type": "string" },
+        "recommended_next_step": { "type": "string" }
+      }
+    },
+    "retest_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "step", "expected_evidence"],
+      "properties": {
+        "target_id": { "type": "string" },
+        "step": { "type": "string" },
+        "expected_evidence": { "type": "string" },
+        "owner": { "type": "string" }
+      }
+    }
+  }
+}

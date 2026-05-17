@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bpcakes/jig-skills/main/plugins/jig-privacy-audit/skills/client-encryption-boundary-audit/templates/client-encryption-boundary-finding.schema.json",
+  "title": "Client Encryption Boundary Finding",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "id",
+    "title",
+    "severity",
+    "confidence",
+    "audit_skill",
+    "surface",
+    "affected_claims",
+    "boundary_surface",
+    "flow",
+    "affected_fields",
+    "boundary_order",
+    "evidence",
+    "impact",
+    "recommended_fix",
+    "retest_steps",
+    "limitations"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^CLIENT-ENC-[0-9]{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "enum": ["critical", "high", "medium", "low", "informational"]
+    },
+    "confidence": {
+      "enum": ["high", "medium", "low"]
+    },
+    "audit_skill": {
+      "const": "client-encryption-boundary-audit"
+    },
+    "surface": {
+      "const": "client-encryption-boundary"
+    },
+    "affected_claims": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "boundary_surface": {
+      "enum": [
+        "create",
+        "edit",
+        "share",
+        "import",
+        "export",
+        "background-sync",
+        "serialization",
+        "network",
+        "local-persistence",
+        "telemetry",
+        "logging",
+        "search-preview",
+        "attachment-processing",
+        "other"
+      ]
+    },
+    "flow": {
+      "type": "string",
+      "minLength": 1
+    },
+    "affected_fields": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "boundary_order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plaintext_source", "encryption_point", "serialization_point", "sink", "observed_order"],
+      "properties": {
+        "plaintext_source": { "type": "string" },
+        "encryption_point": { "type": "string" },
+        "serialization_point": { "type": "string" },
+        "sink": { "type": "string" },
+        "observed_order": { "type": "string" },
+        "expected_order": { "type": "string" }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["type", "description", "location", "excerpt_or_summary"],
+        "properties": {
+          "type": { "type": "string" },
+          "description": { "type": "string" },
+          "file": { "type": "string" },
+          "location": { "type": "string" },
+          "excerpt_or_summary": { "type": "string" },
+          "sentinel_category": { "type": "string" },
+          "redaction_note": { "type": "string" }
+        }
+      }
+    },
+    "reproduction_steps": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "impact": {
+      "type": "string"
+    },
+    "root_cause_hypothesis": {
+      "type": "string"
+    },
+    "recommended_fix": {
+      "type": "string"
+    },
+    "retest_steps": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,487 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bpcakes/jig-skills/main/plugins/jig-privacy-audit/skills/audit-intake-and-evidence-map/templates/audit-manifest.schema.json",
+  "title": "Jig Privacy Audit Manifest",
+  "type": "object",
+  "required": [
+    "audit",
+    "claims",
+    "data_classes",
+    "flows",
+    "evidence_requests",
+    "evidence_map",
+    "limitations",
+    "failure_signals",
+    "recommended_next_skills"
+  ],
+  "properties": {
+    "audit": {
+      "type": "object",
+      "required": [
+        "product",
+        "objective",
+        "environment",
+        "authorization",
+        "scope"
+      ],
+      "properties": {
+        "product": {
+          "type": "string"
+        },
+        "objective": {
+          "type": "string"
+        },
+        "requested_by": {
+          "type": "string"
+        },
+        "prepared_by": {
+          "type": "string"
+        },
+        "dates": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "environment": {
+          "type": "string"
+        },
+        "authorization": {
+          "type": "object",
+          "required": [
+            "status",
+            "permitted_targets",
+            "prohibited_targets"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "confirmed",
+                "limited",
+                "unknown"
+              ]
+            },
+            "approved_by": {
+              "type": "string"
+            },
+            "permitted_targets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "prohibited_targets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "scope": {
+          "type": "object",
+          "required": [
+            "in_scope",
+            "out_of_scope"
+          ],
+          "properties": {
+            "in_scope": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "out_of_scope": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "assumptions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/claim"
+      }
+    },
+    "data_classes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/data_class"
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/flow"
+      }
+    },
+    "evidence_requests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence_request"
+      }
+    },
+    "evidence_map": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence_map_item"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/limitation"
+      }
+    },
+    "failure_signals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/failure_signal"
+      }
+    },
+    "recommended_next_skills": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/recommended_next_skill"
+      }
+    }
+  },
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "required": [
+        "id",
+        "statement",
+        "source",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^CLM-[0-9]{3,}$"
+        },
+        "statement": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_location": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "in_scope",
+            "out_of_scope",
+            "needs_clarification"
+          ]
+        },
+        "audit_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "data_class": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "sensitivity"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^DAT-[0-9]{3,}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sensitivity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "unknown"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "flow": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^FLW-[0-9]{3,}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "data_class_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "enum": [
+            "in_scope",
+            "blocked",
+            "out_of_scope",
+            "unknown"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "evidence_request": {
+      "type": "object",
+      "required": [
+        "id",
+        "artifact",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^EVR-[0-9]{3,}$"
+        },
+        "artifact": {
+          "type": "string"
+        },
+        "owner_or_source": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "requested",
+            "blocked",
+            "out_of_scope",
+            "unknown"
+          ]
+        },
+        "sensitivity": {
+          "enum": [
+            "secret",
+            "personal_data",
+            "confidential",
+            "public",
+            "unknown"
+          ]
+        },
+        "redaction_notes": {
+          "type": "string"
+        },
+        "related_claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_flow_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "evidence_map_item": {
+      "type": "object",
+      "required": [
+        "id",
+        "evidence_request_id",
+        "artifact",
+        "mapped_to",
+        "next_skill"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^EVM-[0-9]{3,}$"
+        },
+        "evidence_request_id": {
+          "type": "string"
+        },
+        "artifact": {
+          "type": "string"
+        },
+        "mapped_to": {
+          "type": "object",
+          "properties": {
+            "claim_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "flow_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "data_class_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "next_skill": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "limitation": {
+      "type": "object",
+      "required": [
+        "id",
+        "description",
+        "impact"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^LIM-[0-9]{3,}$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "impact": {
+          "type": "string"
+        },
+        "mitigation": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "failure_signal": {
+      "type": "object",
+      "required": [
+        "id",
+        "signal",
+        "severity_preview",
+        "evidence_needed"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^SIG-[0-9]{3,}$"
+        },
+        "signal": {
+          "type": "string"
+        },
+        "severity_preview": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "informational",
+            "unknown"
+          ]
+        },
+        "related_claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_needed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "recommended_next_skill": {
+      "type": "object",
+      "required": [
+        "skill",
+        "reason"
+      ],
+      "properties": {
+        "skill": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "priority": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
