@@ -105,9 +105,22 @@ def ensure_cursor_agent(model: str, skip_model_check: bool) -> None:
         )
 
 
-def build_prompt(workspace: Path, plan: Path, extra_instructions: list[str]) -> str:
+def build_prompt(
+    workspace: Path,
+    plan: Path,
+    extra_instructions: list[str],
+    worktree: str | None,
+) -> str:
     rel_plan = plan.relative_to(workspace)
     utc_now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+
+    worktree_note = ""
+    if worktree:
+        worktree_note = (
+            "\nCursor was launched with --worktree. Use the actual worktree root "
+            "provided by Cursor as your working directory; treat the ExecPlan path "
+            "above as repository-relative inside that worktree."
+        )
 
     extra = ""
     if extra_instructions:
@@ -119,6 +132,7 @@ def build_prompt(workspace: Path, plan: Path, extra_instructions: list[str]) -> 
 Workspace root: {workspace}
 ExecPlan path: {rel_plan}
 Current UTC time for plan updates: {utc_now}
+{worktree_note}
 
 Read the entire ExecPlan before editing code. Treat it as the source of truth for the work. Then inspect the relevant repository files and implement the next incomplete milestone or the full plan if the plan is small enough to complete safely in one run.
 
@@ -168,7 +182,7 @@ def main() -> int:
     if args.worktree:
         command.extend(["--worktree", args.worktree])
 
-    command.append(build_prompt(workspace, plan, args.extra_instruction))
+    command.append(build_prompt(workspace, plan, args.extra_instruction, args.worktree))
     result = subprocess.run(command, cwd=workspace, check=False)
     return result.returncode
 
