@@ -9,8 +9,9 @@ Distributed as a Codex plugin marketplace across six plugins. Skills can also be
 ## Requirements
 
 - Codex ≥ 0.128.0 — for plugin marketplace install
-- Python ≥ 3.10 — for `jig-privacy-audit` helper scripts
+- Python ≥ 3.10 — for bundled helper scripts
 - [Claude Code](https://claude.ai/code) — for direct skill install and the `$cc:review` step in `comprehensive-review`
+- [Cursor Agent](https://cursor.com/) — for `jig-exec-plans:cursor-implement-exec-plan`
 - [Claude Code plugin for Codex](https://github.com/sendbird/cc-plugin-codex) — required only for `jig-review:comprehensive-review`
 
 ## Install With Codex
@@ -96,8 +97,9 @@ Path: `plugins/jig-exec-plans`
 
 - `write-exec-plan` — writes a self-contained ExecPlan following PLANS.md-style requirements: living-document sections, observable acceptance, validation, idempotence, and durable-state lifecycle coverage.
 - `improve-exec-plan` — improves an existing ExecPlan without changing its intent. Requires a named plan file or a recent ExecPlan in chat; verifies all claims against repository evidence.
+- `cursor-implement-exec-plan` — runs Cursor Agent with Composer 2.5 to implement a checked-in ExecPlan and keep the plan's living sections current.
 
-Plugin-qualified names: `jig-exec-plans:write-exec-plan`, `jig-exec-plans:improve-exec-plan`
+Plugin-qualified names: `jig-exec-plans:write-exec-plan`, `jig-exec-plans:improve-exec-plan`, `jig-exec-plans:cursor-implement-exec-plan`
 
 ### Jig Privacy Audit
 
@@ -140,6 +142,7 @@ Per-skill exceptions:
 - `typescript-type-system-review` — reviews pasted code when supplied in the prompt.
 - `improve-exec-plan` — requires a concrete target: a file path or a recent ExecPlan from chat.
 - `write-exec-plan` — reads `.agent/PLANS.md` when available and produces a fully self-contained plan.
+- `cursor-implement-exec-plan` — requires a checked-in ExecPlan file path; if the plan only exists in chat, write it to a file first.
 
 ## Direct Skill Copy
 
