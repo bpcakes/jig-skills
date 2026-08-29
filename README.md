@@ -9,10 +9,11 @@ Distributed as a Codex plugin marketplace across six plugins. Skills can also be
 ## Requirements
 
 - Codex ≥ 0.128.0 — for plugin marketplace install
-- Python ≥ 3.10 — for bundled helper scripts
-- [Claude Code](https://claude.ai/code) — for direct skill install and the `$cc:review` step in `comprehensive-review`
-- [Cursor Agent](https://cursor.com/) — for `jig-exec-plans:cursor-implement-exec-plan`
-- [Claude Code plugin for Codex](https://github.com/sendbird/cc-plugin-codex) — required only for `jig-review:comprehensive-review`
+- Python ≥ 3.10 — for `jig-privacy-audit` helper scripts
+- Node.js ≥ 22 — for the `comprehensive-review` helper scripts; CI covers the active Node 22 and 24 LTS lines
+- Linux, macOS, or Windows through WSL — native Windows is not supported by the external-review adapters because Node cannot guarantee descendant process-group termination there
+- [Claude Code](https://claude.ai/code) — installed and authenticated when the default Claude pass is selected in `comprehensive-review`
+- [Cursor Agent](https://cursor.com/) — required for `jig-exec-plans:cursor-implement-exec-plan`, and installed and authenticated when the opt-in Cursor/Grok pass is selected in `comprehensive-review`
 
 ## Install With Codex
 
@@ -87,7 +88,18 @@ Plugin-qualified names: `jig-typescript:typescript-simplify`, `jig-typescript:ty
 
 Path: `plugins/jig-review`
 
-- `comprehensive-review` — runs a Claude Code review with `$cc:review`, independently performs a native Codex review over the same scope, then deduplicates and merges findings into one report. Requires the [Claude Code plugin for Codex](https://github.com/sendbird/cc-plugin-codex).
+- `comprehensive-review` — runs selected Claude Code, native Codex, and Cursor/Grok review subagents in parallel over the same Git changes, then deduplicates and merges their frozen findings. Claude plus Codex is the default; Cursor is opt-in. Bundled read-only adapters avoid separate forwarding skills.
+
+Reviewer examples:
+
+```text
+$comprehensive-review
+$comprehensive-review --reviewers claude,codex,cursor --cursor-effort xhigh
+$comprehensive-review --claude-file-access host
+$comprehensive-review --reviewers codex --codex-model gpt-5.6-sol --codex-effort high
+```
+
+Claude reviews default to `--claude-file-access restricted`, which confines Claude's read-only file tools to the reviewed working directory. Select `host` only when the review intentionally needs read access elsewhere on the machine; the review notes disclose that expanded boundary.
 
 Plugin-qualified name: `jig-review:comprehensive-review`
 
@@ -123,6 +135,8 @@ Plugin-qualified names use the `jig-privacy-audit:` prefix, for example `jig-pri
 
 When changing the privacy-audit helper scripts, run `plugins/jig-privacy-audit/scripts/test_fixtures.sh`.
 
+When changing the comprehensive-review adapters, run `node --test plugins/jig-review/tests/*.test.mjs`.
+
 ## Scope
 
 Most Rust, Swift, and TypeScript skills operate against one of three scopes:
@@ -146,7 +160,7 @@ Per-skill exceptions:
 
 ## Direct Skill Copy
 
-Every skill except `comprehensive-review` can be installed directly into Codex or Claude without the plugin marketplace. (`comprehensive-review` depends on Codex's native review behavior and the `$cc:review` command from the Claude Code plugin for Codex.)
+Every skill can be installed directly into Codex without the plugin marketplace. `comprehensive-review` cannot be installed directly into Claude because it depends on Codex subagents; its bundled adapters invoke the selected local Claude Code and Cursor Agent CLIs for independent external passes.
 
 Install every compatible skill into Codex:
 

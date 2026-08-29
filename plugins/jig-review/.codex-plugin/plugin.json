@@ -1,7 +1,7 @@
 {
   "name": "jig-review",
-  "version": "0.1.0",
-  "description": "Comprehensive review skill that merges Claude Code and Codex findings.",
+  "version": "0.2.0",
+  "description": "Configurable parallel reviews with Claude Code, Codex, and Cursor/Grok.",
   "author": {
     "name": "Jig"
   },
@@ -12,20 +12,23 @@
     "review",
     "claude-code",
     "codex",
+    "cursor-agent",
+    "grok",
     "codex-skills"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Jig Review",
-    "shortDescription": "Combined Claude Code and Codex reviews",
-    "longDescription": "Codex skill for running Claude Code and native Codex review passes over the same scope, then deduplicating and merging findings into one consolidated report. Requires cc-plugin-codex for the Claude review pass: https://github.com/sendbird/cc-plugin-codex.",
+    "shortDescription": "Configurable Claude, Codex, and Grok reviews",
+    "longDescription": "Codex skill for selecting isolated Claude Code, native Codex, and Cursor Agent with Grok 4.6 review subagents, running them in parallel over the same scope, then deduplicating and merging their findings. Includes bundled read-only adapters for the external CLIs; Claude plus Codex remains the default pair.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [
-      "Read"
+      "Read",
+      "Network"
     ],
     "defaultPrompt": [
-      "Run a comprehensive review of my current changes"
+      "Review my changes with Claude and Codex"
     ]
   }
 }
