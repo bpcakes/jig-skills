@@ -1,15 +1,16 @@
 # jig-skills
 
-Specialized code review, refactoring, planning, and privacy-audit skills for Rust, Swift, TypeScript, and encrypted-product review.
+Specialized code review, refactoring, planning, and privacy-audit skills for Rust, Ruby and Rails, Swift, TypeScript, and encrypted-product review.
 
 Each skill targets a specific engineering concern — error handling, type safety, test quality, architecture — rather than running a broad, generic pass. *Jig* in the machinist sense: a guide that holds work at the exact angle for a precise cut.
 
-Distributed as a Codex plugin marketplace across six plugins. Skills can also be installed directly into Claude Code.
+Distributed as a Codex plugin marketplace across seven plugins. Skills can also be installed directly into Claude Code.
 
 ## Requirements
 
 - Codex ≥ 0.128.0 — for plugin marketplace install
 - Python ≥ 3.10 — for `jig-privacy-audit` helper scripts
+- Ruby — for the `jig-ruby` refactoring scanner; its smoke tests also use Minitest
 - Node.js ≥ 22 — for the `comprehensive-review` helper scripts; CI covers the active Node 22 and 24 LTS lines
 - Linux, macOS, or Windows through WSL — native Windows is not supported by the external-review adapters because Node cannot guarantee descendant process-group termination there
 - [Claude Code](https://claude.ai/code) — installed and authenticated when the default Claude pass is selected in `comprehensive-review`
@@ -29,7 +30,7 @@ Or use the Git URL directly:
 codex plugin marketplace add git@github.com:bpcakes/jig-skills.git
 ```
 
-All six plugins are marked `INSTALLED_BY_DEFAULT`. Codex may install them during the next startup — see [Troubleshooting](#troubleshooting) if the skill autocomplete index doesn't reflect them immediately.
+Six plugins are marked `INSTALLED_BY_DEFAULT`. Codex may install them during the next startup — see [Troubleshooting](#troubleshooting) if the skill autocomplete index doesn't reflect them immediately. The new `jig-ruby` plugin is available to install from the marketplace in the plugin UI.
 
 If your Codex version registers the marketplace but does not enable the plugins, enable these IDs in the plugin UI or config:
 
@@ -40,6 +41,7 @@ jig-typescript@jig-skills
 jig-review@jig-skills
 jig-exec-plans@jig-skills
 jig-privacy-audit@jig-skills
+jig-ruby@jig-skills
 ```
 
 In the Codex composer, typing `$jig-rust:` opens the Rust skill submenu. The full qualified name format is `$plugin:skill` — for example, `$jig-rust:rust-simplify`.
@@ -64,6 +66,14 @@ Path: `plugins/jig-rust`
 - `rust-test-quality-review` — checks whether tests prove changed behavior: assertion quality, edge cases, regression coverage, and property-test opportunities.
 
 Plugin-qualified names: `jig-rust:rust-simplify`, `jig-rust:fowler-rust-refactoring`, `jig-rust:rust-source-reorg`, `jig-rust:rust-architecture-review`, `jig-rust:rust-abstraction-police`, `jig-rust:rust-dup-unifier`, `jig-rust:rust-async-concurrency-review`, `jig-rust:rust-security-boundary-review`, `jig-rust:sqlx-query-safety-review`, `jig-rust:sql-transaction-consistency-review`, `jig-rust:rust-error-handling-review`, `jig-rust:rust-test-quality-review`
+
+### Jig Ruby
+
+Path: `plugins/jig-ruby`
+
+- `fowler-ruby-rails-refactoring` — assesses Ruby and Rails refactoring opportunities using Fowler's principles and produces prioritized, behavior-preserving plans. Includes an offline heuristic scanner and smoke tests.
+
+Plugin-qualified name: `jig-ruby:fowler-ruby-rails-refactoring`
 
 ### Jig Swift
 

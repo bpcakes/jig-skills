@@ -1,0 +1,34 @@
+{
+  "name": "jig-ruby",
+  "version": "0.1.0",
+  "description": "Ruby and Rails refactoring assessments and behavior-preserving plans grounded in Fowler's principles.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "ruby",
+    "rails",
+    "refactoring",
+    "fowler",
+    "review",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig Ruby",
+    "shortDescription": "Ruby and Rails refactoring skills",
+    "longDescription": "Ruby-focused Codex skills for evidence-backed Fowler-style refactoring assessments, code-smell analysis, and behavior-preserving plans for Ruby and Rails models, controllers, queries, and callbacks. Includes an offline heuristic scanner.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Review this Ruby and Rails code for behavior-preserving refactoring opportunities"
+    ]
+  }
+}
