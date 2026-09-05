@@ -1,0 +1,18 @@
+{
+  "minScore": 0.68,
+  "minTokens": 32,
+  "minLines": 3,
+  "maxResults": 100,
+  "maxFileBytes": 1500000,
+  "includeTests": false,
+  "includeStories": false,
+  "includeTypes": true,
+  "includeGenerated": false,
+  "exclude": [
+    "**/generated/**",
+    "**/__generated__/**",
+    "**/*.generated.ts",
+    "**/*.generated.tsx",
+    "**/fixtures/**"
+  ]
+}

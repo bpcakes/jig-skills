@@ -51,6 +51,7 @@ In the Codex composer, typing `$jig-rust:` opens the Rust skill submenu. The ful
 Path: `plugins/jig-rust`
 
 - `rust-simplify` — refines recently modified Rust code for clarity and idiomatic structure while preserving exact behavior.
+- `fowler-rust-refactoring` — assesses Rust code smells using Fowler's refactoring principles and produces prioritized, behavior-preserving plans. Includes a heuristic scanner.
 - `rust-source-reorg` — reorganizes Rust files without behavior changes: item ordering, `use` grouping and merging, attribute ordering, and the rules in `plugins/jig-rust/skills/rust-source-reorg/references/rust-source-reorg-rules.md`.
 - `rust-architecture-review` — reviews module boundaries, crate/workspace structure, public APIs, trait hierarchy, data flow, and structural error architecture.
 - `rust-abstraction-police` — finds leaky Rust abstractions with evidence of the intended boundary, exposed implementation detail, and concrete caller or compatibility consequences. Includes a source-only candidate collector.
@@ -61,7 +62,7 @@ Path: `plugins/jig-rust`
 - `rust-error-handling-review` — audits changed error paths for swallowed errors, missing context, panic paths, error type design, resilience, async task failures, and `#[must_use]` gaps.
 - `rust-test-quality-review` — checks whether tests prove changed behavior: assertion quality, edge cases, regression coverage, and property-test opportunities.
 
-Plugin-qualified names: `jig-rust:rust-simplify`, `jig-rust:rust-source-reorg`, `jig-rust:rust-architecture-review`, `jig-rust:rust-abstraction-police`, `jig-rust:rust-async-concurrency-review`, `jig-rust:rust-security-boundary-review`, `jig-rust:sqlx-query-safety-review`, `jig-rust:sql-transaction-consistency-review`, `jig-rust:rust-error-handling-review`, `jig-rust:rust-test-quality-review`
+Plugin-qualified names: `jig-rust:rust-simplify`, `jig-rust:fowler-rust-refactoring`, `jig-rust:rust-source-reorg`, `jig-rust:rust-architecture-review`, `jig-rust:rust-abstraction-police`, `jig-rust:rust-async-concurrency-review`, `jig-rust:rust-security-boundary-review`, `jig-rust:sqlx-query-safety-review`, `jig-rust:sql-transaction-consistency-review`, `jig-rust:rust-error-handling-review`, `jig-rust:rust-test-quality-review`
 
 ### Jig Swift
 
@@ -77,13 +78,15 @@ Path: `plugins/jig-typescript`
 
 - `typescript-simplify` — refines recently modified TypeScript or React code for clarity and project-standard style while preserving behavior.
 - `typescript-type-system-review` — reviews type safety, generics, utility types, and public API shapes. Pass code directly in the prompt to review a snippet instead of a diff.
+- `typescript-react-abstraction-police` — validates leaky TypeScript and React abstractions using consumer evidence and concrete consequences. Includes a source-only candidate scanner.
+- `typescript-react-dup-unifier` — finds similar TypeScript and React abstractions and assesses whether to unify them, extract shared behavior, standardize a contract, or retain intentional duplicates. Includes a TypeScript AST scanner.
 - `react-hooks-effects-review` — reviews React hooks, Effects, refs, custom hooks, render purity, dependency correctness, stale closures, cleanup, and state synchronization.
 - `react-state-data-flow-review` — reviews React state ownership, derived state, reducers, context, server/client data boundaries, async state modeling, external stores, optimistic updates, and cache synchronization.
 - `react-render-performance-review` — reviews React render performance, large lists, context invalidation, memoization boundaries, key stability, client bundle costs, and repeated derivations.
 - `react-test-quality-review` — reviews React tests for user-visible behavior, accessible queries, interaction coverage, async assertions, mocking boundaries, snapshots, and regression confidence.
 - `react-hooks-component-api-review` — reviews React component and hook APIs for prop modeling, controlled/uncontrolled contracts, children typing, callback types, polymorphic components, invalid states, and reusable UI boundaries.
 
-Plugin-qualified names: `jig-typescript:typescript-simplify`, `jig-typescript:typescript-type-system-review`, `jig-typescript:react-hooks-effects-review`, `jig-typescript:react-state-data-flow-review`, `jig-typescript:react-render-performance-review`, `jig-typescript:react-test-quality-review`, `jig-typescript:react-hooks-component-api-review`
+Plugin-qualified names: `jig-typescript:typescript-simplify`, `jig-typescript:typescript-type-system-review`, `jig-typescript:typescript-react-abstraction-police`, `jig-typescript:typescript-react-dup-unifier`, `jig-typescript:react-hooks-effects-review`, `jig-typescript:react-state-data-flow-review`, `jig-typescript:react-render-performance-review`, `jig-typescript:react-test-quality-review`, `jig-typescript:react-hooks-component-api-review`
 
 ### Jig Review
 

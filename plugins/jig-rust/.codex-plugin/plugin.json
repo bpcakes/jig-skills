@@ -1,7 +1,7 @@
 {
   "name": "jig-rust",
-  "version": "0.2.0",
-  "description": "Rust simplification, source reorganization, architecture and abstraction-boundary review, async concurrency review, security-boundary review, SQLx query safety review, SQL transaction consistency review, error handling review, and test quality review skills.",
+  "version": "0.3.0",
+  "description": "Rust simplification, Fowler-style refactoring assessments, source reorganization, architecture and abstraction-boundary review, async concurrency review, security-boundary review, SQLx query safety review, SQL transaction consistency review, error handling review, and test quality review skills.",
   "author": {
     "name": "Jig"
   },
@@ -27,7 +27,7 @@
   "interface": {
     "displayName": "Jig Rust",
     "shortDescription": "Rust review and refinement skills",
-    "longDescription": "Rust-focused Codex skills for behavior-preserving simplification, source reorganization, architecture review, leaky-abstraction audits, async concurrency review, security-boundary review, SQLx query safety review, SQL transaction consistency review, error handling audits, and test quality review.",
+    "longDescription": "Rust-focused Codex skills for behavior-preserving simplification, Fowler-style refactoring assessments and plans, source reorganization, architecture review, leaky-abstraction audits, async concurrency review, security-boundary review, SQLx query safety review, SQL transaction consistency review, error handling audits, and test quality review.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [

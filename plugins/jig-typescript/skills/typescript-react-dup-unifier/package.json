@@ -1,0 +1,14 @@
+{
+  "name": "typescript-react-dup-unifier",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript/React near-duplicate abstraction scanner and Codex-style skill workflow.",
+  "bin": {
+    "typescript-react-dup-unifier": "scripts/typescript-react-dup-unifier.mjs"
+  },
+  "scripts": {
+    "scan": "node scripts/typescript-react-dup-unifier.mjs",
+    "test": "node scripts/test-typescript-react-dup-unifier.mjs"
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fowler Rust Refactoring"
+  short_description: "Find and plan safe idiomatic Rust refactorings"
+  default_prompt: "Review this Rust codebase for refactoring opportunities using Fowler's principles and idiomatic Rust, then produce a prioritized small-step plan without changing code."
