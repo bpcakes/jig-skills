@@ -19,6 +19,8 @@ Accept these reviewer options:
 - `--codex-model <model>` and `--codex-effort <low|medium|high|xhigh|max|ultra>` configure the native Codex child. Both inherit host defaults when omitted.
 - `--cursor-effort <low|medium|high|xhigh>` selects the corresponding fixed `cursor-grok-4.6-*` model. Default: `high` when Cursor is selected.
 
+Selecting Cursor runs it with workspace trust for the reviewed repository (`--trust`), read-only ask mode, and sandboxing. Claude's non-interactive `-p` mode already skips its workspace trust dialog.
+
 Run `node scripts/review-options.mjs` from this skill directory with only the reviewer options supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, ambiguous legacy `--model` and `--effort` flags, and settings for unselected reviewers. Do not silently substitute a model or effort rejected by a provider or the host.
 
 ## Workflow

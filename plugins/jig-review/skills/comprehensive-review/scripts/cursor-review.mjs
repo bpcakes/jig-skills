@@ -100,6 +100,7 @@ function buildCursorArgs(options, scope, promptDirectory, promptPath) {
     "ask",
     "--sandbox",
     "enabled",
+    "--trust",
     "--workspace",
     scope.repoRoot,
     "--add-dir",

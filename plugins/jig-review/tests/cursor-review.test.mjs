@@ -65,7 +65,7 @@ async function waitForProcessGone(pid, timeoutMs = 2_000) {
   assert.fail(`process ${pid} was still present after ${timeoutMs} ms`);
 }
 
-test("Cursor arguments pin Grok effort and read-only execution", () => {
+test("Cursor arguments trust the selected workspace while retaining read-only execution", () => {
   const args = buildCursorArgs(
     { effort: "xhigh" },
     { repoRoot: "/tmp/repo" },
@@ -73,9 +73,11 @@ test("Cursor arguments pin Grok effort and read-only execution", () => {
     "/tmp/prompt/review-prompt.md",
   );
   assert.deepEqual(args.slice(0, 5), ["--print", "--mode", "ask", "--sandbox", "enabled"]);
+  assert.ok(args.includes("--trust"));
+  assert.equal(args[args.indexOf("--workspace") + 1], "/tmp/repo");
   assert.equal(args[args.indexOf("--model") + 1], "cursor-grok-4.6-xhigh");
   assert.equal(args[args.indexOf("--output-format") + 1], "text");
-  assert.equal(args.some((argument) => ["--force", "--yolo", "--trust", "--approve-mcps"].includes(argument)), false);
+  assert.equal(args.some((argument) => ["--force", "--yolo", "--approve-mcps"].includes(argument)), false);
 });
 
 test("Cursor adapter accepts only its supported effort levels", () => {
@@ -130,6 +132,10 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
       'import { readFileSync, writeFileSync } from "node:fs";',
       'import path from "node:path";',
       "const argv = process.argv.slice(2);",
+      "if (!argv.includes('--trust')) {",
+      "  process.stderr.write('Workspace trust is required in non-interactive mode.');",
+      "  process.exit(1);",
+      "}",
       'const promptDirectory = argv[argv.indexOf("--add-dir") + 1];',
       'const prompt = readFileSync(path.join(promptDirectory, "review-prompt.md"), "utf8");',
       "writeFileSync(process.env.FAKE_CURSOR_CAPTURE, JSON.stringify({ argv, prompt, promptDirectory }));",
