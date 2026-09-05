@@ -36,7 +36,7 @@ Check whether our public API leaks Tokio, SQLx, Serde schema, lock guards, lifet
 
 ## Candidate collector
 
-The helper performs no compilation and installs nothing:
+The helper requires Python 3.11 or newer for the standard-library `tomllib` module. It performs no compilation and installs nothing:
 
 ```bash
 python3 scripts/collect_candidates.py /path/to/rust/repo --format markdown

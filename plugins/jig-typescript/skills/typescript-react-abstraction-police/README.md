@@ -35,9 +35,9 @@ typescript-react-abstraction-police/
 The scanner uses only Node.js standard-library modules and does not install packages or access the network.
 
 ```bash
-node scripts/scan.mjs . --format text
-node scripts/scan.mjs src --format json
-node scripts/scan.mjs . --include-tests --max-files 5000
+node scripts/scan.mjs /path/to/repo --format text
+node scripts/scan.mjs /path/to/repo/src --format json
+node scripts/scan.mjs /path/to/repo --include-tests --max-files 5000
 ```
 
 It flags investigation leads such as exported Context objects, raw React state setters, boolean prop clusters, form/query library types crossing public boundaries, deep internal imports, child-shape assumptions, and pass-through wrappers.

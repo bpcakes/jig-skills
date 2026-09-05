@@ -35,16 +35,16 @@ Useful variants:
 
 ```bash
 # Narrow a scan to one package or feature
-node scripts/typescript-react-dup-unifier.mjs packages/design-system
+node scripts/typescript-react-dup-unifier.mjs /path/to/repo/packages/design-system
 
 # Include tests and stories
-node scripts/typescript-react-dup-unifier.mjs . --include-tests --include-stories
+node scripts/typescript-react-dup-unifier.mjs /path/to/repo --include-tests --include-stories
 
 # Lower recall threshold once for a noisier exploratory pass
-node scripts/typescript-react-dup-unifier.mjs . --min-score 0.62
+node scripts/typescript-react-dup-unifier.mjs /path/to/repo --min-score 0.62
 
 # CI-style signal; exits with status 2 when a candidate reaches 0.90
-node scripts/typescript-react-dup-unifier.mjs . --fail-above 0.90 \
+node scripts/typescript-react-dup-unifier.mjs /path/to/repo --fail-above 0.90 \
   --json typescript-react-dup-unifier.json
 ```
 
