@@ -1,0 +1,13 @@
+[package]
+name = "leaky-fixture"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+tokio-runtime = []
+
+[dependencies]
+serde = "1"
+sqlx = "1"
+tokio = "1"
+uuid = "1"
