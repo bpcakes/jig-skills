@@ -15,7 +15,7 @@ Accept these reviewer options:
 
 - `--reviewers <claude,codex,cursor>` selects one or more reviewers. Default: `claude,codex`.
 - `--claude-model <model>` and `--claude-effort <low|medium|high|xhigh|max>` configure Claude. Default model: `opus`; effort is not forced by default.
-- `--claude-file-access <restricted|host>` controls Claude's filesystem boundary. Default: `restricted`. `host` is an explicit trust-boundary opt-out that still exposes only read-only tools but does not confine them to the reviewed repository.
+- `--claude-file-access <restricted|host>` controls Claude's filesystem boundary. Default: `restricted`, limited to the reviewed repository and, for large reviews, the adapter's private evidence directory. `host` is an explicit trust-boundary opt-out that still exposes only read-only tools but does not confine them to those directories.
 - `--codex-model <model>` and `--codex-effort <low|medium|high|xhigh|max|ultra>` configure the native Codex child. Both inherit host defaults when omitted.
 - `--cursor-effort <low|medium|high|xhigh>` selects the corresponding fixed `cursor-grok-4.6-*` model. Default: `high` when Cursor is selected.
 
@@ -105,4 +105,5 @@ Include the Claude file-access line when Claude was selected. If `host` was sele
 - If a child cannot be started, mark it `not started`; if it exceeds the runtime deadline, stop it when the host supports cancellation and mark it `timed out`.
 - Treat an empty external-forwarder response as a transport failure, not a completed review. Do not retry until the original adapter invocation is known to have exited or has been cancelled and cleaned up; otherwise a retry can duplicate billable provider work.
 - If supplied context, an untracked file, a submodule, or the fingerprint is incomplete, state exactly what was omitted and do not claim complete coverage.
+- Large external reviews use paged patch evidence. Retain each adapter's `Evidence coverage` summary and missing-page/capture limitations in review notes. `reviewer-attested` means the reviewer supplied valid page receipts and claimed to review those pages; it does not prove review quality. A `limited` report remains limited even with an unchanged fingerprint. An inline preview truncated while complete evidence pages are available is not itself a capture omission.
 - If line numbers are unavailable, use the narrowest stable file or symbol reference available.

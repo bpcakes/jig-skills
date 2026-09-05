@@ -1,15 +1,12 @@
 #!/usr/bin/env node
 
 import {
-  chmodSync,
-  mkdtempSync,
   realpathSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ReviewEvidence } from "./review-evidence.mjs";
 
 import { CURSOR_MODELS } from "./review-options.mjs";
 import {
@@ -123,20 +120,6 @@ function parseCursorResult(stdout) {
   return report;
 }
 
-function installPromptCleanup(promptDirectory) {
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    rmSync(promptDirectory, { recursive: true, force: true });
-  };
-  process.once("exit", cleanup);
-  return () => {
-    cleanup();
-    process.removeListener("exit", cleanup);
-  };
-}
-
 async function runCursorReview(options, dependencies = {}) {
   assertSupportedAdapterPlatform();
   if (!options.expectedFingerprint) {
@@ -155,16 +138,13 @@ async function runCursorReview(options, dependencies = {}) {
     signal,
   );
   const scope = await resolveScope(options, { deadlineAt, signal });
-  const prompt = buildReviewPrompt(
-    scope,
-    await collectReviewContext(scope, { deadlineAt, signal }),
-  );
-  const promptDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-cursor-review-"));
+  const evidence = new ReviewEvidence({ deadlineAt, signal });
+  const promptDirectory = evidence.directory;
   const promptPath = path.join(promptDirectory, "review-prompt.md");
-  const cleanupPrompt = installPromptCleanup(promptDirectory);
 
   try {
-    chmodSync(promptDirectory, 0o700);
+    const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
+    const prompt = buildReviewPrompt(scope, context);
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
     const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
@@ -184,9 +164,9 @@ async function runCursorReview(options, dependencies = {}) {
       deadlineAt,
       signal,
     );
-    return parseCursorResult(result.stdout);
+    return evidence.annotateReport(parseCursorResult(result.stdout), context);
   } finally {
-    cleanupPrompt();
+    evidence.cleanup();
   }
 }
 
@@ -225,7 +205,6 @@ if (isMain) {
 
 export {
   buildCursorArgs,
-  installPromptCleanup,
   parseArgs,
   parseCursorResult,
   runCursorReview,

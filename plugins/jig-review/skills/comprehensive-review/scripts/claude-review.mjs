@@ -2,6 +2,7 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { ReviewEvidence } from "./review-evidence.mjs";
 
 import {
   buildReviewPrompt,
@@ -105,7 +106,7 @@ function parseArgs(argv) {
   return options;
 }
 
-function buildClaudeArgs(options) {
+function buildClaudeArgs(options, evidenceDirectory = null) {
   const fileAccess = normalizeFileAccess(options.fileAccess);
   const args = [
     "-p",
@@ -127,6 +128,7 @@ function buildClaudeArgs(options) {
     "Grep",
   ];
   if (fileAccess === "restricted") args.push("--restricted");
+  if (evidenceDirectory) args.push("--add-dir", evidenceDirectory);
   args.push("--model", options.model);
   if (options.effort) args.push("--effort", options.effort);
   return args;
@@ -184,26 +186,25 @@ async function runClaudeReview(options, dependencies = {}) {
     signal,
   );
   const scope = await resolveScope(options, { deadlineAt, signal });
-  const prompt = buildReviewPrompt(
-    scope,
-    await collectReviewContext(scope, { deadlineAt, signal }),
-  );
-  const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
-  const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
-  const result = await runCommand(claudeBin, buildClaudeArgs(options), {
-    cwd: scope.repoRoot,
-    input: prompt,
-    timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
-    maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
-    signal,
-  });
-  await verifyScopeFingerprint(
-    options,
-    initialFingerprint.fingerprint,
-    deadlineAt,
-    signal,
-  );
-  return parseClaudeResult(result.stdout);
+  const evidence = new ReviewEvidence({ deadlineAt, signal });
+  try {
+    const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
+    const prompt = buildReviewPrompt(scope, context);
+    const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
+    const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
+    const result = await runCommand(claudeBin,
+      buildClaudeArgs(options, context.evidence ? evidence.directory : null), {
+        cwd: scope.repoRoot,
+        input: prompt,
+        timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
+        maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
+        signal,
+      });
+    await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
+    return evidence.annotateReport(parseClaudeResult(result.stdout), context);
+  } finally {
+    evidence.cleanup();
+  }
 }
 
 async function main() {
