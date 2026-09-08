@@ -72,6 +72,7 @@ async function verifyScopeFingerprint(
     cwd: options.cwd,
     scope: options.scope,
     base: options.base,
+    excludePaths: options.excludePaths,
     timeoutMs: Math.min(
       MAX_FINGERPRINT_TIMEOUT_MS,
       remainingAdapterTime(deadlineAt),

@@ -86,6 +86,72 @@ test("branch review rejects a dirty checkout", async (t) => {
   );
 });
 
+test("branch context filters base-policy paths and discloses the exclusion", async (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  mkdirSync(path.join(repo, ".agent"));
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "baseline\n");
+  writeFileSync(path.join(repo, ".reviewignore"), "/.agent/\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-qm", "add review policy"]);
+  const base = git(repo, ["rev-parse", "HEAD"]);
+
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "SECRET-AGENT-PAYLOAD\n");
+  writeFileSync(path.join(repo, "tracked.txt"), "VISIBLE-SOURCE-CHANGE\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-qm", "branch changes"]);
+
+  const scope = await resolveScope({ cwd: repo, scope: "branch", base });
+  const context = await collectReviewContext(scope);
+  const prompt = buildReviewPrompt(scope, context, { nonce: "exclude-test" });
+
+  assert.deepEqual(scope.excludePaths, [".agent"]);
+  assert.match(context.text, /VISIBLE-SOURCE-CHANGE/);
+  assert.doesNotMatch(context.text, /SECRET-AGENT-PAYLOAD|\.agent\/state\.jsonl/);
+  assert.match(prompt, /Excluded paths \(exact path plus descendants\): \.agent/);
+  assert.match(prompt, new RegExp(`${base}:\\.reviewignore`));
+  assert.match(prompt, /intentionally outside review scope/);
+});
+
+test("working-tree context applies repeatable explicit path exclusions", async (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  mkdirSync(path.join(repo, ".agent"));
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "SECRET-TRACKED\n");
+  git(repo, ["add", ".agent/state.jsonl"]);
+  writeFileSync(path.join(repo, "scratch.log"), "SECRET-UNTRACKED\n");
+  writeFileSync(path.join(repo, "tracked.txt"), "VISIBLE-WORKTREE\n");
+
+  const scope = await resolveScope({
+    cwd: repo,
+    scope: "working-tree",
+    base: null,
+    excludePaths: [".agent/", "scratch.log"],
+  });
+  const context = await collectReviewContext(scope);
+
+  assert.match(context.text, /VISIBLE-WORKTREE/);
+  assert.doesNotMatch(context.text, /SECRET-TRACKED|SECRET-UNTRACKED|\.agent\/state\.jsonl|scratch\.log/);
+  assert.deepEqual(scope.excludePaths, [".agent", "scratch.log"]);
+});
+
+test("branch context does not trust .reviewignore added by the branch", async (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const base = git(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(path.join(repo, "generated"));
+  writeFileSync(path.join(repo, "generated", "result.txt"), "VISIBLE-BRANCH-ARTIFACT\n");
+  writeFileSync(path.join(repo, ".reviewignore"), "generated/\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-qm", "add branch-local ignore"]);
+
+  const scope = await resolveScope({ cwd: repo, scope: "branch", base });
+  const context = await collectReviewContext(scope);
+
+  assert.deepEqual(scope.excludePaths, []);
+  assert.match(context.text, /VISIBLE-BRANCH-ARTIFACT/);
+});
+
 test("unavailable submodules become adapter coverage limitations", async (t) => {
   const repo = makeRepository();
   t.after(() => rmSync(repo, { recursive: true, force: true }));

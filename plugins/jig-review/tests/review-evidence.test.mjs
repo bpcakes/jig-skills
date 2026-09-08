@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -117,6 +117,60 @@ test("branch evidence uses the pinned merge-base and preserves deleted content",
   assert.equal(sectionText(evidence, `Branch diff ${range}`),
     git(repo, "diff", "--no-ext-diff", "--no-textconv", "--submodule=diff", "--find-renames", range));
   assert.equal(context.incomplete, false);
+});
+
+for (const scopeName of ["branch", "working-tree"]) {
+  test(`${scopeName} capture skips an oversized first file and retains later patches`, async (t) => {
+    const repo = repository(t);
+    mkdirSync(path.join(repo, ".agent"));
+    writeFileSync(path.join(repo, ".agent", "state.jsonl"), "old record\n");
+    writeFileSync(path.join(repo, "removed.ts"), "export const deleted = 'DELETED_SOURCE';\n");
+    writeFileSync(path.join(repo, "source.ts"), "export const value = 'BEFORE_SOURCE';\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-qm", "base");
+    const base = git(repo, "rev-parse", "HEAD").trim();
+    // One long JSON line: the collector must skip without buffering the line
+    // or stopping the Git process before it reaches the source files.
+    writeFileSync(path.join(repo, ".agent", "state.jsonl"), JSON.stringify({ log: "x".repeat(3 * 1024 * 1024) }));
+    rmSync(path.join(repo, "removed.ts"));
+    writeFileSync(path.join(repo, "source.ts"), "export const value = 'AFTER_SOURCE';\n");
+    if (scopeName === "branch") git(repo, "commit", "-qam", "change");
+    const scope = await resolveScope({ cwd: repo, scope: scopeName, base });
+    const evidence = store(t);
+    const context = await collectReviewContext(scope, { evidence });
+    const section = scopeName === "branch"
+      ? `Branch diff ${scope.mergeBaseOid}..${scope.headOid}` : "Working tree unstaged diff";
+    const expected = git(repo, "diff", ...(scopeName === "branch" ? [`${base}..HEAD`] : []),
+      "--", "removed.ts", "source.ts");
+    assert.equal(sectionText(evidence, section), expected);
+    assert.equal(context.incomplete, true);
+    assert.match(context.limitations.join(" "), /state\.jsonl.*file patch omitted/);
+    assert.ok(evidence.bytes < 10_000, "omitted patches must not spend the evidence budget");
+  });
+}
+
+test("a file that exceeds remaining total capacity leaves room for smaller later files", (t) => {
+  const evidence = store(t, { maxBytes: 300 });
+  const stream = evidence.startDiff("changes");
+  const first = "diff --git a/large.txt b/large.txt\n" + "+large\n".repeat(100);
+  const last = "diff --git a/last.ts b/last.ts\n-old\n+new\n";
+  for (const byte of Buffer.from(first + last)) stream.write(Buffer.from([byte]));
+  stream.end();
+  assert.equal(sectionText(evidence, "changes"), last);
+  assert.match([...evidence.limitations].join(" "), /large\.txt.*evidence byte limit/);
+});
+
+test("file framing preserves rename headers, Unicode, and diff-like content across chunks", (t) => {
+  const evidence = store(t);
+  const original = "diff --git a/old.ts b/new.ts\nsimilarity index 80%\nrename from old.ts\nrename to new.ts\n"
+    + "--- a/old.ts\n+++ b/new.ts\n@@ -1 +1 @@\n-old\n+diff --git 🙂\n"
+    + "diff --git a/next.ts b/next.ts\n--- a/next.ts\n+++ b/next.ts\n@@ -1 +1 @@\n-before\n+after";
+  const stream = evidence.startDiff("changes");
+  const bytes = Buffer.from(original);
+  for (let i = 0; i < bytes.length; i += 7) stream.write(bytes.subarray(i, i + 7));
+  stream.end();
+  assert.equal(sectionText(evidence, "changes"), original);
+  assert.equal(evidence.limitations.size, 0);
 });
 
 test("paged submodule patches retain commit, staged, and unstaged distinctions", async (t) => {

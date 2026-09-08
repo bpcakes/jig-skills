@@ -22,14 +22,80 @@ function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
-function fingerprint(cwd, scope, base = null) {
+function fingerprint(cwd, scope, base = null, excludePaths = []) {
   const args = [fingerprintScript, "--cwd", cwd, "--scope", scope];
   if (base) args.push("--base", base);
+  for (const excludedPath of excludePaths) args.push("--exclude-path", excludedPath);
   return JSON.parse(execFileSync(process.execPath, args, {
     encoding: "utf8",
     maxBuffer: 2 * 1024 * 1024,
   }));
 }
+
+test("working-tree fingerprint honors committed .reviewignore and explicit exclusions", (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  mkdirSync(path.join(repo, ".agent"));
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "baseline\n");
+  writeFileSync(path.join(repo, ".reviewignore"), "# generated review state\n/.agent/\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-qm", "add review policy"]);
+
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "large ignored state\n");
+  const policyResult = fingerprint(repo, "working-tree");
+  assert.equal(policyResult.hasChanges, false);
+  assert.equal(policyResult.complete, true);
+  assert.deepEqual(policyResult.excludePaths, [".agent"]);
+  assert.deepEqual(policyResult.reviewIgnorePaths, [".agent"]);
+  assert.equal(policyResult.reviewIgnoreRevision, policyResult.headOid);
+
+  writeFileSync(path.join(repo, "generated.log"), "ignored explicitly\n");
+  const explicitResult = fingerprint(repo, "working-tree", null, ["generated.log", ".agent/"]);
+  assert.equal(explicitResult.hasChanges, false);
+  assert.deepEqual(explicitResult.excludePaths, [".agent", "generated.log"]);
+  assert.deepEqual(explicitResult.explicitExcludePaths, [".agent", "generated.log"]);
+  assert.notEqual(explicitResult.fingerprint, policyResult.fingerprint);
+});
+
+test("branch fingerprint uses base .reviewignore but still requires a fully clean checkout", (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  mkdirSync(path.join(repo, ".agent"));
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "baseline\n");
+  writeFileSync(path.join(repo, ".reviewignore"), ".agent/\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-qm", "add review policy"]);
+  const base = git(repo, ["rev-parse", "HEAD"]);
+
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "branch-only ignored change\n");
+  git(repo, ["add", ".agent/state.jsonl"]);
+  git(repo, ["commit", "-qm", "update generated state"]);
+  const ignoredOnly = fingerprint(repo, "branch", base);
+  assert.equal(ignoredOnly.hasChanges, false);
+  assert.equal(ignoredOnly.checkoutClean, true);
+  assert.equal(ignoredOnly.reviewIgnoreRevision, base);
+
+  writeFileSync(path.join(repo, ".agent", "state.jsonl"), "dirty checkout\n");
+  const dirty = fingerprint(repo, "branch", base);
+  assert.equal(dirty.hasChanges, false);
+  assert.equal(dirty.checkoutClean, false);
+});
+
+test("a branch cannot activate a new .reviewignore rule from its own diff", (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const base = git(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(path.join(repo, "generated"));
+  writeFileSync(path.join(repo, "generated", "result.txt"), "must remain visible\n");
+  writeFileSync(path.join(repo, ".reviewignore"), "generated/\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-qm", "try to hide branch files"]);
+
+  const result = fingerprint(repo, "branch", base);
+  assert.equal(result.hasChanges, true);
+  assert.deepEqual(result.excludePaths, []);
+  assert.equal(result.reviewIgnoreRevision, null);
+});
 
 function makeRepository() {
   const repo = mkdtempSync(path.join(os.tmpdir(), "jig-scope-fingerprint-"));

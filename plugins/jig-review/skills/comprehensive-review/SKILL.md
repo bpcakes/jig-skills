@@ -18,10 +18,11 @@ Accept these reviewer options:
 - `--claude-file-access <restricted|host>` controls Claude's filesystem boundary. Default: `restricted`, limited to the reviewed repository and, for large reviews, the adapter's private evidence directory. `host` is an explicit trust-boundary opt-out that still exposes only read-only tools but does not confine them to those directories.
 - `--codex-model <model>` and `--codex-effort <low|medium|high|xhigh|max|ultra>` configure the native Codex child. Both inherit host defaults when omitted.
 - `--cursor-effort <low|medium|high|xhigh>` selects the corresponding fixed `cursor-grok-4.6-*` model. Default: `high` when Cursor is selected.
+- `--exclude-path <repository-relative-path>` excludes one exact path and all its descendants. Repeat the flag to exclude multiple paths. This is additive with the repository's `.reviewignore` policy.
 
 Selecting Cursor runs it with workspace trust for the reviewed repository (`--trust`), read-only ask mode, and sandboxing. Claude's non-interactive `-p` mode already skips its workspace trust dialog.
 
-Run `node scripts/review-options.mjs` from this skill directory with only the reviewer options supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, ambiguous legacy `--model` and `--effort` flags, and settings for unselected reviewers. Do not silently substitute a model or effort rejected by a provider or the host.
+Run `node scripts/review-options.mjs` from this skill directory with the reviewer options and every `--exclude-path` supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, ambiguous legacy `--model` and `--effort` flags, settings for unselected reviewers, and unsafe exclusion paths. Do not silently substitute a model or effort rejected by a provider or the host.
 
 ## Workflow
 
@@ -33,13 +34,17 @@ Run `node scripts/review-options.mjs` from this skill directory with only the re
    - Branch scope requires a clean checkout, including no untracked files or dirty initialized submodules. This keeps reviewer file inspection aligned with the pinned `HEAD`; ask the user to clean the checkout or choose working-tree scope if this check fails.
    - Treat staged, unstaged, and untracked files, including changes inside initialized tracked submodules, as reviewable working-tree changes.
    - Working-tree scope supports repositories with an unborn `HEAD`; branch scope still requires `HEAD` to resolve to a commit.
+   - Read permanent exclusions from `.reviewignore` at the repository root. Each nonblank, non-comment line names one repository-relative exact path plus descendants; leading and trailing `/` are optional. Globs, negation, `..`, backslashes, and excluding `.reviewignore` itself are invalid.
+   - For working-tree scope, trust `.reviewignore` from pinned `HEAD` only. For branch scope, trust it from the resolved base commit only. A staged, unstaged, or branch-local policy edit remains reviewable and does not take effect in that same review; use an explicit `--exclude-path` for an immediate one-off exclusion.
+   - Apply the union of trusted `.reviewignore` entries and normalized `--exclude-path` values to tracked and untracked review content. Exclusions never relax branch scope's full clean-check.
    - If the concrete scope has no reviewable diff, say so and stop.
 2. Capture a read-only scope fingerprint.
-   - Run `node scripts/scope-fingerprint.mjs --cwd <repository> --scope <working-tree|branch> [--base <ref>]` from this skill directory.
+   - Run `node scripts/scope-fingerprint.mjs --cwd <repository> --scope <working-tree|branch> [--base <ref>] [--exclude-path <path>]...` from this skill directory, forwarding every normalized explicit exclusion.
    - Use its resolved scope, pinned base OID, and fingerprint. Do not hand-roll a weaker fingerprint.
    - For branch scope, require `checkoutClean: true`. The fingerprint also includes checkout state so later mutations are detectable.
    - Preserve `complete` and `issues`. If `complete` is false, reviewers may proceed only as a limited-coverage review: pass the issues to the native Codex child, retain the adapters' own coverage warnings, disclose the limitations in the final report, and use `not verified` rather than `verified` for fingerprint status.
    - Pass the same concrete scope description to every selected reviewer. Never pass findings, hypotheses, or conclusions between reviewers.
+   - Pass the same explicit exclusion arguments to every selected reviewer. Preserve `excludePaths`, `reviewIgnorePaths`, and `reviewIgnoreRevision` from the fingerprint for final disclosure.
    - Pass the initial fingerprint to every reviewer. External adapters must match it before context capture and again after the provider exits. The native Codex child must capture and compare the same fingerprint before inspection and after drafting its report. A mismatch is a failed same-scope review, not a completed report.
 3. Read [references/parallel-review-runtime.md](references/parallel-review-runtime.md), then attempt to start every selected reviewer as a context-free subagent before waiting for any result.
    - Claude and Cursor children are pure forwarders for their bundled adapters.
@@ -84,9 +89,11 @@ Review notes:
 - <selected reviewer> review: completed|failed|timed out|not started
 - Claude file access: restricted|host
 - Scope fingerprint: verified|changed|not verified
+- Excluded paths: none|<comma-separated normalized paths>
+- .reviewignore source: none|<commit-oid>:.reviewignore
 ```
 
-Include the Claude file-access line when Claude was selected. If `host` was selected, explicitly disclose that Claude's read-only file tools were not confined to the reviewed repository. Include one status line for each selected reviewer. For a failure, append one sanitized key message. If there are no actionable findings, say `No actionable findings from the completed reviewer pass(es).` and identify the completed reviewers in `Review notes`. Still mention residual test gaps and review limitations.
+Always include the exclusion and policy-source lines, even when neither is active. Include the Claude file-access line when Claude was selected. If `host` was selected, explicitly disclose that Claude's read-only file tools were not confined to the reviewed repository. Include one status line for each selected reviewer. For a failure, append one sanitized key message. If there are no actionable findings, say `No actionable findings from the completed reviewer pass(es).` and identify the completed reviewers in `Review notes`. Still mention residual test gaps and review limitations.
 
 ## Merging Rules
 

@@ -101,6 +101,7 @@ test("Cursor adapter accepts only its supported effort levels", () => {
       effort: "low",
       expectedFingerprint: "a".repeat(64),
       timeoutMs: 28 * 60 * 1000,
+      excludePaths: [],
     },
   );
   assert.throws(() => parseArgs([
@@ -113,6 +114,20 @@ test("Cursor adapter accepts only its supported effort levels", () => {
   ]), /Unsupported effort/);
   assert.throws(() => parseArgs(["--scope", "working-tree", "--model", "auto"]), /Unsupported argument/);
   assert.throws(() => parseArgs(["--scope", "working-tree"]), /expected-fingerprint/);
+});
+
+test("Cursor adapter accepts repeatable review exclusions", () => {
+  const options = parseArgs([
+    "--scope",
+    "working-tree",
+    "--expected-fingerprint",
+    "a".repeat(64),
+    "--exclude-path",
+    ".agent/",
+    "--exclude-path",
+    "tmp/output",
+  ]);
+  assert.deepEqual(options.excludePaths, [".agent", "tmp/output"]);
 });
 
 test("Cursor receives a temporary bounded prompt and returns only its report", async (t) => {

@@ -3,6 +3,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ReviewEvidence } from "./review-evidence.mjs";
+import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
 import {
   buildReviewPrompt,
@@ -40,6 +41,7 @@ function parseArgs(argv) {
     fileAccess: "restricted",
     expectedFingerprint: null,
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    excludePaths: [],
   };
   const supported = new Set([
     "--cwd",
@@ -50,18 +52,23 @@ function parseArgs(argv) {
     "--file-access",
     "--expected-fingerprint",
     "--timeout-ms",
+    "--exclude-path",
   ]);
   const seen = new Set();
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (!supported.has(argument)) throw new Error(`Unsupported argument: ${argument}`);
-    if (seen.has(argument)) throw new Error(`Duplicate argument: ${argument}`);
+    if (seen.has(argument) && argument !== "--exclude-path") {
+      throw new Error(`Duplicate argument: ${argument}`);
+    }
     seen.add(argument);
     const value = argv[index + 1];
     if (value == null || value === "") throw new Error(`Missing value for ${argument}`);
     index += 1;
-    if (argument === "--timeout-ms") {
+    if (argument === "--exclude-path") {
+      options.excludePaths.push(value);
+    } else if (argument === "--timeout-ms") {
       options.timeoutMs = Number(value);
       if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) {
         throw new Error("--timeout-ms must be a positive integer.");
@@ -92,6 +99,7 @@ function parseArgs(argv) {
     throw new Error("--expected-fingerprint must be a 64-character hexadecimal SHA-256 value.");
   }
   options.expectedFingerprint = options.expectedFingerprint.toLowerCase();
+  options.excludePaths = normalizeExcludePaths(options.excludePaths);
   options.fileAccess = normalizeFileAccess(options.fileAccess);
   options.model = String(options.model).trim();
   if (!options.model) throw new Error("--model must not be blank.");

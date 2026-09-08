@@ -2,6 +2,7 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
 const REVIEWER_ORDER = ["claude", "codex", "cursor"];
 const REVIEWERS = new Set(REVIEWER_ORDER);
@@ -54,6 +55,7 @@ function parseArgs(argv) {
     codexModel: null,
     codexEffort: null,
     cursorEffort: "high",
+    excludePaths: [],
   };
   const flags = new Map([
     ["--reviewers", "reviewers"],
@@ -63,6 +65,7 @@ function parseArgs(argv) {
     ["--codex-model", "codexModel"],
     ["--codex-effort", "codexEffort"],
     ["--cursor-effort", "cursorEffort"],
+    ["--exclude-path", "excludePaths"],
   ]);
   const provided = new Set();
 
@@ -70,10 +73,13 @@ function parseArgs(argv) {
     const flag = argv[index];
     const property = flags.get(flag);
     if (!property) throw new Error(`Unsupported argument: ${flag}`);
-    if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
+    if (provided.has(flag) && flag !== "--exclude-path") {
+      throw new Error(`Duplicate argument: ${flag}`);
+    }
     const value = argv[index + 1];
     if (value == null || value === "") throw new Error(`Missing value for ${flag}`);
-    raw[property] = value;
+    if (flag === "--exclude-path") raw.excludePaths.push(value);
+    else raw[property] = value;
     provided.add(flag);
     index += 1;
   }
@@ -119,7 +125,13 @@ function parseArgs(argv) {
     ? null
     : { effort: cursorEffort, model: CURSOR_MODELS[cursorEffort] };
 
-  return { reviewers, claude, codex, cursor };
+  return {
+    reviewers,
+    claude,
+    codex,
+    cursor,
+    excludePaths: normalizeExcludePaths(raw.excludePaths),
+  };
 }
 
 function main() {

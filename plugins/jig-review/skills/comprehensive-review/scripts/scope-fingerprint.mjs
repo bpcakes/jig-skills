@@ -15,6 +15,12 @@ import {
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  exclusionsForSubtree,
+  gitPathspec,
+  normalizeExcludePaths,
+  resolveReviewExclusions,
+} from "./review-exclusions.mjs";
 
 // Linux guarantees /proc/self/fd entries can be used to preserve raw path bytes
 // across spawn. Other supported platforms degrade non-UTF-8 submodule coverage
@@ -33,19 +39,24 @@ function parseArgs(argv) {
     scope: null,
     base: null,
     timeoutMs: DEFAULT_FINGERPRINT_TIMEOUT_MS,
+    excludePaths: [],
   };
   const seen = new Set();
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (!["--cwd", "--scope", "--base", "--timeout-ms"].includes(argument)) {
+    if (!["--cwd", "--scope", "--base", "--timeout-ms", "--exclude-path"].includes(argument)) {
       throw new Error(`Unsupported argument: ${argument}`);
     }
-    if (seen.has(argument)) throw new Error(`Duplicate argument: ${argument}`);
+    if (seen.has(argument) && argument !== "--exclude-path") {
+      throw new Error(`Duplicate argument: ${argument}`);
+    }
     seen.add(argument);
     const value = argv[index + 1];
     if (!value) throw new Error(`Missing value for ${argument}`);
-    if (argument === "--timeout-ms") {
+    if (argument === "--exclude-path") {
+      options.excludePaths.push(value);
+    } else if (argument === "--timeout-ms") {
       options.timeoutMs = Number(value);
       if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) {
         throw new Error("--timeout-ms must be a positive integer.");
@@ -66,6 +77,7 @@ function parseArgs(argv) {
   if (options.scope === "working-tree" && options.base) {
     throw new Error("Working-tree scope does not accept --base.");
   }
+  options.excludePaths = normalizeExcludePaths(options.excludePaths);
 
   return options;
 }
@@ -246,6 +258,20 @@ function runGit(cwd, args, deadlineAt, signal = null) {
 
 async function gitText(cwd, args, deadlineAt, signal = null) {
   return (await runGit(cwd, args, deadlineAt, signal)).toString("utf8").trim();
+}
+
+async function readFileAtRevision(repoRoot, revision, filePath, deadlineAt, signal = null) {
+  try {
+    return (await runGit(
+      repoRoot,
+      ["cat-file", "blob", `${revision}:${filePath}`],
+      deadlineAt,
+      signal,
+    )).toString("utf8");
+  } catch (error) {
+    if (error.exitCode === 128) return null;
+    throw error;
+  }
 }
 
 async function resolveHeadOid(repoRoot, deadlineAt, signal = null) {
@@ -553,6 +579,7 @@ async function hashTrackedSubmodules(
   indexEntries,
   deadlineAt,
   signal = null,
+  excludePaths = [],
 ) {
   const entries = gitlinkEntries(indexEntries);
   const registeredPaths = entries.length > 0
@@ -564,6 +591,9 @@ async function hashTrackedSubmodules(
 
   for (const { oid: expectedOid, relativePath } of entries) {
     assertWithinDeadline(deadlineAt);
+    const displayPath = displayRawPath(relativePath);
+    const subtree = exclusionsForSubtree(excludePaths, displayPath);
+    if (subtree.excluded) continue;
     hashField(hash, "submodule-path", relativePath);
     hashField(hash, "submodule-index-oid", Buffer.from(expectedOid));
     const submodulePath = childRepositoryPath(repoRoot, relativePath);
@@ -636,11 +666,11 @@ async function hashTrackedSubmodules(
         visitedRoots,
         deadlineAt,
         signal,
+        subtree.excludePaths,
       );
       hashField(hash, "submodule-fingerprint", Buffer.from(result.fingerprint));
       hasChanges ||= submoduleHead !== expectedOid || result.hasChanges;
       submoduleCount += 1 + result.submoduleCount;
-      const displayPath = displayRawPath(relativePath);
       issues.push(...result.issues.map((issue) => ({
         ...issue,
         path: issue.path ? `${displayPath}/${issue.path}` : displayPath,
@@ -648,7 +678,6 @@ async function hashTrackedSubmodules(
     } catch (error) {
       if (error.timedOut || error.outputLimit || error.cancelled) throw error;
       hashField(hash, "submodule-state", Buffer.from("unavailable"));
-      const displayPath = displayRawPath(relativePath);
       issues.push({ path: displayPath, reason: "submodule-unavailable" });
       hasChanges = true;
     }
@@ -663,12 +692,17 @@ async function workingTreeFingerprint(
   visitedRoots = new Set(),
   deadlineAt = Date.now() + DEFAULT_FINGERPRINT_TIMEOUT_MS,
   signal = null,
+  excludePaths = [],
 ) {
   assertWithinDeadline(deadlineAt);
   visitedRoots.add(repositoryPathKey(repoRoot));
   const hash = createHash("sha256");
   hashField(hash, "scope", Buffer.from("working-tree"));
   hashField(hash, "head", Buffer.from(headOid ?? "unborn"));
+  for (const excludedPath of excludePaths) {
+    hashField(hash, "exclude-path", Buffer.from(excludedPath));
+  }
+  const pathspec = gitPathspec(excludePaths);
 
   const status = await runGit(repoRoot, [
     "status",
@@ -676,12 +710,13 @@ async function workingTreeFingerprint(
     "-z",
     "--untracked-files=all",
     "--ignore-submodules=all",
+    ...pathspec,
   ], deadlineAt, signal);
   hashField(hash, "status", status);
 
   const indexEntries = await runGit(
     repoRoot,
-    ["ls-files", "--stage", "-z"],
+    ["ls-files", "--stage", "-z", ...pathspec],
     deadlineAt,
     signal,
   );
@@ -694,6 +729,7 @@ async function workingTreeFingerprint(
     "--no-ext-diff",
     "--no-textconv",
     "-z",
+    ...pathspec,
   ], deadlineAt, signal);
   hashField(hash, "staged-paths", staged);
 
@@ -704,6 +740,7 @@ async function workingTreeFingerprint(
     "--no-textconv",
     "--ignore-submodules=all",
     "-z",
+    ...pathspec,
   ], deadlineAt, signal)).sort(Buffer.compare);
   const pathIssues = await hashPathStates(
     hash,
@@ -719,6 +756,7 @@ async function workingTreeFingerprint(
     "--others",
     "--exclude-standard",
     "-z",
+    ...pathspec,
   ], deadlineAt, signal)).sort(Buffer.compare);
 
   pathIssues.push(...await hashPathStates(
@@ -737,6 +775,7 @@ async function workingTreeFingerprint(
     indexEntries,
     deadlineAt,
     signal,
+    excludePaths,
   );
   const issues = [...pathIssues, ...submodules.issues];
 
@@ -750,20 +789,22 @@ async function workingTreeFingerprint(
     submoduleCount: submodules.submoduleCount,
     complete: issues.length === 0,
     issues,
+    excludePaths,
     fingerprint: hash.digest("hex"),
   };
 }
 
-async function branchFingerprint(repoRoot, headOid, baseRef, deadlineAt, signal = null) {
+async function branchFingerprint(
+  repoRoot,
+  headOid,
+  baseOid,
+  deadlineAt,
+  signal = null,
+  excludePaths = [],
+) {
   if (!headOid) {
     throw new Error("Branch scope requires HEAD to resolve to a commit; use working-tree scope for an unborn repository.");
   }
-  const baseOid = await gitText(repoRoot, [
-    "rev-parse",
-    "--verify",
-    "--end-of-options",
-    `${baseRef}^{commit}`,
-  ], deadlineAt, signal);
   const mergeBaseOid = await gitText(
     repoRoot,
     ["merge-base", headOid, baseOid],
@@ -775,6 +816,7 @@ async function branchFingerprint(repoRoot, headOid, baseRef, deadlineAt, signal 
     "--name-only",
     "-z",
     `${mergeBaseOid}..${headOid}`,
+    ...gitPathspec(excludePaths),
   ], deadlineAt, signal);
   const checkout = await workingTreeFingerprint(
     repoRoot,
@@ -789,6 +831,9 @@ async function branchFingerprint(repoRoot, headOid, baseRef, deadlineAt, signal 
   hashField(hash, "base", Buffer.from(baseOid));
   hashField(hash, "merge-base", Buffer.from(mergeBaseOid));
   hashField(hash, "checkout-fingerprint", Buffer.from(checkout.fingerprint));
+  for (const excludedPath of excludePaths) {
+    hashField(hash, "exclude-path", Buffer.from(excludedPath));
+  }
 
   return {
     scope: "branch",
@@ -801,6 +846,7 @@ async function branchFingerprint(repoRoot, headOid, baseRef, deadlineAt, signal 
     submoduleCount: checkout.submoduleCount,
     complete: checkout.complete,
     issues: checkout.issues,
+    excludePaths,
     fingerprint: hash.digest("hex"),
   };
 }
@@ -814,9 +860,48 @@ async function captureFingerprint(options) {
     options.signal,
   );
   const headOid = await resolveHeadOid(repoRoot, deadlineAt, options.signal);
-  return options.scope === "working-tree"
-    ? await workingTreeFingerprint(repoRoot, headOid, new Set(), deadlineAt, options.signal)
-    : await branchFingerprint(repoRoot, headOid, options.base, deadlineAt, options.signal);
+  let baseOid = null;
+  if (options.scope === "branch") {
+    if (!headOid) {
+      throw new Error("Branch scope requires HEAD to resolve to a commit; use working-tree scope for an unborn repository.");
+    }
+    baseOid = await gitText(repoRoot, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${options.base}^{commit}`,
+    ], deadlineAt, options.signal);
+  }
+  const reviewIgnoreRevision = options.scope === "branch" ? baseOid : headOid;
+  const exclusions = await resolveReviewExclusions({
+    revision: reviewIgnoreRevision,
+    explicitPaths: options.excludePaths,
+    readFileAtRevision: (revision, filePath) => readFileAtRevision(
+      repoRoot,
+      revision,
+      filePath,
+      deadlineAt,
+      options.signal,
+    ),
+  });
+  const result = options.scope === "working-tree"
+    ? await workingTreeFingerprint(
+      repoRoot,
+      headOid,
+      new Set(),
+      deadlineAt,
+      options.signal,
+      exclusions.excludePaths,
+    )
+    : await branchFingerprint(
+      repoRoot,
+      headOid,
+      baseOid,
+      deadlineAt,
+      options.signal,
+      exclusions.excludePaths,
+    );
+  return { ...result, ...exclusions };
 }
 
 async function main() {

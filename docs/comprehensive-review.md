@@ -23,6 +23,8 @@ Enter these prompts in Codex from the repository being reviewed:
 | Review a branch against a named base | `$jig-review:comprehensive-review --base main` |
 | Choose Cursor effort | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh` |
 | Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-effort high` |
+| Exclude one path for this run | `$jig-review:comprehensive-review --scope branch --exclude-path .agent/` |
+| Exclude several paths | `$jig-review:comprehensive-review --exclude-path .agent/ --exclude-path generated/reports/` |
 
 For a direct-copy install, replace `$jig-review:comprehensive-review` with `$comprehensive-review`. Direct installation into Claude Code is unsupported because orchestration depends on Codex subagents.
 
@@ -34,11 +36,23 @@ The default is working-tree scope: staged, unstaged, and untracked changes, incl
 
 `--scope branch` detects the default branch when no base is supplied. `--scope auto` chooses working-tree scope when changes exist and branch scope otherwise. Use explicit scope when the distinction matters.
 
+Use repeatable `--exclude-path <path>` arguments for one review. Each value is a literal repository-relative path and excludes that path plus everything below it, whether tracked or untracked. Globs and negation are intentionally unsupported.
+
+For permanent repository policy, commit a root `.reviewignore` file:
+
+```text
+# Large agent transcripts are not product code.
+.agent/
+generated/reports/
+```
+
+Blank lines and `#` comments are ignored; entries use the same literal path semantics as `--exclude-path`. Working-tree reviews read `.reviewignore` from `HEAD`. Branch reviews read it from the selected base commit, so a branch cannot hide its own files by adding an ignore entry. A new or edited policy therefore takes effect once it is in the trusted revision; use `--exclude-path` for the current run. `.reviewignore` cannot exclude itself, and exclusions never waive branch scope's clean-check.
+
 This skill reviews diffs. For unchanged code, select a focused skill that supports repository or path assessment.
 
 ## Reading the Result
 
-The report leads with findings and identifies which reviewers independently reported each issue. Review notes disclose reviewer failures, coverage limitations, Claude file access, and whether the scope fingerprint was verified unchanged. With only one completed review, the result is labeled as a single-reviewer report.
+The report leads with findings and identifies which reviewers independently reported each issue. Review notes disclose reviewer failures, intentional path exclusions and their policy source, coverage limitations, Claude file access, and whether the scope fingerprint was verified unchanged. With only one completed review, the result is labeled as a single-reviewer report.
 
 For large external reviews, the adapters supply numbered pages of patch evidence. The `Evidence coverage` summary distinguishes:
 
@@ -47,7 +61,7 @@ For large external reviews, the adapters supply numbered pages of patch evidence
 
 Fingerprint verification establishes scope stability. It does not prove complete coverage or a bug-free change. If the scope changes during the review, the results cannot be presented as reviews of the same changes.
 
-The runtime switches to pages when a diff exceeds 384 KiB or combined inline context exceeds 768 KiB. Capture is bounded to 16 MiB of source text and 2,048 pages. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) for capture details, deadlines, and cleanup.
+The runtime switches to pages when a diff exceeds 384 KiB or combined inline context exceeds 768 KiB. Capture is bounded to 16 MiB of source text and 2,048 pages. Each included file patch is limited to 2 MiB. A patch that exceeds that limit or the remaining total budget is omitted in full, with its header and reason recorded; capture continues to later files. No path category is excluded automatically. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) for capture details, deadlines, and cleanup.
 
 ## File Access and Project Hooks
 
@@ -69,6 +83,7 @@ Cursor runs with `--mode ask --sandbox enabled --trust --workspace <repository>`
 |---|---|
 | A selected CLI is missing or unauthenticated | Install and authenticate that CLI through its normal setup, or explicitly select available reviewers with `--reviewers`. |
 | Branch review refuses a dirty checkout | Commit or otherwise resolve the changes yourself, use a clean checkout, or choose `--scope working-tree` to review the pending changes. |
+| A large tracked directory overwhelms review evidence | Add a literal `--exclude-path <directory>` for one run, or commit it to the root `.reviewignore` for permanent policy. |
 | Review stops because there is no diff | Select the intended branch/base, or use a repository-capable focused skill for unchanged code. |
 | Evidence coverage is limited | Read the reported omissions or missing pages. Narrow the change set and rerun if fuller coverage is needed. |
 | Scope fingerprint changes | Finish other edits or background writers, then rerun the review over a stable scope. |

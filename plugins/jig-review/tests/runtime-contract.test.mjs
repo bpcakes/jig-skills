@@ -81,3 +81,15 @@ test("empty forwarder output cannot trigger an unaccounted provider retry", asyn
   assert.match(skill, /Treat an empty external-forwarder response as a transport failure/);
   assert.match(skill, /duplicate billable provider work/);
 });
+
+test("review exclusion contract reaches every reviewer and verification pass", () => {
+  const runtime = readFileSync(runtimePath, "utf8");
+  const skill = readFileSync(skillPath, "utf8");
+
+  assert.match(skill, /scope-fingerprint\.mjs[^\n]+\[--exclude-path <path>\]\.{3}/);
+  assert.match(skill, /Pass the same explicit exclusion arguments to every selected reviewer/);
+  assert.match(runtime, /claude-review\.mjs[^\n]+\[--exclude-path <path>\]\.{3}/);
+  assert.match(runtime, /cursor-review\.mjs[^\n]+\[--exclude-path <path>\]\.{3}/);
+  assert.match(runtime, /rerun the fingerprint helper with the same concrete arguments and every explicit exclusion/);
+  assert.match(runtime, /branch cannot hide its own files|cannot hide itself|cannot hide/i);
+});

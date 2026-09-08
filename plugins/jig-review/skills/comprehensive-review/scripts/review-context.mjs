@@ -12,6 +12,11 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import {
+  exclusionsForSubtree,
+  gitPathspec,
+  resolveReviewExclusions,
+} from "./review-exclusions.mjs";
 
 const GIT_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_KILL_GRACE_MS = 500;
@@ -241,6 +246,19 @@ async function gitText(cwd, args, options = {}) {
   return result.stdout.toString("utf8").trim();
 }
 
+async function readFileAtRevision(repoRoot, revision, filePath, options = {}) {
+  try {
+    return (await runGit(
+      repoRoot,
+      ["cat-file", "blob", `${revision}:${filePath}`],
+      options,
+    )).stdout.toString("utf8");
+  } catch (error) {
+    if (error.exitCode === 128) return null;
+    throw error;
+  }
+}
+
 async function boundedGitText(cwd, args, options = {}) {
   const maxBuffer = options.maxBuffer ?? MAX_METADATA_BYTES;
   const result = await runGit(cwd, args, {
@@ -333,7 +351,7 @@ function decodeUtf8Prefix(buffer, byteLength) {
 
 async function boundedDiff(cwd, args, options = {}) {
   if (options.evidence) {
-    const stream = options.evidence.start(options.evidenceTitle);
+    const stream = options.evidence.startDiff(options.evidenceTitle);
     try {
       const result = await runGit(cwd, args, {
         ...options, maxBuffer: MAX_DIFF_BYTES, overflow: "truncate",
@@ -424,7 +442,13 @@ async function formatUntrackedFiles(repoRoot, displayPrefix = "", options = {}) 
   try {
     listed = (await runGit(
       repoRoot,
-      ["ls-files", "--others", "--exclude-standard", "-z"],
+      [
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        ...gitPathspec(options.excludePaths),
+      ],
       { deadlineAt: options.deadlineAt, signal: options.signal },
     )).stdout;
   } catch (error) {
@@ -627,9 +651,16 @@ async function registeredSubmodulePaths(repoRoot, options = {}) {
 }
 
 async function collectWorkingTreeRepository(context, repoRoot, label, options = {}) {
+  const pathspec = gitPathspec(options.excludePaths);
   const status = await boundedGitText(
     repoRoot,
-    ["status", "--short", "--untracked-files=all", "--ignore-submodules=all"],
+    [
+      "status",
+      "--short",
+      "--untracked-files=all",
+      "--ignore-submodules=all",
+      ...pathspec,
+    ],
     options,
   );
   context.addEvidence(`${label} status`, status.text);
@@ -638,12 +669,12 @@ async function collectWorkingTreeRepository(context, repoRoot, label, options = 
   const shared = ["--no-ext-diff", "--no-textconv", "--find-renames"];
   const staged = await boundedDiff(
     repoRoot,
-    ["diff", "--cached", "--submodule=diff", ...shared],
+    ["diff", "--cached", "--submodule=diff", ...shared, ...pathspec],
     { ...options, evidenceTitle: `${label} staged diff` },
   );
   const unstaged = await boundedDiff(
     repoRoot,
-    ["diff", "--ignore-submodules=all", ...shared],
+    ["diff", "--ignore-submodules=all", ...shared, ...pathspec],
     { ...options, evidenceTitle: `${label} unstaged diff` },
   );
   context.addEvidence(`${label} staged diff`, staged.text, Boolean(options.evidence));
@@ -670,7 +701,7 @@ async function collectSubmoduleContexts(
   try {
     indexEntries = (await runGit(
       repoRoot,
-      ["ls-files", "--stage", "-z"],
+      ["ls-files", "--stage", "-z", ...gitPathspec(options.excludePaths)],
       { deadlineAt: options.deadlineAt, signal: options.signal },
     )).stdout;
   } catch (error) {
@@ -697,8 +728,11 @@ async function collectSubmoduleContexts(
 
   for (const { expectedOid, relativePath } of links.entries) {
     remainingTimeout(options.deadlineAt);
-    const submoduleRoot = safeRepositoryPath(repoRoot, relativePath);
     const displayPath = displayPrefix ? `${displayPrefix}/${relativePath}` : relativePath;
+    const subtree = exclusionsForSubtree(options.excludePaths ?? [], relativePath);
+    if (subtree.excluded) continue;
+    const submoduleOptions = { ...options, excludePaths: subtree.excludePaths };
+    const submoduleRoot = safeRepositoryPath(repoRoot, relativePath);
     let stat;
     try {
       stat = lstatSync(submoduleRoot);
@@ -755,7 +789,8 @@ async function collectSubmoduleContexts(
           "--no-textconv",
           "--find-renames",
           `${expectedOid}..${actualOid}`,
-        ], { ...options, evidenceTitle: `Submodule ${displayPath} commit change ${expectedOid}..${actualOid}` });
+          ...gitPathspec(subtree.excludePaths),
+        ], { ...submoduleOptions, evidenceTitle: `Submodule ${displayPath} commit change ${expectedOid}..${actualOid}` });
         context.addEvidence(`Submodule ${displayPath} commit change`, [
           `${expectedOid}..${actualOid}`,
           commitDiff.text,
@@ -771,8 +806,9 @@ async function collectSubmoduleContexts(
           "--porcelain=v1",
           "--untracked-files=all",
           "--ignore-submodules=all",
+          ...gitPathspec(subtree.excludePaths),
         ],
-        options,
+        submoduleOptions,
       );
       if (status.truncated) context.markIncomplete(`submodule ${displayPath} status truncated`);
       if (status.text) {
@@ -780,7 +816,7 @@ async function collectSubmoduleContexts(
           context,
           submoduleRoot,
           `Submodule ${displayPath}`,
-          options,
+          submoduleOptions,
         );
       }
       await collectSubmoduleContexts(
@@ -788,7 +824,7 @@ async function collectSubmoduleContexts(
         submoduleRoot,
         displayPath,
         visitedRoots,
-        options,
+        submoduleOptions,
       );
     } catch (error) {
       if (error.timedOut || error.outputLimit) throw error;
@@ -819,12 +855,23 @@ async function resolveScope(options, runtime = {}) {
     headOid = null;
   }
   if (options.scope === "working-tree") {
+    const exclusions = await resolveReviewExclusions({
+      revision: headOid,
+      explicitPaths: options.excludePaths,
+      readFileAtRevision: (revision, filePath) => readFileAtRevision(
+        repoRoot,
+        revision,
+        filePath,
+        gitOptions,
+      ),
+    });
     return {
       scope: "working-tree",
       repoRoot,
       headOid,
       baseOid: null,
       mergeBaseOid: null,
+      ...exclusions,
       label: headOid ? `working tree at ${headOid}` : "working tree with unborn HEAD",
     };
   }
@@ -865,23 +912,43 @@ async function resolveScope(options, runtime = {}) {
     ["merge-base", headOid, baseOid],
     gitOptions,
   );
+  const exclusions = await resolveReviewExclusions({
+    revision: baseOid,
+    explicitPaths: options.excludePaths,
+    readFileAtRevision: (revision, filePath) => readFileAtRevision(
+      repoRoot,
+      revision,
+      filePath,
+      gitOptions,
+    ),
+  });
   return {
     scope: "branch",
     repoRoot,
     headOid,
     baseOid,
     mergeBaseOid,
+    ...exclusions,
     label: `branch changes ${mergeBaseOid}..${headOid} (base ${baseOid})`,
   };
 }
 
 async function collectReviewContext(scope, options = {}) {
+  options = { ...options, excludePaths: scope.excludePaths ?? [] };
   const context = new ContextBuilder(options.evidence);
   if (scope.scope === "branch") {
     const range = `${scope.mergeBaseOid}..${scope.headOid}`;
     const commits = await boundedGitText(
       scope.repoRoot,
-      ["log", "--oneline", "--no-decorate", "-n", "200", range],
+      [
+        "log",
+        "--oneline",
+        "--no-decorate",
+        "-n",
+        "200",
+        range,
+        ...gitPathspec(options.excludePaths),
+      ],
       options,
     );
     context.addEvidence("Commits", commits.text);
@@ -889,7 +956,13 @@ async function collectReviewContext(scope, options = {}) {
 
     const changedPaths = await boundedGitText(
       scope.repoRoot,
-      ["diff", "--name-status", "--no-renames", range],
+      [
+        "diff",
+        "--name-status",
+        "--no-renames",
+        range,
+        ...gitPathspec(options.excludePaths),
+      ],
       options,
     );
     context.addEvidence("Changed paths", changedPaths.text);
@@ -902,6 +975,7 @@ async function collectReviewContext(scope, options = {}) {
       "--submodule=diff",
       "--find-renames",
       range,
+      ...gitPathspec(options.excludePaths),
     ], { ...options, evidenceTitle: `Branch diff ${range}` });
     context.addEvidence("Branch diff", diff.text, Boolean(options.evidence));
     if (diff.truncated) context.markIncomplete("branch diff omitted");
@@ -933,6 +1007,15 @@ function buildReviewPrompt(scope, reviewContext, options = {}) {
   const escapedContext = String(reviewContext.text ?? "").split(closingDelimiter).join(
     `&lt;/repository-context-${nonce}&gt;`,
   );
+  const exclusionNotice = scope.excludePaths?.length
+    ? [
+        `Excluded paths (exact path plus descendants): ${scope.excludePaths.join(", ")}`,
+        scope.reviewIgnoreRevision
+          ? `.reviewignore policy source: ${scope.reviewIgnoreRevision}:.reviewignore`
+          : ".reviewignore policy source: none; exclusions came from --exclude-path.",
+        "Treat these exclusions as intentionally outside review scope. Do not inspect or report findings from them.",
+      ]
+    : [];
 
   return [
     "Act as an independent senior code reviewer.",
@@ -946,6 +1029,7 @@ function buildReviewPrompt(scope, reviewContext, options = {}) {
     "Do not modify, create, or delete files.",
     "",
     `Target: ${scope.label}`,
+    ...exclusionNotice,
     coverage,
     ...(reviewContext.evidence ? [
       "Captured patch evidence is supplied in numbered JSON pages. The manifest records any capture limitations.",

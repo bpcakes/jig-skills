@@ -17,6 +17,7 @@ test("default reviewers remain Claude and Codex", () => {
     claude: { model: "opus", effort: null, fileAccess: "restricted" },
     codex: { model: null, effort: null },
     cursor: null,
+    excludePaths: [],
   });
 });
 
@@ -43,6 +44,7 @@ test("reviewers and namespaced model settings are normalized", () => {
       claude: { model: "sonnet", effort: "max", fileAccess: "host" },
       codex: { model: "gpt-5.6-sol", effort: "ultra" },
       cursor: { effort: "xhigh", model: "cursor-grok-4.6-xhigh" },
+      excludePaths: [],
     },
   );
   assert.equal(CURSOR_MODELS.high, "cursor-grok-4.6-high");
@@ -54,7 +56,31 @@ test("single-reviewer selection does not configure or require other CLIs", () =>
     claude: null,
     codex: null,
     cursor: { effort: "low", model: "cursor-grok-4.6-low" },
+    excludePaths: [],
   });
+});
+
+test("review exclusions are repeatable, normalized, and deduplicated", () => {
+  assert.deepEqual(parseArgs([
+    "--exclude-path",
+    "/.agent/",
+    "--exclude-path",
+    "build/output",
+    "--exclude-path",
+    ".agent",
+  ]).excludePaths, [".agent", "build/output"]);
+  assert.throws(
+    () => parseArgs(["--exclude-path", "../outside"]),
+    /normalized repository-relative path/,
+  );
+  assert.throws(
+    () => parseArgs(["--exclude-path", "*.jsonl"]),
+    /glob patterns/,
+  );
+  assert.throws(
+    () => parseArgs(["--exclude-path", ".reviewignore"]),
+    /cannot exclude itself/,
+  );
 });
 
 test("reviewer-specific settings require selecting that reviewer", () => {
@@ -115,5 +141,6 @@ test("CLI entrypoint works when the skill directory is reached through a symlink
     claude: null,
     codex: null,
     cursor: { effort: "medium", model: "cursor-grok-4.6-medium" },
+    excludePaths: [],
   });
 });

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { captureDiff } from "./diff-evidence.mjs";
 
 const PAGE_BYTES = 16 * 1024;
 const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024;
@@ -100,6 +101,48 @@ class ReviewEvidence {
     } catch (error) {
       if (!error.evidenceLimit) throw error;
     }
+  }
+
+  startDiff(section) {
+    const stream = this.start(section);
+    const omit = (reason) => {
+      this.required = true;
+      this.limitations.add(`${section}: ${reason}`);
+    };
+    const diff = captureDiff({
+      checkTime: () => this.checkTime(),
+      omit,
+      accept: (patch, label) => {
+        // Admit a whole file or none of it. A rejected file cannot consume the
+        // remaining budget or stop Git before later file patches arrive.
+        if (patch.length > this.maxBytes - this.bytes) {
+          omit(`${label}: file patch omitted (evidence byte limit reached)`);
+          return;
+        }
+        try {
+          new TextDecoder("utf-8", { fatal: true }).decode(patch);
+        } catch {
+          omit(`${label}: non-UTF-8 file patch omitted`);
+          return;
+        }
+        try {
+          stream.write(patch);
+        } catch (error) {
+          if (!error.evidenceLimit) throw error;
+        }
+      },
+    });
+    return {
+      write: diff.write,
+      end: () => {
+        diff.end();
+        try {
+          stream.end();
+        } catch (error) {
+          if (!error.evidenceLimit) throw error;
+        }
+      },
+    };
   }
 
   finish(scope, context) {

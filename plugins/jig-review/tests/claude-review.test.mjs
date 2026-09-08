@@ -73,6 +73,7 @@ test("argument parsing keeps Claude configuration separate from scope", () => {
       fileAccess: "restricted",
       expectedFingerprint: "a".repeat(64),
       timeoutMs: 5000,
+      excludePaths: [],
     },
   );
   assert.throws(
@@ -99,6 +100,20 @@ test("argument parsing keeps Claude configuration separate from scope", () => {
     ]).expectedFingerprint,
     "a".repeat(64),
   );
+});
+
+test("Claude adapter accepts repeatable review exclusions", () => {
+  const options = parseArgs([
+    "--scope",
+    "working-tree",
+    "--expected-fingerprint",
+    "a".repeat(64),
+    "--exclude-path",
+    "/.agent/",
+    "--exclude-path",
+    "build",
+  ]);
+  assert.deepEqual(options.excludePaths, [".agent", "build"]);
 });
 
 test("Claude receives only read-only repository tools", () => {
