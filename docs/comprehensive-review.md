@@ -22,6 +22,7 @@ Enter these prompts in Codex from the repository being reviewed:
 | Use Codex and Cursor | `$jig-review:comprehensive-review --reviewers codex,cursor` |
 | Review a branch against a named base | `$jig-review:comprehensive-review --base main` |
 | Choose Cursor effort | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh` |
+| Enable Cursor fast mode | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
 | Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-effort high` |
 | Use a separate Claude profile | `$jig-review:comprehensive-review --claude-config-dir ~/.claude-appleid` |
 | Exclude one path for this run | `$jig-review:comprehensive-review --scope branch --exclude-path .agent/` |
@@ -86,6 +87,12 @@ $jig-review:comprehensive-review --claude-file-access host
 
 Cursor runs with `--mode ask --sandbox enabled --trust --workspace <repository>`. Workspace trust allows non-interactive startup, but ask mode and sandboxing do not establish isolation for project hooks. This is an accepted limitation; future hook isolation is tracked as `jig-skills-h18` in [Beads](../.beads/issues.jsonl). The current adapter does not disable project hooks.
 
+Cursor uses standard Grok 4.6 models by default. Pass `--cursor-speed fast` to select the `-fast` variant for the chosen `--cursor-effort`:
+
+```text
+$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast
+```
+
 ## Troubleshooting
 
 | Symptom | What to do |
@@ -97,7 +104,7 @@ Cursor runs with `--mode ask --sandbox enabled --trust --workspace <repository>`
 | Review stops because there is no diff | Select the intended branch/base, or use a repository-capable focused skill for unchanged code. |
 | Evidence coverage is limited | Read the reported omissions or missing pages. Narrow the change set and rerun if fuller coverage is needed. |
 | Scope fingerprint changes | Finish other edits or background writers, then rerun the review over a stable scope. |
-| A model or effort is rejected | Choose a supported value explicitly. The skill does not silently substitute models or effort levels. |
+| A model, effort, or speed is rejected | Choose a supported value explicitly. The skill does not silently substitute models, effort levels, or Cursor speed. |
 | Cursor still requests interactive workspace trust | Check that the installed `jig-review` includes the `--trust` adapter change; follow the [plugin update steps](../README.md#update-marketplace-plugins). |
 
 The [skill entrypoint](../plugins/jig-review/skills/comprehensive-review/SKILL.md) defines all reviewer controls and the report contract. The [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) documents orchestration and evidence handling for maintainers.

@@ -43,6 +43,8 @@ test("reviewers and namespaced model settings are normalized", () => {
       "ultra",
       "--cursor-effort",
       "xhigh",
+      "--cursor-speed",
+      "fast",
     ]),
     {
       reviewers: ["claude", "codex", "cursor"],
@@ -53,7 +55,11 @@ test("reviewers and namespaced model settings are normalized", () => {
         configDir: null,
       },
       codex: { model: "gpt-5.6-sol", effort: "ultra" },
-      cursor: { effort: "xhigh", model: "cursor-grok-4.6-xhigh" },
+      cursor: {
+        effort: "xhigh",
+        speed: "fast",
+        model: "cursor-grok-4.6-xhigh-fast",
+      },
       excludePaths: [],
     },
   );
@@ -65,7 +71,11 @@ test("single-reviewer selection does not configure or require other CLIs", () =>
     reviewers: ["cursor"],
     claude: null,
     codex: null,
-    cursor: { effort: "low", model: "cursor-grok-4.6-low" },
+    cursor: {
+      effort: "low",
+      speed: "standard",
+      model: "cursor-grok-4.6-low",
+    },
     excludePaths: [],
   });
 });
@@ -110,6 +120,10 @@ test("reviewer-specific settings require selecting that reviewer", () => {
     () => parseArgs(["--reviewers", "claude", "--cursor-effort", "high"]),
     /requires selecting cursor/,
   );
+  assert.throws(
+    () => parseArgs(["--reviewers", "claude", "--cursor-speed", "fast"]),
+    /requires selecting cursor/,
+  );
 });
 
 test("Claude config directory is explicit and home-relative paths are expanded", () => {
@@ -143,6 +157,10 @@ test("provider effort levels are validated independently", () => {
     /Unsupported --cursor-effort/,
   );
   assert.throws(
+    () => parseArgs(["--reviewers", "cursor", "--cursor-speed", "turbo"]),
+    /Unsupported --cursor-speed/,
+  );
+  assert.throws(
     () => parseArgs(["--claude-file-access", "workspace"]),
     /Unsupported --claude-file-access/,
   );
@@ -160,14 +178,26 @@ test("CLI entrypoint works when the skill directory is reached through a symlink
 
   const output = execFileSync(
     process.execPath,
-    [linkedScript, "--reviewers", "cursor", "--cursor-effort", "medium"],
+    [
+      linkedScript,
+      "--reviewers",
+      "cursor",
+      "--cursor-effort",
+      "medium",
+      "--cursor-speed",
+      "fast",
+    ],
     { encoding: "utf8" },
   );
   assert.deepEqual(JSON.parse(output), {
     reviewers: ["cursor"],
     claude: null,
     codex: null,
-    cursor: { effort: "medium", model: "cursor-grok-4.6-medium" },
+    cursor: {
+      effort: "medium",
+      speed: "fast",
+      model: "cursor-grok-4.6-medium-fast",
+    },
     excludePaths: [],
   });
 });

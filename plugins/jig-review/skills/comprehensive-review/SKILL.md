@@ -18,12 +18,13 @@ Accept these reviewer options:
 - `--claude-file-access <restricted|host>` controls Claude's filesystem boundary. Default: `restricted`, limited to the reviewed repository and, for large reviews, the adapter's private evidence directory. `host` is an explicit trust-boundary opt-out that still exposes only read-only tools but does not confine them to those directories.
 - `--claude-config-dir <absolute-path|~/path>` runs only the Claude reviewer with that `CLAUDE_CONFIG_DIR`. Use it to select a separate Claude Code profile without changing the Codex process environment.
 - `--codex-model <model>` and `--codex-effort <low|medium|high|xhigh|max|ultra>` configure the native Codex child. Both inherit host defaults when omitted.
-- `--cursor-effort <low|medium|high|xhigh>` selects the corresponding fixed `cursor-grok-4.6-*` model. Default: `high` when Cursor is selected.
+- `--cursor-effort <low|medium|high|xhigh>` selects the Grok 4.6 effort level. Default: `high` when Cursor is selected.
+- `--cursor-speed <standard|fast>` selects the corresponding standard or `-fast` Cursor model. Default: `standard`.
 - `--exclude-path <repository-relative-path>` excludes one exact path and all its descendants. Repeat the flag to exclude multiple paths. This is additive with the repository's `.reviewignore` policy.
 
 Selecting Cursor runs it with workspace trust for the reviewed repository (`--trust`), read-only ask mode, and sandboxing. Claude's non-interactive `-p` mode already skips its workspace trust dialog.
 
-Run `node scripts/review-options.mjs` from this skill directory with the reviewer options and every `--exclude-path` supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, ambiguous legacy `--model` and `--effort` flags, settings for unselected reviewers, unsafe exclusion paths, and relative Claude config directories. Do not silently substitute a model, effort, or Claude profile rejected by a provider or the host.
+Run `node scripts/review-options.mjs` from this skill directory with the reviewer options and every `--exclude-path` supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, ambiguous legacy `--model` and `--effort` flags, settings for unselected reviewers, unsupported Cursor speed values, unsafe exclusion paths, and relative Claude config directories. Do not silently substitute a model, effort, speed, or Claude profile rejected by a provider or the host.
 
 ## Workflow
 

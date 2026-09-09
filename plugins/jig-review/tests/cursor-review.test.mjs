@@ -78,9 +78,20 @@ test("Cursor arguments trust the selected workspace while retaining read-only ex
   assert.equal(args[args.indexOf("--model") + 1], "cursor-grok-4.6-xhigh");
   assert.equal(args[args.indexOf("--output-format") + 1], "text");
   assert.equal(args.some((argument) => ["--force", "--yolo", "--approve-mcps"].includes(argument)), false);
+
+  const fastArgs = buildCursorArgs(
+    { effort: "xhigh", speed: "fast" },
+    { repoRoot: "/tmp/repo" },
+    "/tmp/prompt",
+    "/tmp/prompt/review-prompt.md",
+  );
+  assert.equal(
+    fastArgs[fastArgs.indexOf("--model") + 1],
+    "cursor-grok-4.6-xhigh-fast",
+  );
 });
 
-test("Cursor adapter accepts only its supported effort levels", () => {
+test("Cursor adapter accepts only its supported effort and speed values", () => {
   assert.deepEqual(
     parseArgs([
       "--cwd",
@@ -99,6 +110,7 @@ test("Cursor adapter accepts only its supported effort levels", () => {
       scope: "branch",
       base: "abc",
       effort: "low",
+      speed: "standard",
       expectedFingerprint: "a".repeat(64),
       timeoutMs: 28 * 60 * 1000,
       excludePaths: [],
@@ -112,6 +124,14 @@ test("Cursor adapter accepts only its supported effort levels", () => {
     "--expected-fingerprint",
     "a".repeat(64),
   ]), /Unsupported effort/);
+  assert.throws(() => parseArgs([
+    "--scope",
+    "working-tree",
+    "--speed",
+    "turbo",
+    "--expected-fingerprint",
+    "a".repeat(64),
+  ]), /Unsupported speed/);
   assert.throws(() => parseArgs(["--scope", "working-tree", "--model", "auto"]), /Unsupported argument/);
   assert.throws(() => parseArgs(["--scope", "working-tree"]), /expected-fingerprint/);
 });
@@ -174,6 +194,7 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
       scope: "working-tree",
       base: null,
       effort: "medium",
+      speed: "fast",
       expectedFingerprint,
       timeoutMs: 5_000,
     },
@@ -182,7 +203,10 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
   const captured = JSON.parse(readFileSync(capturePath, "utf8"));
 
   assert.equal(report, "No actionable findings from Cursor.");
-  assert.equal(captured.argv[captured.argv.indexOf("--model") + 1], "cursor-grok-4.6-medium");
+  assert.equal(
+    captured.argv[captured.argv.indexOf("--model") + 1],
+    "cursor-grok-4.6-medium-fast",
+  );
   assert.match(captured.prompt, /Target: working tree at [0-9a-f]{40}/);
   assert.match(captured.prompt, /\+export const value = 2;/);
   assert.match(captured.prompt, /untracked\.js/);

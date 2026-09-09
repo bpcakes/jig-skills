@@ -9,7 +9,11 @@ import { fileURLToPath } from "node:url";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
-import { CURSOR_MODELS } from "./review-options.mjs";
+import {
+  CURSOR_MODELS,
+  CURSOR_SPEEDS,
+  cursorModel,
+} from "./review-options.mjs";
 import {
   buildReviewPrompt,
   collectReviewContext,
@@ -32,6 +36,7 @@ function parseArgs(argv) {
     scope: null,
     base: null,
     effort: "high",
+    speed: "standard",
     expectedFingerprint: null,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     excludePaths: [],
@@ -41,6 +46,7 @@ function parseArgs(argv) {
     "--scope",
     "--base",
     "--effort",
+    "--speed",
     "--expected-fingerprint",
     "--timeout-ms",
     "--exclude-path",
@@ -95,6 +101,12 @@ function parseArgs(argv) {
       `Unsupported effort "${options.effort}". Use ${Object.keys(CURSOR_MODELS).join(", ")}.`,
     );
   }
+  options.speed = String(options.speed).trim().toLowerCase();
+  if (!CURSOR_SPEEDS.has(options.speed)) {
+    throw new Error(
+      `Unsupported speed "${options.speed}". Use ${[...CURSOR_SPEEDS].join(", ")}.`,
+    );
+  }
   return options;
 }
 
@@ -111,7 +123,7 @@ function buildCursorArgs(options, scope, promptDirectory, promptPath) {
     "--add-dir",
     promptDirectory,
     "--model",
-    CURSOR_MODELS[options.effort],
+    cursorModel(options.effort, options.speed),
     "--output-format",
     "text",
     [

@@ -16,6 +16,12 @@ const CURSOR_MODELS = Object.freeze({
   high: "cursor-grok-4.6-high",
   xhigh: "cursor-grok-4.6-xhigh",
 });
+const CURSOR_SPEEDS = new Set(["standard", "fast"]);
+
+function cursorModel(effortLevel, speed = "standard") {
+  const model = CURSOR_MODELS[effortLevel];
+  return speed === "fast" ? `${model}-fast` : model;
+}
 
 function nonblank(flag, value) {
   const normalized = String(value).trim();
@@ -57,6 +63,7 @@ function parseArgs(argv) {
     codexModel: null,
     codexEffort: null,
     cursorEffort: "high",
+    cursorSpeed: "standard",
     excludePaths: [],
   };
   const flags = new Map([
@@ -68,6 +75,7 @@ function parseArgs(argv) {
     ["--codex-model", "codexModel"],
     ["--codex-effort", "codexEffort"],
     ["--cursor-effort", "cursorEffort"],
+    ["--cursor-speed", "cursorSpeed"],
     ["--exclude-path", "excludePaths"],
   ]);
   const provided = new Set();
@@ -97,7 +105,7 @@ function parseArgs(argv) {
       "--claude-config-dir",
     ],
     codex: ["--codex-model", "--codex-effort"],
-    cursor: ["--cursor-effort"],
+    cursor: ["--cursor-effort", "--cursor-speed"],
   };
   for (const [reviewer, configurationFlags] of Object.entries(reviewerFlags)) {
     if (selected.has(reviewer)) continue;
@@ -127,12 +135,20 @@ function parseArgs(argv) {
           : effort("--codex-effort", raw.codexEffort, CODEX_EFFORTS),
       }
     : null;
-  const cursorEffort = selected.has("cursor")
-    ? effort("--cursor-effort", raw.cursorEffort, new Set(Object.keys(CURSOR_MODELS)))
-    : null;
-  const cursor = cursorEffort == null
-    ? null
-    : { effort: cursorEffort, model: CURSOR_MODELS[cursorEffort] };
+  let cursor = null;
+  if (selected.has("cursor")) {
+    const cursorEffort = effort(
+      "--cursor-effort",
+      raw.cursorEffort,
+      new Set(Object.keys(CURSOR_MODELS)),
+    );
+    const speed = effort("--cursor-speed", raw.cursorSpeed, CURSOR_SPEEDS);
+    cursor = {
+      effort: cursorEffort,
+      speed,
+      model: cursorModel(cursorEffort, speed),
+    };
+  }
 
   return {
     reviewers,
@@ -161,5 +177,7 @@ if (isMain) {
 
 export {
   CURSOR_MODELS,
+  CURSOR_SPEEDS,
+  cursorModel,
   parseArgs,
 };
