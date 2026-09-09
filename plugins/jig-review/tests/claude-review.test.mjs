@@ -71,6 +71,7 @@ test("argument parsing keeps Claude configuration separate from scope", () => {
       model: "sonnet",
       effort: "xhigh",
       fileAccess: "restricted",
+      configDir: null,
       expectedFingerprint: "a".repeat(64),
       timeoutMs: 5000,
       excludePaths: [],
@@ -100,6 +101,26 @@ test("argument parsing keeps Claude configuration separate from scope", () => {
     ]).expectedFingerprint,
     "a".repeat(64),
   );
+});
+
+test("Claude config directory parsing expands home paths and rejects relative paths", () => {
+  const parsed = parseArgs([
+    "--scope",
+    "working-tree",
+    "--expected-fingerprint",
+    "a".repeat(64),
+    "--config-dir",
+    "~/.claude-appleid",
+  ]);
+  assert.equal(parsed.configDir, path.join(os.homedir(), ".claude-appleid"));
+  assert.throws(() => parseArgs([
+    "--scope",
+    "working-tree",
+    "--expected-fingerprint",
+    "a".repeat(64),
+    "--config-dir",
+    "relative/config",
+  ]), /absolute path or start with ~\//);
 });
 
 test("Claude adapter accepts repeatable review exclusions", () => {
@@ -228,7 +249,7 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
       'import { writeFileSync } from "node:fs";',
       "let prompt = '';",
       "for await (const chunk of process.stdin) prompt += chunk;",
-      "writeFileSync(process.env.FAKE_CLAUDE_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), prompt }));",
+      "writeFileSync(process.env.FAKE_CLAUDE_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), prompt, configDir: process.env.CLAUDE_CONFIG_DIR }));",
       "process.stdout.write(JSON.stringify({ result: 'No actionable findings from Claude.' }));",
       "",
     ].join("\n"),
@@ -250,6 +271,7 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
       base: null,
       model: "opus",
       effort: "medium",
+      configDir: "~/.claude-appleid",
       expectedFingerprint,
       timeoutMs: 5_000,
     },
@@ -258,6 +280,7 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
   const captured = JSON.parse(readFileSync(capturePath, "utf8"));
 
   assert.equal(report, "No actionable findings from Claude.");
+  assert.equal(captured.configDir, path.join(os.homedir(), ".claude-appleid"));
   assert.match(captured.prompt, /Target: working tree at [0-9a-f]{40}/);
   assert.match(captured.prompt, /\+  return 3;/);
   assert.match(captured.prompt, /new-file\.js/);

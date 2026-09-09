@@ -14,7 +14,12 @@ import {
 test("default reviewers remain Claude and Codex", () => {
   assert.deepEqual(parseArgs([]), {
     reviewers: ["claude", "codex"],
-    claude: { model: "opus", effort: null, fileAccess: "restricted" },
+    claude: {
+      model: "opus",
+      effort: null,
+      fileAccess: "restricted",
+      configDir: null,
+    },
     codex: { model: null, effort: null },
     cursor: null,
     excludePaths: [],
@@ -41,7 +46,12 @@ test("reviewers and namespaced model settings are normalized", () => {
     ]),
     {
       reviewers: ["claude", "codex", "cursor"],
-      claude: { model: "sonnet", effort: "max", fileAccess: "host" },
+      claude: {
+        model: "sonnet",
+        effort: "max",
+        fileAccess: "host",
+        configDir: null,
+      },
       codex: { model: "gpt-5.6-sol", effort: "ultra" },
       cursor: { effort: "xhigh", model: "cursor-grok-4.6-xhigh" },
       excludePaths: [],
@@ -93,8 +103,25 @@ test("reviewer-specific settings require selecting that reviewer", () => {
     /requires selecting claude/,
   );
   assert.throws(
+    () => parseArgs(["--reviewers", "codex", "--claude-config-dir", "~/.claude-work"]),
+    /requires selecting claude/,
+  );
+  assert.throws(
     () => parseArgs(["--reviewers", "claude", "--cursor-effort", "high"]),
     /requires selecting cursor/,
+  );
+});
+
+test("Claude config directory is explicit and home-relative paths are expanded", () => {
+  const result = parseArgs(["--claude-config-dir", "~/.claude-appleid"]);
+  assert.equal(result.claude.configDir, path.join(os.homedir(), ".claude-appleid"));
+  assert.throws(
+    () => parseArgs(["--claude-config-dir", ".claude-relative"]),
+    /absolute path or start with ~\//,
+  );
+  assert.throws(
+    () => parseArgs(["--claude-config-dir", "~another-user/.claude"]),
+    /supports only ~ or ~\//,
   );
 });
 

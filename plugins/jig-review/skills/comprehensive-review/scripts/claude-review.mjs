@@ -2,6 +2,7 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { normalizeClaudeConfigDir } from "./claude-config.mjs";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
@@ -39,6 +40,7 @@ function parseArgs(argv) {
     model: "opus",
     effort: null,
     fileAccess: "restricted",
+    configDir: null,
     expectedFingerprint: null,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     excludePaths: [],
@@ -50,6 +52,7 @@ function parseArgs(argv) {
     "--model",
     "--effort",
     "--file-access",
+    "--config-dir",
     "--expected-fingerprint",
     "--timeout-ms",
     "--exclude-path",
@@ -77,6 +80,8 @@ function parseArgs(argv) {
       options.expectedFingerprint = value;
     } else if (argument === "--file-access") {
       options.fileAccess = value;
+    } else if (argument === "--config-dir") {
+      options.configDir = value;
     } else {
       options[argument.slice(2)] = value;
     }
@@ -101,6 +106,7 @@ function parseArgs(argv) {
   options.expectedFingerprint = options.expectedFingerprint.toLowerCase();
   options.excludePaths = normalizeExcludePaths(options.excludePaths);
   options.fileAccess = normalizeFileAccess(options.fileAccess);
+  options.configDir = normalizeClaudeConfigDir(options.configDir, "--config-dir");
   options.model = String(options.model).trim();
   if (!options.model) throw new Error("--model must not be blank.");
   if (options.effort) {
@@ -184,6 +190,7 @@ async function runClaudeReview(options, dependencies = {}) {
     ...options,
     expectedFingerprint: options.expectedFingerprint.toLowerCase(),
     fileAccess: normalizeFileAccess(options.fileAccess),
+    configDir: normalizeClaudeConfigDir(options.configDir, "--config-dir"),
   };
   const deadlineAt = Date.now() + options.timeoutMs;
   const signal = dependencies.signal ?? null;
@@ -207,6 +214,9 @@ async function runClaudeReview(options, dependencies = {}) {
         timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
         maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
         signal,
+        env: options.configDir == null
+          ? process.env
+          : { ...process.env, CLAUDE_CONFIG_DIR: options.configDir },
       });
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
     return evidence.annotateReport(parseClaudeResult(result.stdout), context);

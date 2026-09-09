@@ -23,6 +23,7 @@ Enter these prompts in Codex from the repository being reviewed:
 | Review a branch against a named base | `$jig-review:comprehensive-review --base main` |
 | Choose Cursor effort | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh` |
 | Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-effort high` |
+| Use a separate Claude profile | `$jig-review:comprehensive-review --claude-config-dir ~/.claude-appleid` |
 | Exclude one path for this run | `$jig-review:comprehensive-review --scope branch --exclude-path .agent/` |
 | Exclude several paths | `$jig-review:comprehensive-review --exclude-path .agent/ --exclude-path generated/reports/` |
 
@@ -67,6 +68,14 @@ The runtime switches to pages when a diff exceeds 384 KiB or combined inline con
 
 Claude defaults to `--claude-file-access restricted`: its read-only file tools are confined to the reviewed working directory and, for paged evidence, the adapter's private temporary evidence directory. The adapter enables Claude safe mode and exposes only `Read`, `Glob`, and `Grep`.
 
+Use `--claude-config-dir <absolute-path|~/path>` to select a Claude Code profile for one review:
+
+```text
+$jig-review:comprehensive-review --reviewers claude,codex --claude-config-dir ~/.claude-appleid
+```
+
+The adapter expands `~/`, then sets `CLAUDE_CONFIG_DIR` only for the spawned Claude process. Relative paths and `~other-user` forms are rejected. This option requires Claude in `--reviewers`; it does not affect Codex or Cursor. Claude Code uses that directory for its settings, session history, and plugins, as documented in the [Claude Code settings guide](https://code.claude.com/docs/en/settings).
+
 When the review intentionally requires access elsewhere on the machine, request:
 
 ```text
@@ -82,6 +91,7 @@ Cursor runs with `--mode ask --sandbox enabled --trust --workspace <repository>`
 | Symptom | What to do |
 |---|---|
 | A selected CLI is missing or unauthenticated | Install and authenticate that CLI through its normal setup, or explicitly select available reviewers with `--reviewers`. |
+| Claude uses the wrong account or profile | Pass `--claude-config-dir ~/.claude-profile-name`; verify that directory already contains the intended Claude Code configuration. |
 | Branch review refuses a dirty checkout | Commit or otherwise resolve the changes yourself, use a clean checkout, or choose `--scope working-tree` to review the pending changes. |
 | A large tracked directory overwhelms review evidence | Add a literal `--exclude-path <directory>` for one run, or commit it to the root `.reviewignore` for permanent policy. |
 | Review stops because there is no diff | Select the intended branch/base, or use a repository-capable focused skill for unchanged code. |

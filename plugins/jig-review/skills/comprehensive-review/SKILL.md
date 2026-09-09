@@ -16,13 +16,14 @@ Accept these reviewer options:
 - `--reviewers <claude,codex,cursor>` selects one or more reviewers. Default: `claude,codex`.
 - `--claude-model <model>` and `--claude-effort <low|medium|high|xhigh|max>` configure Claude. Default model: `opus`; effort is not forced by default.
 - `--claude-file-access <restricted|host>` controls Claude's filesystem boundary. Default: `restricted`, limited to the reviewed repository and, for large reviews, the adapter's private evidence directory. `host` is an explicit trust-boundary opt-out that still exposes only read-only tools but does not confine them to those directories.
+- `--claude-config-dir <absolute-path|~/path>` runs only the Claude reviewer with that `CLAUDE_CONFIG_DIR`. Use it to select a separate Claude Code profile without changing the Codex process environment.
 - `--codex-model <model>` and `--codex-effort <low|medium|high|xhigh|max|ultra>` configure the native Codex child. Both inherit host defaults when omitted.
 - `--cursor-effort <low|medium|high|xhigh>` selects the corresponding fixed `cursor-grok-4.6-*` model. Default: `high` when Cursor is selected.
 - `--exclude-path <repository-relative-path>` excludes one exact path and all its descendants. Repeat the flag to exclude multiple paths. This is additive with the repository's `.reviewignore` policy.
 
 Selecting Cursor runs it with workspace trust for the reviewed repository (`--trust`), read-only ask mode, and sandboxing. Claude's non-interactive `-p` mode already skips its workspace trust dialog.
 
-Run `node scripts/review-options.mjs` from this skill directory with the reviewer options and every `--exclude-path` supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, ambiguous legacy `--model` and `--effort` flags, settings for unselected reviewers, and unsafe exclusion paths. Do not silently substitute a model or effort rejected by a provider or the host.
+Run `node scripts/review-options.mjs` from this skill directory with the reviewer options and every `--exclude-path` supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, ambiguous legacy `--model` and `--effort` flags, settings for unselected reviewers, unsafe exclusion paths, and relative Claude config directories. Do not silently substitute a model, effort, or Claude profile rejected by a provider or the host.
 
 ## Workflow
 
@@ -88,12 +89,13 @@ Review notes:
 - Reviewers requested: <comma-separated reviewer names>
 - <selected reviewer> review: completed|failed|timed out|not started
 - Claude file access: restricted|host
+- Claude config: default|custom
 - Scope fingerprint: verified|changed|not verified
 - Excluded paths: none|<comma-separated normalized paths>
 - .reviewignore source: none|<commit-oid>:.reviewignore
 ```
 
-Always include the exclusion and policy-source lines, even when neither is active. Include the Claude file-access line when Claude was selected. If `host` was selected, explicitly disclose that Claude's read-only file tools were not confined to the reviewed repository. Include one status line for each selected reviewer. For a failure, append one sanitized key message. If there are no actionable findings, say `No actionable findings from the completed reviewer pass(es).` and identify the completed reviewers in `Review notes`. Still mention residual test gaps and review limitations.
+Always include the exclusion and policy-source lines, even when neither is active. Include the Claude file-access and config lines when Claude was selected; report whether a custom config was used without exposing its filesystem path. If `host` was selected, explicitly disclose that Claude's read-only file tools were not confined to the reviewed repository. Include one status line for each selected reviewer. For a failure, append one sanitized key message. If there are no actionable findings, say `No actionable findings from the completed reviewer pass(es).` and identify the completed reviewers in `Review notes`. Still mention residual test gaps and review limitations.
 
 ## Merging Rules
 

@@ -2,6 +2,7 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { normalizeClaudeConfigDir } from "./claude-config.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
 const REVIEWER_ORDER = ["claude", "codex", "cursor"];
@@ -52,6 +53,7 @@ function parseArgs(argv) {
     claudeModel: "opus",
     claudeEffort: null,
     claudeFileAccess: "restricted",
+    claudeConfigDir: null,
     codexModel: null,
     codexEffort: null,
     cursorEffort: "high",
@@ -62,6 +64,7 @@ function parseArgs(argv) {
     ["--claude-model", "claudeModel"],
     ["--claude-effort", "claudeEffort"],
     ["--claude-file-access", "claudeFileAccess"],
+    ["--claude-config-dir", "claudeConfigDir"],
     ["--codex-model", "codexModel"],
     ["--codex-effort", "codexEffort"],
     ["--cursor-effort", "cursorEffort"],
@@ -87,7 +90,12 @@ function parseArgs(argv) {
   const reviewers = parseReviewers(raw.reviewers);
   const selected = new Set(reviewers);
   const reviewerFlags = {
-    claude: ["--claude-model", "--claude-effort", "--claude-file-access"],
+    claude: [
+      "--claude-model",
+      "--claude-effort",
+      "--claude-file-access",
+      "--claude-config-dir",
+    ],
     codex: ["--codex-model", "--codex-effort"],
     cursor: ["--cursor-effort"],
   };
@@ -108,6 +116,7 @@ function parseArgs(argv) {
           raw.claudeFileAccess,
           CLAUDE_FILE_ACCESS,
         ),
+        configDir: normalizeClaudeConfigDir(raw.claudeConfigDir),
       }
     : null;
   const codex = selected.has("codex")

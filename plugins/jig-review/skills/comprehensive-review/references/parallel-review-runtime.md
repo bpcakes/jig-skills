@@ -7,10 +7,10 @@ Use this runtime only for a collected, same-turn comprehensive review. The paren
 Normalize reviewer controls before checking provider prerequisites:
 
 ```text
-node "<skill-root>/scripts/review-options.mjs" [--reviewers <list>] [--claude-model <model>] [--claude-effort <level>] [--claude-file-access <restricted|host>] [--codex-model <model>] [--codex-effort <level>] [--cursor-effort <level>] [--exclude-path <path>]...
+node "<skill-root>/scripts/review-options.mjs" [--reviewers <list>] [--claude-model <model>] [--claude-effort <level>] [--claude-file-access <restricted|host>] [--claude-config-dir <absolute-path|~/path>] [--codex-model <model>] [--codex-effort <level>] [--cursor-effort <level>] [--exclude-path <path>]...
 ```
 
-Use the returned `reviewers` array as the only spawn list. The parser defaults to Claude and Codex, defaults Claude file access to `restricted`, keeps provider settings separate, and maps Cursor effort to an exact Grok 4.6 model ID. Do not probe, spawn, or consume tokens for an unselected reviewer.
+Use the returned `reviewers` array as the only spawn list. The parser defaults to Claude and Codex, defaults Claude file access to `restricted`, expands a Claude config directory beginning with `~/`, keeps provider settings separate, and maps Cursor effort to an exact Grok 4.6 model ID. `--claude-config-dir` requires selecting Claude and accepts only an absolute path, `~`, or `~/...`; do not resolve relative paths against the reviewed repository. Do not probe, spawn, or consume tokens for an unselected reviewer.
 
 Treat `--wait` as a compatibility flag and remove it. Normalize scope arguments before any reviewer starts:
 
@@ -43,10 +43,10 @@ The external adapters support Linux, macOS, and Windows through WSL. Fail closed
 Claude command:
 
 ```text
-node "<skill-root>/scripts/claude-review.mjs" --cwd <repository> --scope <working-tree|branch> [--base <resolved-base-oid>] --expected-fingerprint <initial-fingerprint> [--model <claude.model>] [--effort <claude.effort>] --file-access <claude.fileAccess> [--exclude-path <path>]...
+node "<skill-root>/scripts/claude-review.mjs" --cwd <repository> --scope <working-tree|branch> [--base <resolved-base-oid>] --expected-fingerprint <initial-fingerprint> [--model <claude.model>] [--effort <claude.effort>] --file-access <claude.fileAccess> [--config-dir <claude.configDir>] [--exclude-path <path>]...
 ```
 
-Require an authenticated `claude` executable. The adapter defaults to `opus`. It independently verifies the repository and pinned branch base, supplies bounded Git context over stdin, enables safe mode without session persistence, and exposes only `Read`, `Glob`, and `Grep`. It never exposes Bash, Edit, Write, skills, MCP servers, or subagents. In the default `restricted` mode it passes Claude's `--restricted` flag, confining file tools to the working directory and explicitly added directories. For paged evidence it adds only its private temporary directory with `--add-dir`; this does not require `host` access or changes to the fingerprinted repository. `host` mode deliberately omits the restriction flag; the tools remain read-only but may read outside these directories. Treat `host` as an explicit user-selected trust-boundary expansion and disclose it in the final review notes.
+Require an authenticated `claude` executable. The adapter defaults to `opus`. When `claude.configDir` is non-null, pass it as `--config-dir` to the adapter; the adapter sets `CLAUDE_CONFIG_DIR` only in the Claude provider process environment and never interpolates it into shell syntax. Otherwise the provider retains its inherited environment. It independently verifies the repository and pinned branch base, supplies bounded Git context over stdin, enables safe mode without session persistence, and exposes only `Read`, `Glob`, and `Grep`. It never exposes Bash, Edit, Write, skills, MCP servers, or subagents. In the default `restricted` mode it passes Claude's `--restricted` flag, confining file tools to the working directory and explicitly added directories. For paged evidence it adds only its private temporary directory with `--add-dir`; this does not require `host` access or changes to the fingerprinted repository. `host` mode deliberately omits the restriction flag; the tools remain read-only but may read outside these directories. Treat `host` as an explicit user-selected trust-boundary expansion and disclose it in the final review notes. Disclose custom/default Claude config selection without printing the config path.
 
 Claude's `-p` mode [skips workspace trust verification](https://code.claude.com/docs/en/security#additional-safeguards); this adapter does not use the `--worktree` exception. No separate trust setup or permission-bypass flag is needed.
 
