@@ -82,6 +82,11 @@ function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
+    if (flag === "--all-reviewers") {
+      if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
+      provided.add(flag);
+      continue;
+    }
     const property = flags.get(flag);
     if (!property) throw new Error(`Unsupported argument: ${flag}`);
     if (provided.has(flag) && flag !== "--exclude-path") {
@@ -95,7 +100,12 @@ function parseArgs(argv) {
     index += 1;
   }
 
-  const reviewers = parseReviewers(raw.reviewers);
+  if (provided.has("--all-reviewers") && provided.has("--reviewers")) {
+    throw new Error("--all-reviewers cannot be combined with --reviewers.");
+  }
+  const reviewers = provided.has("--all-reviewers")
+    ? [...REVIEWER_ORDER]
+    : parseReviewers(raw.reviewers);
   const selected = new Set(reviewers);
   const reviewerFlags = {
     claude: [

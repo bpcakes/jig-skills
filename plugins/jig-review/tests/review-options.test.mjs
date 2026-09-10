@@ -26,6 +26,34 @@ test("default reviewers remain Claude and Codex", () => {
   });
 });
 
+test("all-reviewers selects every provider in canonical order", () => {
+  assert.deepEqual(
+    parseArgs([
+      "--all-reviewers",
+      "--cursor-effort",
+      "xhigh",
+      "--cursor-speed",
+      "fast",
+    ]),
+    {
+      reviewers: ["claude", "codex", "cursor"],
+      claude: {
+        model: "opus",
+        effort: null,
+        fileAccess: "restricted",
+        configDir: null,
+      },
+      codex: { model: null, effort: null },
+      cursor: {
+        effort: "xhigh",
+        speed: "fast",
+        model: "cursor-grok-4.6-xhigh-fast",
+      },
+      excludePaths: [],
+    },
+  );
+});
+
 test("reviewers and namespaced model settings are normalized", () => {
   assert.deepEqual(
     parseArgs([
@@ -145,6 +173,14 @@ test("ambiguous legacy flags and invalid reviewer lists are rejected", () => {
   assert.throws(() => parseArgs(["--reviewers", "claude,claude"]), /Duplicate reviewer/);
   assert.throws(() => parseArgs(["--reviewers", "claude,grok"]), /Unknown reviewer/);
   assert.throws(() => parseArgs(["--reviewers", ""]), /Missing value/);
+  assert.throws(
+    () => parseArgs(["--all-reviewers", "--reviewers", "codex"]),
+    /cannot be combined/,
+  );
+  assert.throws(
+    () => parseArgs(["--all-reviewers", "--all-reviewers"]),
+    /Duplicate argument/,
+  );
 });
 
 test("provider effort levels are validated independently", () => {

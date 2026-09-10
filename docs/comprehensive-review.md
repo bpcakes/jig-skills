@@ -17,6 +17,7 @@ Enter these prompts in Codex from the repository being reviewed:
 | Task | Prompt |
 |---|---|
 | Review working changes with the defaults | `$jig-review:comprehensive-review` |
+| Review with all three providers | `$jig-review:comprehensive-review --all-reviewers` |
 | Use only native Codex | `$jig-review:comprehensive-review --reviewers codex` |
 | Add Cursor | `$jig-review:comprehensive-review --reviewers claude,codex,cursor` |
 | Use Codex and Cursor | `$jig-review:comprehensive-review --reviewers codex,cursor` |
@@ -29,6 +30,12 @@ Enter these prompts in Codex from the repository being reviewed:
 | Exclude several paths | `$jig-review:comprehensive-review --exclude-path .agent/ --exclude-path generated/reports/` |
 
 For a direct-copy install, replace `$jig-review:comprehensive-review` with `$comprehensive-review`. Direct installation into Claude Code is unsupported because orchestration depends on Codex subagents.
+
+`--all-reviewers` is shorthand for `--reviewers claude,codex,cursor`. Do not combine the two selection forms. Reviewer-specific controls still apply, for example:
+
+```text
+$jig-review:comprehensive-review --all-reviewers --cursor-effort xhigh --cursor-speed fast
+```
 
 ## Scope
 
