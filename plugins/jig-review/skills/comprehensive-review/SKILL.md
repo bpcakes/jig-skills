@@ -27,6 +27,8 @@ Selecting Cursor runs it with workspace trust for the reviewed repository (`--tr
 
 Run `node scripts/review-options.mjs` from this skill directory with the reviewer options and every `--exclude-path` supplied by the user, then use its JSON exactly. It rejects unknown or duplicate reviewers, combining `--all-reviewers` with `--reviewers`, ambiguous legacy `--model` and `--effort` flags, settings for unselected reviewers, unsupported Cursor speed values, unsafe exclusion paths, and relative Claude config directories. Do not silently substitute a model, effort, speed, or Claude profile rejected by a provider or the host.
 
+A value cannot begin with `--`. For a literal exclusion path beginning with `--`, use its repository-root form, such as `--exclude-path /--output`.
+
 ## Workflow
 
 1. Resolve one concrete review scope.

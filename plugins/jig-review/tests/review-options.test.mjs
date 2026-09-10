@@ -154,6 +154,16 @@ test("reviewer-specific settings require selecting that reviewer", () => {
   );
 });
 
+test("review options reject flags as values while accepting explicit literal exclusion paths", () => {
+  for (const flag of ["--exclude-path", "--claude-model", "--claude-config-dir", "--reviewers"]) {
+    assert.throws(
+      () => parseArgs([flag, "--all-reviewers"]),
+      { message: `Missing value for ${flag}` },
+    );
+  }
+  assert.deepEqual(parseArgs(["--exclude-path", "/--all-reviewers"]).excludePaths, ["--all-reviewers"]);
+});
+
 test("Claude config directory is explicit and home-relative paths are expanded", () => {
   const result = parseArgs(["--claude-config-dir", "~/.claude-appleid"]);
   assert.equal(result.claude.configDir, path.join(os.homedir(), ".claude-appleid"));

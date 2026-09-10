@@ -4,10 +4,14 @@ on:
   pull_request:
     paths:
       - "plugins/jig-review/**"
+      - "plugins/*/skills/**"
+      - "scripts/install.sh"
       - ".github/workflows/jig-review-tests.yml"
   push:
     paths:
       - "plugins/jig-review/**"
+      - "plugins/*/skills/**"
+      - "scripts/install.sh"
       - ".github/workflows/jig-review-tests.yml"
 
 permissions:

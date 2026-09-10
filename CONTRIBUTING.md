@@ -9,7 +9,7 @@ Keep each skill focused on a concrete task, with clear inputs, default behavior,
 - `.agents/plugins/marketplace.json` registers plugins and their installation policies.
 - `plugins/<plugin>/.codex-plugin/plugin.json` declares plugin metadata and version.
 - `plugins/<plugin>/skills/<skill>/SKILL.md` is the skill entrypoint. Supporting references, scanners, examples, and tests stay with the skill.
-- `scripts/install.sh` copies complete skill directories into Codex or Claude Code; it excludes `comprehensive-review` from Claude installs.
+- `scripts/install.sh` copies complete skill directories into Codex or Claude Code; it excludes Codex-only orchestration skills from Claude installs.
 - `docs/` contains user guidance that is too detailed for the root README.
 
 ## Changing Skills and Documentation

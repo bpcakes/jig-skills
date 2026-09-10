@@ -1,0 +1,7 @@
+interface:
+  display_name: "Review Fix Loop"
+  short_description: "Review loops with minimal or comprehensive fixes"
+  default_prompt: "Use $review-fix-loop to review my working changes, fix verified medium-or-higher findings, and re-review until clean or the round limit is reached."
+
+policy:
+  allow_implicit_invocation: true

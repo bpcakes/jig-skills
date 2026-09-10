@@ -17,6 +17,32 @@ const CURSOR_MODELS = Object.freeze({
   xhigh: "cursor-grok-4.6-xhigh",
 });
 const CURSOR_SPEEDS = new Set(["standard", "fast"]);
+const REVIEW_VALUE_FLAGS = new Map([
+  ["--reviewers", "reviewers"],
+  ["--claude-model", "claudeModel"],
+  ["--claude-effort", "claudeEffort"],
+  ["--claude-file-access", "claudeFileAccess"],
+  ["--claude-config-dir", "claudeConfigDir"],
+  ["--codex-model", "codexModel"],
+  ["--codex-effort", "codexEffort"],
+  ["--cursor-effort", "cursorEffort"],
+  ["--cursor-speed", "cursorSpeed"],
+  ["--exclude-path", "excludePaths"],
+]);
+
+function reviewOptionTakesValue(flag) {
+  if (flag === "--all-reviewers") return false;
+  if (REVIEW_VALUE_FLAGS.has(flag)) return true;
+  throw new Error(`Unsupported argument: ${flag}`);
+}
+
+function readOptionValue(argv, index, flag) {
+  const value = argv[index + 1];
+  if (value == null || value === "" || value.startsWith("--")) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
+}
 
 function cursorModel(effortLevel, speed = "standard") {
   const model = CURSOR_MODELS[effortLevel];
@@ -66,34 +92,20 @@ function parseArgs(argv) {
     cursorSpeed: "standard",
     excludePaths: [],
   };
-  const flags = new Map([
-    ["--reviewers", "reviewers"],
-    ["--claude-model", "claudeModel"],
-    ["--claude-effort", "claudeEffort"],
-    ["--claude-file-access", "claudeFileAccess"],
-    ["--claude-config-dir", "claudeConfigDir"],
-    ["--codex-model", "codexModel"],
-    ["--codex-effort", "codexEffort"],
-    ["--cursor-effort", "cursorEffort"],
-    ["--cursor-speed", "cursorSpeed"],
-    ["--exclude-path", "excludePaths"],
-  ]);
   const provided = new Set();
 
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
-    if (flag === "--all-reviewers") {
+    if (!reviewOptionTakesValue(flag)) {
       if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
       provided.add(flag);
       continue;
     }
-    const property = flags.get(flag);
-    if (!property) throw new Error(`Unsupported argument: ${flag}`);
+    const property = REVIEW_VALUE_FLAGS.get(flag);
     if (provided.has(flag) && flag !== "--exclude-path") {
       throw new Error(`Duplicate argument: ${flag}`);
     }
-    const value = argv[index + 1];
-    if (value == null || value === "") throw new Error(`Missing value for ${flag}`);
+    const value = readOptionValue(argv, index, flag);
     if (flag === "--exclude-path") raw.excludePaths.push(value);
     else raw[property] = value;
     provided.add(flag);
@@ -190,4 +202,6 @@ export {
   CURSOR_SPEEDS,
   cursorModel,
   parseArgs,
+  readOptionValue,
+  reviewOptionTakesValue,
 };
