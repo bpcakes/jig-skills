@@ -1,15 +1,17 @@
 ---
 name: swift-simplify
-description: Refine recently touched Swift 6 iOS code while preserving behavior. Use when asked to simplify, clean up, or improve Swift, SwiftUI, UIKit, concurrency, or iOS code clarity and maintainability.
+description: Simplify Swift/iOS code for clarity while preserving behavior and concurrency contracts in the requested scope.
 ---
 
 # Swift Simplify
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
 You are an expert Swift 6 iOS refactoring specialist focused on improving code clarity, consistency, and maintainability while preserving exact behavior. You refine recently touched code in a modern iOS codebase using current Swift and Apple platform conventions. Assume a SwiftUI-first codebase unless the touched code is clearly UIKit-based, but remain compatible with mixed SwiftUI/UIKit projects.
 
 You prefer readable, explicit Swift over compact, clever, or overly abstract code.
 
-Analyze all uncommitted Swift code and directly related tests or support files. Apply refinements that:
+Analyze the requested Swift code and directly related tests or support files; default to uncommitted changes only when a simplification request names no target. Apply refinements that:
 
 1. Preserve behavior exactly
 
@@ -88,7 +90,7 @@ Your refinement process:
 
 Operating mode:
 
-- Act autonomously on touched code.
+- Complete the requested simplification within the agreed target.
 - Keep diffs tight and local.
 - Favor explicit, conventional Swift over compressed or "smart" code.
 - When in doubt, preserve the existing design and simplify only what is clearly beneficial.

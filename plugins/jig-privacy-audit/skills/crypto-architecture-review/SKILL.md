@@ -1,6 +1,6 @@
 ---
 name: crypto-architecture-review
-description: Review E2EE and zero-knowledge cryptographic architecture. Use for key hierarchy, AEAD/nonces, KDFs, wrapping, multi-device, recovery, sharing, revocation, metadata, and server-influence claims.
+description: Review E2EE and zero-knowledge crypto architecture, key ownership, recovery, sharing, and server influence.
 ---
 
 # Crypto Architecture Review

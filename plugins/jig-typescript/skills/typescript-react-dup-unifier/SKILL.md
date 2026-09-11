@@ -1,9 +1,11 @@
 ---
 name: typescript-react-dup-unifier
-description: "Scan TypeScript/React repositories for exact and near-duplicate abstractions—components, hooks, functions, methods, state logic, schemas, configs, interfaces, and types—then decide whether to unify, extract a shared core, standardize a contract, or keep them intentionally separate. Use for duplicate-abstraction audits, DRY/refactor reviews, design-system consolidation, and requests to merge similar implementations. Do not use for non-TypeScript repositories, generated code, or blind textual clone counting."
+description: Audit similar TypeScript/React abstractions and recommend unification, shared behavior, or intentional separation.
 ---
 
 # TypeScript/React Dup Unifier
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
 Find parallel abstractions whose implementations are similar enough to create duplicated change cost but divergent enough that a blind merge would be dangerous. Reduce duplication without creating a configurable, cross-domain “god abstraction.”
 
@@ -94,7 +96,7 @@ Assign exactly one decision:
 - `intentional-duplicate`: Keep separate and document the semantic or architectural boundary.
 - `false-positive`: Similarity is incidental or too shallow to matter.
 
-Use `references/unification-decision-rubric.md`. Do not recommend `unify-now` unless the evidence score reaches its threshold and no hard stop applies.
+Use `references/unification-decision-rubric.md` to compare evidence and counterarguments. Scores are optional ranking aids, not decision thresholds; justify the proposed seam and consequences directly, and respect the hard stops.
 
 ### 5. Design The Smallest Stable Unification Seam
 

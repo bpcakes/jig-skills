@@ -1,9 +1,11 @@
 ---
 name: fowler-rust-refactoring
-description: Review Rust crates, workspaces, or diffs for behavior-preserving refactoring opportunities, diagnose Fowler-style code smells in Rust context, and produce a prioritized small-step refactoring plan. Use for Rust maintainability reviews, code-smell searches, refactoring audits, or preparing a safe structural change. Do not use as a generic feature, bug, security, or performance review unless refactoring is the primary task.
+description: Assess Rust code smells and produce a behavior-preserving refactoring plan; implementation and bug fixes are separate tasks.
 ---
 
 # Fowler Rust Refactoring
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
 Review Rust code for structural improvements without confusing style preferences with design evidence. Default to analysis and a refactoring plan; do not edit code unless the user explicitly asks for implementation.
 

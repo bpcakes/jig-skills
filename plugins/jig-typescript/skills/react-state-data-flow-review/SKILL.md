@@ -1,9 +1,13 @@
 ---
 name: react-state-data-flow-review
-description: Review React state ownership and data flow in TypeScript/React changes, including derived state, duplicated state, reducers, context, server/client data boundaries, async state modeling, prop drilling, external stores, optimistic updates, and cache synchronization.
+description: Review React state ownership and data flow for drift, invalid async states, and cache or server/client inconsistencies.
 ---
 
 # React State Data Flow Review
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
+
+Treat checklist patterns, counts, and missing comments as investigation signals. Report a defect only after tracing a concrete consequence and checking counterevidence in callers, invariants, tests, and configuration. Missing context is a limitation, not a finding. Assign severity from impact and reachability; keep optional preferences separate and allow no findings.
 
 Use this skill to review React + TypeScript changes where state shape, ownership, or data movement can create drift, stale UI, redundant renders, unclear ownership, or invalid async states.
 

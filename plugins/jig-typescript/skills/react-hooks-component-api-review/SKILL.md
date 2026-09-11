@@ -1,9 +1,13 @@
 ---
 name: react-hooks-component-api-review
-description: Review React component and hook APIs for prop modeling, controlled/uncontrolled contracts, children typing, callback types, polymorphic components, invalid states, and reusable UI boundaries.
+description: Review React component and hook contracts, including props, controlled state, children, callbacks, and invalid combinations.
 ---
 
 # React Component and Hook API Review
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
+
+Treat checklist patterns, counts, and missing comments as investigation signals. Report a defect only after tracing a concrete consequence and checking counterevidence in callers, invariants, tests, and configuration. Missing context is a limitation, not a finding. Assign severity from impact and reachability; keep optional preferences separate and allow no findings.
 
 Use this skill when reviewing public React + TypeScript component or hook contracts: shared components, design-system components, exported UI modules, form controls, compound components, layout primitives, and reusable hooks.
 
@@ -93,4 +97,3 @@ Every finding should answer four questions:
 2. Why does that matter for a reusable React component or hook?
 3. What exact type/model/naming change would fix it?
 4. What call sites, stories, or tests would need updating?
-

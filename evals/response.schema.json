@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "answer": {"type": "string"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "location": {"type": "string"},
+          "issue": {"type": "string"},
+          "consequence": {"type": "string"},
+          "counterevidence": {"type": "string"}
+        },
+        "required": ["location", "issue", "consequence", "counterevidence"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["answer", "findings"],
+  "additionalProperties": false
+}

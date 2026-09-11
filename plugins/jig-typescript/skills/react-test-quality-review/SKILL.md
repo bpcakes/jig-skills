@@ -1,9 +1,13 @@
 ---
 name: react-test-quality-review
-description: Review React test quality for user-visible behavior, accessible queries, interaction coverage, async assertions, mocking boundaries, snapshots, regression tests, and weak assertions in React, Testing Library, Vitest, Jest, Storybook, and Playwright component tests.
+description: Review React tests for behavioral coverage, assertion strength, async interactions, mocking, and regression confidence.
 ---
 
 # React Test Quality Review
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
+
+Treat checklist patterns, counts, and missing comments as investigation signals. Report a defect only after tracing a concrete consequence and checking counterevidence in callers, invariants, tests, and configuration. Missing context is a limitation, not a finding. Assign severity from impact and reachability; keep optional preferences separate and allow no findings.
 
 Use this skill when reviewing tests for React components, hooks, UI regressions, Storybook interaction tests, Testing Library suites, Vitest/Jest suites, and Playwright component tests.
 
@@ -17,7 +21,7 @@ A good React test demonstrates observable behavior from the user's point of view
 
 > If this feature broke in production, would this test fail for the same reason a user would notice the breakage?
 
-If the answer is no, report it. Treat render-only tests, shallow snapshots, implementation-detail assertions, and over-mocked tests as weak until they prove behavior.
+If the answer is no, inspect other coverage and the test's claimed contract before reporting a concrete surviving regression. Render-only tests can be intentional smoke checks; assertion syntax alone does not establish weak suite coverage.
 
 ## Review Workflow
 
@@ -45,13 +49,13 @@ Prefer Testing Library queries in this order:
 7. `getByTitle` only when title is meaningful to users.
 8. `getByTestId` only as a last resort.
 
-Flag `data-testid`, CSS selectors, DOM traversal, and class-name assertions when an accessible query should work. If a button, dialog, tab, checkbox, textbox, link, alert, or status cannot be found by role/name, that may expose an accessibility defect, not just a test inconvenience.
+Investigate test IDs, CSS selectors, DOM traversal, and class-name assertions when they can pass despite a relevant user-visible or accessibility regression. Accessible queries are a useful preference, not a defect threshold. A test ID may intentionally locate a non-semantic container, and separate tests may already verify roles and names.
 
 ## Severity
 
-Use severity based on confidence loss, not style preference.
+Use severity based on the consequence of a specific regression the tests would miss. Assertion syntax, query choice, or missing coverage alone does not determine severity. The examples below are investigation signals, not automatic ratings.
 
-**Critical** findings mean the test gives false confidence or is disconnected from the behavior it claims to protect. Examples:
+Potentially high-impact coverage gaps, when they leave a critical contract unprotected:
 
 - Mocks the component, hook, reducer, or module whose behavior it claims to verify.
 - Only asserts render/existence for interaction or state-transition behavior.
@@ -59,15 +63,15 @@ Use severity based on confidence loss, not style preference.
 - Async behavior is asserted before the observable result can occur.
 - Broad snapshot is the only protection for a complex component.
 
-**Major** findings mean the test exercises some behavior but misses an important user-visible failure path. Examples:
+Other signals to investigate for a concrete surviving regression:
 
-- Uses test IDs, CSS selectors, DOM traversal, or class names where accessible queries should work.
+- Uses selectors that still match after a required accessible role, name, or behavior breaks, without other tests protecting that contract.
 - Asserts internal state, private helper calls, hook internals, or mocked child props instead of user-visible output.
 - Tests mouse interaction but misses required keyboard/focus behavior.
 - Covers only the happy path and omits error, loading, empty, invalid, disabled, or negative states.
 - Waits on a mock call instead of the resulting UI state.
 
-**Minor** findings mean the test is mostly useful but could be clearer or more resilient. Examples:
+Optional improvements, kept separate when no meaningful regression is demonstrated:
 
 - Test name describes implementation rather than user outcome.
 - Assertion is vague but stronger assertions elsewhere cover the behavior.
@@ -76,7 +80,7 @@ Use severity based on confidence loss, not style preference.
 
 ## Common Blunders
 
-Flag these unless the surrounding context justifies them:
+Investigate these patterns and report only when the tested contract remains materially unproven:
 
 - Render-only smoke tests presented as behavior coverage.
 - Assertions like `toBeTruthy`, `toBeDefined`, `toHaveBeenCalled`, or `toMatchSnapshot` without user-visible result assertions.
@@ -108,56 +112,7 @@ These are not automatic failures. For each match, ask whether the pattern is jus
 
 ## Output Format
 
-Lead with findings, ordered by severity. If no issues are found, say so and mention remaining test gaps or residual risk.
-
-Use this structure when useful:
-
-````md
-## React test quality review
-
-### Verdict
-
-[Strong / Mixed / Weak / False confidence]
-
-### Highest-risk issue
-
-[One paragraph explaining the biggest confidence gap.]
-
-### Findings
-
-#### Critical: [title]
-
-Evidence:
-```ts
-[small excerpt]
-```
-
-Why this is weak:
-[Explain the false confidence or missed failure mode.]
-
-What to test instead:
-```ts
-[replacement pattern or pseudocode]
-```
-
-### Missing behavior coverage
-
-- [User behavior/state missing]
-
-### Query/accessibility review
-
-- [Where accessible queries should replace test IDs/selectors]
-
-### Async/mocking/snapshot review
-
-- [Async waits, mocks, and snapshots that matter]
-
-### Minimum fix plan
-
-1. [Most important test rewrite]
-2. [Second]
-3. [Third]
-````
+Before reporting, read [the report contract](references/report-format.md), the authoritative template for this skill. It supports no findings, impact-based severity, and optional improvements separate from defects. Omit sections that add no useful evidence.
 
 ## Related Skills
 

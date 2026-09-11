@@ -1,0 +1,582 @@
+{
+  "schemaVersion": 3,
+  "sourceRun": "/tmp/jig-skill-evals-1tMxem",
+  "sourceSummaryHash": "0ff8c0284f87679720676262a184ce94856d51e93c2b306029d29581058c956b",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-test-only-weakened",
+      "rust-test-only-valid-consolidation",
+      "rust-loaded-explain",
+      "rust-implicit-simplify",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation"
+    ],
+    "missingTrials": [],
+    "plannedTrials": [
+      {
+        "id": "sqlx-runtime-query-valid",
+        "iteration": 1
+      },
+      {
+        "id": "sqlx-runtime-query-valid",
+        "iteration": 2
+      },
+      {
+        "id": "react-test-valid-testid",
+        "iteration": 1
+      },
+      {
+        "id": "react-test-valid-testid",
+        "iteration": 2
+      },
+      {
+        "id": "react-test-missed-confirmation",
+        "iteration": 1
+      },
+      {
+        "id": "react-test-missed-confirmation",
+        "iteration": 2
+      },
+      {
+        "id": "react-test-minor-display-gap",
+        "iteration": 1
+      },
+      {
+        "id": "react-test-minor-display-gap",
+        "iteration": 2
+      },
+      {
+        "id": "sqlx-minor-display-defect",
+        "iteration": 1
+      },
+      {
+        "id": "sqlx-minor-display-defect",
+        "iteration": 2
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-09-11T18:05:13.258Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "CLI default (--ignore-user-config)",
+  "sourceCommit": "0f106352c36bde312a0621971c2a894a6f51be3c",
+  "harnessHash": "e4c12d80aaeed77e8d4dab622349c182dc25798215f11b365422403f7119b980",
+  "suiteHash": "768d3eb402de33193f516892581c146b1597b720e6f4270150c7d150e99608dd",
+  "exporterHash": "28942754f767c8ef8210c3900aac88c81e2d4b375d105ce8dfc4dfa6e95f2860",
+  "skillHashes": {
+    "audit-common": "4541cf948ba3b149b518980bb68878a5231911fe1206a14a9a2dac69a6141bb7",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "f339d51670eca15e50272b74491121bef28a55fbe5603fdebb6b015d2d0163ab",
+    "comprehensive-review": "b4ca4736d52689c460ad68159efe956ef88852eb643de7988cc707c685ee23e1",
+    "crypto-architecture-review": "aebe7e8f47d88f355e9e86d23b5a4ad722689814711bbfe22d125b691d17e11a",
+    "crypto-implementation-static-review": "4a5a23e0c783b971f8443197a30c8a3786fa235cb5ca354d6fb759b20cd0c411",
+    "cursor-implement-exec-plan": "67cfcb1a75abd7f1892167fe12a7e8068f17272bfc6d4e47164e8cb96e3b1fed",
+    "fowler-ruby-rails-refactoring": "6e50bac47b632ccf51e189cb6bdab4a3ed49b0ea696b69947943368436ab48be",
+    "fowler-rust-refactoring": "8d9d0709d1b36975b4f760537ac896a527b4c1e80793252bbf0c00ff5210999b",
+    "improve-exec-plan": "a543f2ec104c87216b2751bf3a9f31e1c7a8249d3825818613e11d1955c7960c",
+    "metadata-leakage-inventory": "b944ca38cf4df60622c7c6690849a81867bd8475ee3615033b78671374e1d063",
+    "network-payload-zero-knowledge-test": "7b4c66b11fa379a547066eeb810c3fb2cbdd9a0fd90c43dab74eb7ecff67e3aa",
+    "privacy-claims-field-classifier": "d4d74596291b9ecebc9ad65f8ee2b2531035123eb3f2e23660af9e8ad6025ad1",
+    "react-hooks-component-api-review": "a5331dd4595243c7c6732a284a2666c3c4db25694cacec73956a04b2511cc144",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "218cbeab12fb14c396dc5cc4467c035225b5dbdcc8e68fc96bdd23d8cc5790ba",
+    "react-test-quality-review": "b8f8185a36c704500f41946e55749efc138c7cf344b125516ecf53da9ddd2ed5",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "25f70d06bc8af873dde8446666ef7c84141a408fc71fcb1424312d27e3de6196",
+    "rust-dup-unifier": "548cd04652a3713ecee5834e3590630b2cc8a797e0acbfae848fb496fff77e8e",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "7f3b4e08d6651fd27ffa7105e356e718a715c25764ded77df90625ed9caaecdb",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "bff89abcc34bb24f721b9478fe45c0f036075a3898c77fdaba910fe439d7d0b5",
+    "rust-test-quality-review": "45b4096320f491ebe88d4ccb6dc6e3788cc2105c1bc08e9987673ef7595ec6c2",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "c7e8b0dcc6f5729d5ffcd8675cc55a739f29f1d258f1c3caa9e978c9f81c19f2",
+    "sqlx-query-safety-review": "af846ba60ecfcb87f104d889061e3a60c29eebd5a84b443ccc1cca05b2c44b06",
+    "swift-simplify": "80b7c9d245726d933ebee9517a2f0db42f7958a9b06cd38b3d4a6594da20d388",
+    "telemetry-crash-logs-support-leakage-audit": "6fc8675f5c7208acbe52439198ce7786abb7480120754b57b36748b81637deea",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "4b4bc5ac3ef6fff3d39c3fe2eea8ce54fff3b4720bc68b53470f5c3179e06e38",
+    "typescript-react-dup-unifier": "32a5c6312fb187900d7ecf9468b32edf7d640eb9a349fd94c659d8866cc20a0d",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "5caed888b99c97f8a6d5b002b31cd984b90b503c59375c5311710f3d4cfd1af8",
+    "write-exec-plan": "00dd36c664085d5b59854fd72fbf864790ae48859a93b9c313d5f14a0a0567e1"
+  },
+  "passed": 10,
+  "total": 10,
+  "skillsEvaluated": 2,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Current source verification covers every discovery entrypoint and all files of recorded target skills and skills read or possibly read in completed trials; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "sqlx-runtime-query-valid",
+      "iteration": 1,
+      "skill": "sqlx-query-safety-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "sqlx-query-safety-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**' -g '\"'!*lock*'\"'\"",
+        "/usr/bin/bash -lc 'nl -ba src/lib.rs'",
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/references/results-and-boundaries.md .agents/skills/sqlx-query-safety-review/references/query-checking.md .agents/skills/sqlx-query-safety-review/references/sql-construction.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md schema.sql'"
+      ],
+      "answer": {
+        "answer": "No findings in src/lib.rs. The query safely binds the i64 ID to PostgreSQL bigint, decodes non-null text as String, and uses fetch_optional consistently with primary-key uniqueness and documented absence handling. Runtime queries are intentional. Review was static; CI integration coverage is documented but was not independently verified.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "supported_runtime_api",
+            "passed": true,
+            "evidence": "The response reports no findings and accepts intentional runtime queries. It correctly identifies bound i64-to-bigint compatibility, NOT NULL text decoding as String, and fetch_optional matching primary-key uniqueness and documented absence handling."
+          }
+        ]
+      },
+      "artifactHash": "a852deeb25af6b9c11de5e68eb076d5763695ad2e5995e673891bd725ae2bc8e"
+    },
+    {
+      "id": "sqlx-runtime-query-valid",
+      "iteration": 2,
+      "skill": "sqlx-query-safety-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "sqlx-query-safety-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/references/sql-construction.md .agents/skills/sqlx-query-safety-review/references/results-and-boundaries.md .agents/skills/sqlx-query-safety-review/references/query-checking.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md schema.sql; nl -ba src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "No findings in src/lib.rs. The query safely binds id, matches the schema’s bigint and non-null text types, and uses fetch_optional correctly for a primary-key lookup. Runtime SQLx APIs are intentional per README.md. Review was static; the documented CI integration tests were unavailable locally.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "supported_runtime_api",
+            "passed": true,
+            "evidence": "The review reports no findings and correctly recognizes bound id, bigint/i64 and non-null text/String compatibility, and fetch_optional for a primary-key lookup. It accepts runtime query_scalar as intentional per README rather than requiring macros."
+          }
+        ]
+      },
+      "artifactHash": "c69239ee109a5fd5c1dfae61c9270464392f5545ee17605c56eb50fe08eaa424"
+    },
+    {
+      "id": "react-test-valid-testid",
+      "iteration": 1,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md .agents/skills/react-test-quality-review/references/test-quality-rules.md .agents/skills/react-test-quality-review/references/review-example.md .agents/skills/react-test-quality-review/references/report-format.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba README.md; nl -ba Counter.tsx; nl -ba Counter.test.tsx; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"'\""
+      ],
+      "answer": {
+        "answer": "No concrete coverage defects found. The tests protect README.md’s initial zero, successive increments through mouse and keyboard activation, and accessible button and count names. The container smoke test is backed by behavioral assertions. Review was static; no test runner configuration is provided. No files were edited or dependencies installed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "counterevidence",
+            "passed": true,
+            "evidence": "The response reports no defects and explicitly accepts the container smoke test as backed by behavioral assertions. The supplied tests verify the accessible Increment button and Count output, initial count 0, mouse activation to 1, and keyboard Enter activation to 2. It raises no query-choice defect or missing loading/error coverage, consistent with README.md’s complete synchronous contract."
+          }
+        ]
+      },
+      "artifactHash": "85e514e1160b4c14c703510b11605a63e841922c7e35516330f78eff76f57da5"
+    },
+    {
+      "id": "react-test-valid-testid",
+      "iteration": 2,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"' -g 'AGENTS.md' -g '*Counter*' -g '*test*' -g '*spec*' -g 'README.md' -g 'package.json' -g '*config*'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md .agents/skills/react-test-quality-review/references/report-format.md .agents/skills/react-test-quality-review/references/test-quality-rules.md .agents/skills/react-test-quality-review/references/review-example.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md && nl -ba README.md && nl -ba Counter.tsx && nl -ba Counter.test.tsx && rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"'\""
+      ],
+      "answer": {
+        "answer": "No concrete coverage defects found. The tests protect README.md’s initial zero, one-step increments, accessible button name and count, and mouse/keyboard activation. The container smoke test is supported by behavioral assertions. Reviewed the skill’s relevant references; assessment was static because no test runner configuration or package manifest is provided. No files changed or dependencies installed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "counterevidence",
+            "passed": true,
+            "evidence": "The review reports no defects and accepts the container smoke test as supported by behavioral assertions. The supplied tests separately verify the Increment button by role/name, the accessible Count initially at 0, and click/Enter increments to 1 and 2. It flags neither test-ID usage nor loading/error states, which README.md explicitly excludes."
+          }
+        ]
+      },
+      "artifactHash": "291dec5b6a8ca2c33a1a1e7fb22360b400f61a2692a1434b84af1c0236c6c6d7"
+    },
+    {
+      "id": "react-test-missed-confirmation",
+      "iteration": 1,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"'\"",
+        "/usr/bin/bash -lc 'nl -ba README.md'",
+        "/usr/bin/bash -lc 'nl -ba .agents/skills/react-test-quality-review/references/test-quality-rules.md'",
+        "/usr/bin/bash -lc 'nl -ba .agents/skills/react-test-quality-review/references/review-example.md'",
+        "/usr/bin/bash -lc 'nl -ba AGENTS.md'",
+        "/usr/bin/bash -lc 'nl -ba DeleteConfirmation.tsx'",
+        "/usr/bin/bash -lc 'nl -ba DeleteConfirmation.test.tsx'",
+        "/usr/bin/bash -lc 'nl -ba .agents/skills/react-test-quality-review/references/report-format.md'"
+      ],
+      "answer": {
+        "answer": "Found one concrete coverage defect. Reviewed README.md, the component, the complete test suite, and the skill references. Static review only; no files changed or dependencies installed.",
+        "findings": [
+          {
+            "location": "DeleteConfirmation.test.tsx:4",
+            "issue": "Medium: Confirmation behavior is untested. The sole test checks button visibility but never activates it or asserts the README’s exactly-once callback contract. Add a retained onConfirm spy, activate the rendered button, and assert one call; activate again and assert two total calls.",
+            "consequence": "Replacing the click handler with a no-op or invoking onConfirm twice would leave the assertion satisfied, allowing broken confirmation or duplicate deletion requests to escape detection. This is a meaningful, bounded failure. These surviving regressions follow from static inspection; mutation tests were not executed.",
+            "counterevidence": "The accessible role/name query usefully protects rendering, and the current component correctly forwards onClick to onConfirm. However, README.md explicitly confirms there is no other confirmation coverage. It excludes cancel, async, modal, error, and loading contracts, so their absence is not a defect."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "surviving-regression",
+            "passed": true,
+            "evidence": "The finding identifies that a no-op click handler or duplicate onConfirm calls would pass the sole visibility assertion. It recommends retaining a callback spy, activating the button, asserting one call, then activating again and asserting two total calls. Medium severity is tied to broken confirmation or duplicate deletion requests escaping detection. It explicitly excludes async, modal, cancel, error, and loading behavior from required coverage, consistent with README.md."
+          }
+        ]
+      },
+      "artifactHash": "f1bc97b41b08af1cf739034e0e7cebceafa120b87d657e80bd5cf9131fdf418c"
+    },
+    {
+      "id": "react-test-missed-confirmation",
+      "iteration": 2,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"' -g '\"'!*lock*'\"' -g 'AGENTS.md' -g 'README.md' -g '*confirm*' -g '*Confirm*' -g 'package.json' -g '*test*' -g '*spec*'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md .agents/skills/react-test-quality-review/references/report-format.md .agents/skills/react-test-quality-review/references/test-quality-rules.md .agents/skills/react-test-quality-review/references/review-example.md'",
+        "/usr/bin/bash -lc \"rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"' && cat AGENTS.md && nl -ba README.md && nl -ba DeleteConfirmation.test.tsx && nl -ba DeleteConfirmation.tsx\""
+      ],
+      "answer": {
+        "answer": "Found one concrete coverage defect. Reviewed README.md, the component, the complete test suite, and the skill references. No files changed or dependencies installed. Verification is static; no test runner configuration is supplied.",
+        "findings": [
+          {
+            "location": "DeleteConfirmation.test.tsx:4",
+            "issue": "Medium: The test checks only button visibility, leaving README.md’s requirement to invoke onConfirm exactly once per activation untested. Removing onClick or invoking onConfirm twice would preserve the assertion. Minimal repair: retain a callback spy, activate the rendered button with userEvent, and assert exactly one call; activate again and assert exactly two total calls.",
+            "consequence": "Users could be unable to confirm deletion, or a single activation could trigger duplicate confirmation operations, without this suite detecting either regression. The proposed assertions would reject both mutations; this was reasoned from source, not executed.",
+            "counterevidence": "The component currently wires onClick directly to onConfirm. The existing test protects the button’s accessible name and visibility and is valid as a smoke check. README.md:1 explicitly identifies this directory as the complete suite with no integration or end-to-end confirmation coverage, and excludes cancel, async, modal, error, and loading contracts."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "surviving-regression",
+            "passed": true,
+            "evidence": "The finding identifies that removing onClick would preserve the sole visibility assertion, leaving confirmation unprotected. It recommends activating the button and asserting one callback call, then activating again and asserting two total calls. Medium severity is grounded in missed or duplicate confirmation operations. It explicitly acknowledges that async, modal, cancel, error, and loading contracts are excluded."
+          }
+        ]
+      },
+      "artifactHash": "378d7e46c46c278ea54d46fb9a579e755bbac74037fa9073e9eea29101819554"
+    },
+    {
+      "id": "react-test-minor-display-gap",
+      "iteration": 1,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"' -g 'AGENTS.md' -g '*Greeting*' -g 'README.md' -g '*config*' -g 'package.json' -g '*test*' -g '*spec*'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md .agents/skills/react-test-quality-review/references/report-format.md .agents/skills/react-test-quality-review/references/test-quality-rules.md .agents/skills/react-test-quality-review/references/review-example.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba README.md; nl -ba Greeting.tsx; nl -ba Greeting.test.tsx; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"'\""
+      ],
+      "answer": {
+        "answer": "Found one Low-severity coverage gap against README.md. Reviewed the skill’s rules, example, and report contract. Static review only: no test configuration or dependency manifest is provided. No files changed or dependencies installed.",
+        "findings": [
+          {
+            "location": "Greeting.test.tsx:3",
+            "issue": "Low: The absent-name greeting is untested. README.md:1 requires “Hello guest” when no name is supplied, but the only test supplies “Ada”. Add render(<Greeting />) and expect(screen.getByText('Hello guest')).toBeVisible().",
+            "consequence": "Removing the fallback in Greeting.tsx would leave the existing test passing while unnamed visitors see “Hello” instead of “Hello guest”. Impact is Low because this is optional decorative text in a local demo with no effect on operations. This surviving regression is established by static reasoning, not execution; the proposed assertion would reject it.",
+            "counterevidence": "The existing test verifies the named greeting’s text and visibility, and the current implementation correctly handles an absent name. README.md explicitly identifies these as the complete tests and excludes interactive or operational behavior, so no broader coverage findings are warranted."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "minor-impact",
+            "passed": true,
+            "evidence": "Identifies the missing absent-name test and explains that removing the fallback would leave the Ada test passing while displaying “Hello” instead of “Hello guest”. Rates the gap Low because the greeting is optional decorative text with no operational effect. Recommends rendering <Greeting /> and asserting visible “Hello guest”, without inventing additional behavior contracts."
+          }
+        ]
+      },
+      "artifactHash": "45d43c43524a2b291ae9b269649e3ffa2e8b7e92da4b2a06241b01615f10c13f"
+    },
+    {
+      "id": "react-test-minor-display-gap",
+      "iteration": 2,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md .agents/skills/react-test-quality-review/references/report-format.md .agents/skills/react-test-quality-review/references/test-quality-rules.md .agents/skills/react-test-quality-review/references/review-example.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba README.md; nl -ba Greeting.tsx; nl -ba Greeting.test.tsx; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"'\""
+      ],
+      "answer": {
+        "answer": "Found one Low-severity coverage gap against README.md. Reviewed the skill’s rules, example, and report contract. Static review only; no test runner configuration is provided. No files changed or dependencies installed.",
+        "findings": [
+          {
+            "location": "Greeting.test.tsx:3",
+            "issue": "Low: The absent-name fallback is untested. README.md:1 requires “Hello guest” when no name is supplied, but the complete suite only renders name='Ada'. Add render(<Greeting />) and expect(screen.getByText('Hello guest')).toBeVisible().",
+            "consequence": "Replacing name ?? 'guest' with name would preserve the existing test while displaying only “Hello” for unnamed visitors. Severity is Low because this is optional decorative text in a local demo and affects no operation. This surviving regression is established by static reasoning, not execution; the proposed test would reject it.",
+            "counterevidence": "The existing test verifies visible named-visitor text, and Greeting.tsx:1 currently implements the fallback correctly. README.md explicitly identifies these as the complete tests and excludes controls, persistence, network, permissions, and other behavior."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "minor-impact",
+            "passed": true,
+            "evidence": "Identifies that the sole name='Ada' test misses the absent-name fallback and explains that replacing name ?? 'guest' with name would pass while showing only “Hello.” Rates the gap Low because the greeting is optional decorative text with no operational effect. Recommends rendering <Greeting /> and asserting visible “Hello guest,” without inventing additional contracts."
+          }
+        ]
+      },
+      "artifactHash": "cc3485920b503c8de9fc41dcf3787a90088238ff10eb4e3f12dc04498dfadf32"
+    },
+    {
+      "id": "sqlx-minor-display-defect",
+      "iteration": 1,
+      "skill": "sqlx-query-safety-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "sqlx-query-safety-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'README.md' -g 'schema.sql' -g 'Cargo.toml' -g '*.rs' -g 'SKILL.md' -g '*.md' .agents/skills/sqlx-query-safety-review src .\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/SKILL.md src/lib.rs schema.sql README.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md .agents/skills/sqlx-query-safety-review/references/query-checking.md .agents/skills/sqlx-query-safety-review/references/sql-construction.md .agents/skills/sqlx-query-safety-review/references/results-and-boundaries.md'",
+        "/usr/bin/bash -lc \"rg --files -g '\"'! .git'\"' -g '\"'! .agents'\"' && nl -ba src/lib.rs\""
+      ],
+      "answer": {
+        "answer": "Found one Low-severity defect. Binding, decoding, and optional-fetch cardinality match the schema. Reviewed the relevant query-checking, construction/binding, and results/boundaries references. Static review only; no files changed or dependencies installed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:2",
+            "issue": "[Low] Caption selects the wrong label. The query selects login_name, but README.md explicitly requires display_name. Fix: use SELECT display_name FROM users WHERE id = $1, preserving the existing binding and fetch_optional.",
+            "consequence": "Rows with different login_name and display_name values show an incorrect decorative profile caption.",
+            "counterevidence": "README.md limits captions to optional decoration in an offline single-user demo. Both labels are public, functional content is independent, and no downstream operation consumes the caption; there is no demonstrated authorization, privacy, or stored-data impact. Both columns are non-null text, so decoding checks would not detect this semantic error."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "minor-impact",
+            "passed": true,
+            "evidence": "The finding identifies src/lib.rs:2 selecting login_name contrary to README.md and recommends SELECT display_name with existing binding and fetch_optional preserved. It rates the defect Low and ties impact to incorrect optional decorative captions where labels differ. It explicitly excludes demonstrated authorization, privacy, and downstream impact and invents no cardinality or macro-adoption defects."
+          }
+        ]
+      },
+      "artifactHash": "eccf16a6442defa0d3f23a543040ca8501e1dd84824fb198f960d5b6c39090e6"
+    },
+    {
+      "id": "sqlx-minor-display-defect",
+      "iteration": 2,
+      "skill": "sqlx-query-safety-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "sqlx-query-safety-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'README.md' -g 'schema.sql' -g 'Cargo.toml' -g '*.rs' -g '*sqlx*'; cat .agents/skills/sqlx-query-safety-review/SKILL.md\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md; nl -ba src/lib.rs; nl -ba schema.sql; nl -ba README.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/references/query-checking.md .agents/skills/sqlx-query-safety-review/references/sql-construction.md .agents/skills/sqlx-query-safety-review/references/results-and-boundaries.md'"
+      ],
+      "answer": {
+        "answer": "Found one Low-severity defect. Binding, decoding, and zero-or-one fetch semantics match the schema. Reviewed the relevant query-checking, construction/binding, and results/boundaries references. Static review only; no files changed or dependencies installed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:2",
+            "issue": "[Low] Caption selects the wrong label. The query selects login_name, but README.md requires display_name. Fix: use `SELECT display_name FROM users WHERE id = $1`, retaining the existing binding and fetch_optional.",
+            "consequence": "Rows with different login_name and display_name values show an incorrect decorative caption. Severity is Low because functional content and downstream operations do not depend on it.",
+            "counterevidence": "Both columns are public, non-null text, so decoding succeeds and there is no privacy impact. The primary-key lookup identifies the correct user; missing rows correctly return None. Documented decoding checks do not establish that the selected label meets the caption contract."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "minor-impact",
+            "passed": true,
+            "evidence": "The finding identifies src/lib.rs:2 selecting login_name instead of the required display_name and recommends SELECT display_name while preserving binding and fetch_optional. It rates the defect Low because differing labels only produce an incorrect decorative caption, with no functional or downstream impact. It correctly acknowledges public non-null columns, correct user lookup, and missing-row semantics, without inventing privacy, authorization, cardinality, or macro-adoption defects."
+          }
+        ]
+      },
+      "artifactHash": "f47cf525f25d906096349edcb3beabf9f6809910d9810d13860f581eea292043"
+    }
+  ]
+}

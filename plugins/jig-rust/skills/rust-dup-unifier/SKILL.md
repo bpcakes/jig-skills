@@ -1,9 +1,11 @@
 ---
 name: rust-dup-unifier
-description: "Use when asked to scan a Rust repository for similar-but-divergent abstractions: sibling structs, enums, traits, builders, configs, errors, adapters, conversion layers, parallel module APIs, sync/async variants, or near-identical implementations that may have drifted. Produces source-backed recommendations to unify, extract a shared core, or keep separate. Do not use as a generic line-clone detector, and do not refactor code unless the user explicitly asks."
+description: Audit similar Rust abstractions and recommend unification, a shared core, or separation using caller and contract evidence.
 ---
 
 # Rust Dup Unifier
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
 Find Rust abstractions that appear to represent the same concept or mechanism but have drifted into slightly different shapes or behavior. Generate candidates mechanically, then validate them semantically before recommending consolidation.
 

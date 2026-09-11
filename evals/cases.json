@@ -1,0 +1,642 @@
+[
+  {
+    "id": "rust-test-only-weakened",
+    "skill": "rust-test-quality-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-test-quality-review to review the current Git diff against README.md. Report concrete test-quality regressions. Do not edit files or install dependencies.",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"age-gate\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+      "README.md": "The age gate accepts exactly ages 18 and older. Tests run in CI with plain cargo test. This is the entire test suite; no integration, ignored-test, or external jobs exist. The behavior contract is unchanged.\n",
+      "src/lib.rs": "pub fn accepts(age: u8) -> bool { age >= 18 }\n",
+      "tests/age.rs": "use age_gate::accepts;\n#[test]\nfn adult_boundary() { let result = accepts(18); assert!(result || !result); }\n#[test]\n#[ignore]\nfn minor_boundary() { assert!(!accepts(17)); }\n"
+    },
+    "baseFiles": {
+      "tests/age.rs": "use age_gate::accepts;\n#[test]\nfn adult_boundary() { assert!(accepts(18)); }\n#[test]\nfn minor_boundary() { assert!(!accepts(17)); }\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "weakened-assertion",
+        "requirement": "Identifies that replacing the accepts(18) assertion with result || !result loses protection of the inclusive adult boundary: returning false at age 18 now passes. Production code is unchanged, which does not excuse the lost regression coverage."
+      },
+      {
+        "id": "ignored-regression",
+        "requirement": "Identifies that ignoring the sole minor boundary test removes it from plain cargo test, so incorrectly accepting age 17 can pass. Checks the documented absence of replacement or ignored-test CI coverage, rather than reporting ignore syntax alone."
+      }
+    ]
+  },
+  {
+    "id": "rust-test-only-valid-consolidation",
+    "skill": "rust-test-quality-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-test-quality-review to review the current Git diff against README.md. Report only concrete test-quality regressions. Do not edit files or install dependencies.",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"age-gate\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+      "README.md": "The age gate accepts exactly ages 18 and older. Tests run in CI with plain cargo test. This is the entire test suite; no integration, ignored-test, or external jobs exist. The behavior contract is unchanged.\n",
+      "src/lib.rs": "pub fn accepts(age: u8) -> bool { age >= 18 }\n",
+      "tests/age.rs": "use age_gate::accepts;\n#[test]\nfn age_contract() {\n    for age in 0..=u8::MAX { assert_eq!(accepts(age), age >= 18, \"age {age}\"); }\n}\n"
+    },
+    "baseFiles": {
+      "tests/age.rs": "use age_gate::accepts;\n#[test]\nfn adult_boundary() { assert!(accepts(18)); }\n#[test]\nfn minor_boundary() { assert!(!accepts(17)); }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "replacement-coverage",
+        "requirement": "Accepts removal of two separate boundary tests because the replacement checks exact expected behavior for all u8 ages, including both original boundaries. Does not report test deletion, fewer test functions, or unchanged production as a defect."
+      }
+    ]
+  },
+  {
+    "id": "rust-loaded-explain",
+    "skill": "rust-simplify",
+    "mode": "loaded",
+    "expectInvoke": false,
+    "prompt": "Explain what classify in src/lib.rs returns for positive, zero, and negative inputs.",
+    "files": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool {\n    if value > 0 {\n        return true;\n    } else {\n        return false;\n    }\n}\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { if flag { true } else { false } }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "answer",
+        "requirement": "Explains true for positive values and false for zero and negative values. Answers the explanation task without claiming to have simplified code or adding unsolicited review findings."
+      }
+    ],
+    "baseFiles": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { flag }\n"
+    }
+  },
+  {
+    "id": "rust-implicit-simplify",
+    "skill": "rust-simplify",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Simplify classify in src/lib.rs while preserving its behavior.",
+    "files": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool {\n    if value > 0 {\n        return true;\n    } else {\n        return false;\n    }\n}\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { if flag { true } else { false } }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "behavior",
+        "requirement": "The changed function returns true exactly when value > 0, including false for zero and negative inputs."
+      },
+      {
+        "id": "simplification",
+        "requirement": "Removes redundant branching or returns and leaves a materially simpler function."
+      }
+    ],
+    "allowedChanges": [
+      "src/lib.rs"
+    ],
+    "requiredChanges": [
+      "src/lib.rs"
+    ],
+    "baseFiles": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { flag }\n"
+    }
+  },
+  {
+    "id": "typescript-loaded-explain",
+    "skill": "typescript-simplify",
+    "mode": "loaded",
+    "expectInvoke": false,
+    "prompt": "Explain what classify in src/classify.ts returns for positive, zero, and negative inputs.",
+    "files": {
+      "src/classify.ts": "export function classify(value: number): boolean {\n  if (value > 0) {\n    return true;\n  } else {\n    return false;\n  }\n}\n",
+      "src/unrelated.ts": "export function untouched(flag: boolean): boolean { if (flag) { return true; } else { return false; } }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "answer",
+        "requirement": "Explains true for positive values and false for zero and negative values. Answers the explanation task without claiming to have simplified code or adding unsolicited review findings."
+      }
+    ],
+    "baseFiles": {
+      "src/classify.ts": "export function classify(value: number): boolean { return value >= 0; }\n",
+      "src/unrelated.ts": "export function untouched(flag: boolean): boolean { return flag; }\n"
+    }
+  },
+  {
+    "id": "typescript-implicit-simplify",
+    "skill": "typescript-simplify",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Simplify classify in src/classify.ts while preserving its behavior.",
+    "files": {
+      "src/classify.ts": "export function classify(value: number): boolean {\n  if (value > 0) {\n    return true;\n  } else {\n    return false;\n  }\n}\n",
+      "src/unrelated.ts": "export function untouched(flag: boolean): boolean { if (flag) { return true; } else { return false; } }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "behavior",
+        "requirement": "The changed function returns true exactly when value > 0, including false for zero and negative inputs."
+      },
+      {
+        "id": "simplification",
+        "requirement": "Removes redundant branching or returns and leaves a materially simpler function."
+      }
+    ],
+    "allowedChanges": [
+      "src/classify.ts"
+    ],
+    "requiredChanges": [
+      "src/classify.ts"
+    ],
+    "baseFiles": {
+      "src/classify.ts": "export function classify(value: number): boolean { return value >= 0; }\n",
+      "src/unrelated.ts": "export function untouched(flag: boolean): boolean { return flag; }\n"
+    }
+  },
+  {
+    "id": "error-four-from-valid",
+    "skill": "rust-error-handling-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-error-handling-review to review src/lib.rs for error-handling defects.",
+    "files": {
+      "src/lib.rs": "#[derive(Debug, thiserror::Error)]\npub enum ReadError {\n    #[error(\"reading input: {0}\")]\n    Io(#[from] std::io::Error),\n    #[error(\"parsing record count: {0}\")]\n    Count(#[from] std::num::ParseIntError),\n    #[error(\"decoding input text: {0}\")]\n    Utf8(#[from] std::str::Utf8Error),\n    #[error(\"measuring elapsed time: {0}\")]\n    Clock(#[from] std::time::SystemTimeError),\n}\npub fn read_count(path: &std::path::Path) -> Result<u32, ReadError> {\n    let bytes = std::fs::read(path)?;\n    let text = std::str::from_utf8(&bytes)?;\n    Ok(text.trim().parse()?)\n}\npub fn elapsed(since: std::time::SystemTime) -> Result<std::time::Duration, ReadError> {\n    Ok(since.elapsed()?)\n}\n",
+      "README.md": "Internal command-line import utility. Error display plus its source chain is printed by the caller. Each operation has one input file selected and printed at startup. Error variants are intentionally closed; no external compatibility commitment.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "no_count_defect",
+        "requirement": "Does not report enum size, four #[from] conversions, absent explicit #[source], or unobserved variant matching as defects. Recognizes operation-specific variants and preserved sources as sufficient."
+      }
+    ]
+  },
+  {
+    "id": "error-one-from-context-loss",
+    "skill": "rust-error-handling-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-error-handling-review to review src/lib.rs for diagnostic correctness.",
+    "files": {
+      "src/lib.rs": "#[derive(Debug, thiserror::Error)]\npub enum LoadError {\n    #[error(\"configuration I/O: {0}\")]\n    Io(#[from] std::io::Error),\n}\npub fn load(primary: &std::path::Path, fallback: &std::path::Path) -> Result<(String, String), LoadError> {\n    let first = std::fs::read_to_string(primary)?;\n    let second = std::fs::read_to_string(fallback)?;\n    Ok((first, second))\n}\npub fn run(primary: &std::path::Path, fallback: &std::path::Path) {\n    match load(primary, fallback) {\n        Ok((a, b)) => println!(\"loaded {} bytes\", a.len() + b.len()),\n        Err(error) => eprintln!(\"{error}\"),\n    }\n}\n",
+      "README.md": "The run function is the only caller and diagnostic sink. Operators must distinguish failure of the primary configuration from failure of the fallback to repair the right file. Neither configured path is secret. There is no other tracing or logging.\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "lost_origin",
+        "requirement": "Identifies that the two I/O operations produce indistinguishable diagnostics at run, so operators cannot identify which configured input failed. Recommends preserving the operation or safe path context; does not rely on a conversion-count threshold."
+      }
+    ]
+  },
+  {
+    "id": "error-required-write-discarded",
+    "skill": "rust-error-handling-review",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Review the Rust error handling in src/lib.rs, including how failures reach callers.",
+    "files": {
+      "src/lib.rs": "pub fn persist(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {\n    std::fs::write(path, bytes).ok();\n    Ok(())\n}\n",
+      "README.md": "persist must return an error when the file cannot be written. Callers acknowledge completed work only on Ok(()).\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "false_success",
+        "requirement": "Reports that a failed write is discarded and persist returns success, causing callers to acknowledge work that was not written. The finding is about contract violation, not merely a missing comment."
+      }
+    ]
+  },
+  {
+    "id": "error-optional-parse-valid",
+    "skill": "rust-error-handling-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-error-handling-review to review src/lib.rs.",
+    "files": {
+      "src/lib.rs": "pub fn timeout(raw: Option<&str>) -> u64 {\n    raw.and_then(|value| value.parse().ok()).unwrap_or(30)\n}\n",
+      "README.md": "timeout is a local convenience parser. The established contract is 30 seconds for absent, malformed, negative, or out-of-range inputs, and the parsed u64 for valid values. No diagnostics are required for this optional override.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "intentional_default",
+        "requirement": "Accepts the optional parse and fallback contract without demanding comments, propagation, or logging."
+      }
+    ]
+  },
+  {
+    "id": "typescript-validated-assertion",
+    "skill": "typescript-type-system-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $typescript-type-system-review to review src/input.ts.",
+    "files": {
+      "src/input.ts": "type Name = { name: string };\nexport function parseName(value: unknown): Name {\n  if (typeof value !== \"object\" || value === null ||\n      !(\"name\" in value) || typeof value.name !== \"string\") {\n    throw new TypeError(\"name required\");\n  }\n  return value as Name;\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "valid_narrowing",
+        "requirement": "Accepts the runtime checks as establishing the structural Name contract. Does not report unknown, the proven assertion, or a plain string name as defects."
+      }
+    ]
+  },
+  {
+    "id": "typescript-unchecked-boundary",
+    "skill": "typescript-type-system-review",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Review src/input.ts for TypeScript type safety at its input boundary.",
+    "files": {
+      "src/input.ts": "type Name = { name: string };\nexport function normalized(value: unknown): string {\n  const record = value as Name;\n  return record.name.toUpperCase();\n}\n",
+      "README.md": "normalized receives untrusted decoded JSON, including null and objects without a string name. It should validate the shape and reject malformed records with a TypeError identifying the field.\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "unvalidated_input",
+        "requirement": "Identifies unchecked casting of arbitrary input as Name and the null/missing/non-string name failure before intended validation, with a concrete invalid input and validation remedy."
+      }
+    ]
+  },
+  {
+    "id": "rust-read-only-review-loaded",
+    "skill": "rust-architecture-review",
+    "mode": "loaded",
+    "expectInvoke": false,
+    "prompt": "Explain how src/lib.rs determines whether a number is positive.",
+    "files": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool {\n    if value > 0 {\n        return true;\n    } else {\n        return false;\n    }\n}\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { if flag { true } else { false } }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "no_review",
+        "requirement": "Explains the function without an unsolicited architecture audit or refactoring recommendation."
+      }
+    ],
+    "baseFiles": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { flag }\n"
+    }
+  },
+  {
+    "id": "rust-simplify-negative-discovery",
+    "skill": "rust-simplify",
+    "mode": "negative",
+    "expectInvoke": false,
+    "prompt": "What does src/lib.rs return when classify receives zero?",
+    "files": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool {\n    if value > 0 {\n        return true;\n    } else {\n        return false;\n    }\n}\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { if flag { true } else { false } }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "answer",
+        "requirement": "Answers false for zero without simplifying code or adding a review."
+      }
+    ],
+    "baseFiles": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
+      "src/unrelated.rs": "pub fn untouched(flag: bool) -> bool { flag }\n"
+    }
+  },
+  {
+    "id": "sqlx-runtime-query-valid",
+    "skill": "sqlx-query-safety-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $sqlx-query-safety-review to review src/lib.rs.",
+    "files": {
+      "src/lib.rs": "pub async fn display_name(pool: &sqlx::PgPool, id: i64) -> Result<Option<String>, sqlx::Error> {\n    sqlx::query_scalar::<_, String>(\"SELECT display_name FROM users WHERE id = $1\")\n        .bind(id)\n        .fetch_optional(pool)\n        .await\n}\n",
+      "schema.sql": "CREATE TABLE users (id bigint PRIMARY KEY, display_name text NOT NULL);\n",
+      "README.md": "Internal DB helper. Schema-backed integration tests validate this mapping in CI; runtime APIs are intentional to keep builds database-independent. The caller handles None as absence and logs database failures internally. Client deadlines are configured above this helper.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "supported_runtime_api",
+        "requirement": "Does not treat runtime query_scalar, absent macro use, or an optional result as defects; binds, nullability, and cardinality match the schema."
+      }
+    ]
+  },
+  {
+    "id": "rust-test-unit-result-valid",
+    "skill": "rust-test-quality-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-test-quality-review to review src/lib.rs and its tests.",
+    "files": {
+      "src/lib.rs": "pub fn accept(value: i32) -> Result<(), &'static str> {\n    if value > 0 { Ok(()) } else { Err(\"positive required\") }\n}\n#[cfg(test)]\nmod tests {\n    use super::accept;\n    #[test]\n    fn positive_is_accepted() { assert!(accept(1).is_ok()); }\n    #[test]\n    fn zero_is_rejected() { assert_eq!(accept(0), Err(\"positive required\")); }\n    #[test]\n    fn negative_is_rejected() { assert_eq!(accept(-1), Err(\"positive required\")); }\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "unit_success_contract",
+        "requirement": "Accepts is_ok() as proving the Result<(), E> success contract and boundary tests as sufficient; no mandatory property tests or stronger value assertions."
+      }
+    ]
+  },
+  {
+    "id": "rust-abstraction-invariant-escape",
+    "skill": "rust-abstraction-police",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-abstraction-police to review src/lib.rs and its public contract.",
+    "files": {
+      "src/lib.rs": "use std::ops::{Deref, DerefMut};\npub struct HeaderName(String);\nimpl HeaderName {\n    pub fn new(value: String) -> Option<Self> {\n        if !value.is_empty() && value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {\n            Some(Self(value))\n        } else { None }\n    }\n}\nimpl Deref for HeaderName {\n    type Target = String;\n    fn deref(&self) -> &String { &self.0 }\n}\nimpl DerefMut for HeaderName {\n    fn deref_mut(&mut self) -> &mut String { &mut self.0 }\n}\npub fn wire_header(name: &HeaderName) -> String { format!(\"{}: value\\r\\n\", name.as_str()) }\n",
+      "README.md": "HeaderName promises to contain a validated header name throughout its lifetime. Downstream callers can construct and mutate it. wire_header trusts that invariant and writes the returned bytes to a connection.\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "boundary",
+        "requirement": "Reports that DerefMut exposes String mutation, allowing CR/LF or other invalid characters after constructor validation and violating wire_header's invariant. Identifies the caller-visible consequence, not Deref syntax alone."
+      }
+    ]
+  },
+  {
+    "id": "rust-abstraction-transparent-contract",
+    "skill": "rust-abstraction-police",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-abstraction-police to review src/lib.rs and its public contract.",
+    "files": {
+      "src/lib.rs": "#[derive(Clone, Copy, Debug, PartialEq, Eq)]\npub struct UserId(pub u64);\nimpl UserId {\n    pub fn new(raw: u64) -> Self { Self(raw) }\n}\npub fn wire_id(id: UserId) -> u64 { id.0 }\n",
+      "README.md": "This wire-schema module intentionally represents IDs as unrestricted u64 values. All values are valid and the public representation is the protocol contract. It makes no validation, storage-neutrality, or hidden-representation promise.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "boundary",
+        "requirement": "Accepts the transparent public u64 representation as the intentional contract. No finding solely for public tuple field, primitive representation, derives, or absence of stronger validation."
+      }
+    ]
+  },
+  {
+    "id": "async-finite-channel-no-spans",
+    "skill": "rust-async-concurrency-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-async-concurrency-review to review src/lib.rs for correctness.",
+    "files": {
+      "src/lib.rs": "pub async fn sum_three(values: [u8; 3]) -> Result<u16, tokio::task::JoinError> {\n    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();\n    let worker = tokio::spawn(async move {\n        for value in values {\n            if tx.send(value).is_err() { return; }\n        }\n    });\n    let mut total = 0u16;\n    while let Some(value) = rx.recv().await { total += u16::from(value); }\n    worker.await?;\n    Ok(total)\n}\n",
+      "README.md": "This library adds exactly three bytes. The caller owns the async operation and may abandon its result. No side effects, persistence, production tracing requirement, or service shutdown protocol are part of the contract.\n"
+    },
+    "findings": { "min": 0, "max": 0 },
+    "criteria": [{ "id": "counterevidence", "requirement": "Accepts the fixed three-message bound, channel-close completion, and propagated join error. Does not require an unbounded-channel justification comment, tracing spans, or a separate cancellation token without a consequence." }]
+  },
+  {
+    "id": "async-lost-required-write",
+    "skill": "rust-async-concurrency-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-async-concurrency-review to review src/main.rs against the documented contract.",
+    "files": {
+      "src/main.rs": "#[tokio::main(flavor = \"current_thread\")]\nasync fn main() -> std::io::Result<()> {\n    tokio::spawn(async { tokio::fs::write(\"receipt.txt\", b\"confirmed\").await });\n    println!(\"confirmed\");\n    Ok(())\n}\n",
+      "README.md": "This one-shot command must create receipt.txt before printing confirmed and returning success. A failed write must produce a nonzero exit status. Nothing else owns the spawned task.\n"
+    },
+    "findings": { "min": 1, "max": 2 },
+    "criteria": [{ "id": "consequence", "requirement": "Identifies that main returns without awaiting the write, so runtime shutdown can discard the required receipt and write errors cannot affect exit status. Recommends awaiting the operation or its result; not merely adding spans or a comment." }]
+  },
+  {
+    "id": "security-debug-without-sink",
+    "skill": "rust-security-boundary-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-security-boundary-review to review src/lib.rs and its credential boundary.",
+    "files": {
+      "src/lib.rs": "#[derive(Debug, serde::Serialize)]\nstruct Credential { value: String }\npub fn authorization_header(raw: String) -> Result<http::HeaderValue, http::header::InvalidHeaderValue> {\n    let secret = Credential { value: raw };\n    let mut header = http::HeaderValue::from_str(&format!(\"Bearer {}\", secret.value))?;\n    header.set_sensitive(true);\n    Ok(header)\n}\n",
+      "README.md": "This is the complete module. The private Credential has no other consumers. Its only use builds an Authorization header for a trusted upstream; the caller never logs or returns the header to clients. There is no Debug formatting or serialization call on Credential.\n"
+    },
+    "findings": { "min": 0, "max": 0 },
+    "criteria": [{ "id": "no-speculation", "requirement": "Does not report a confirmed exposure solely because Credential derives Debug/Serialize. Recognizes that no reachable logging/serialization disclosure sink is present; optional hardening may be clearly separated." }]
+  },
+  {
+    "id": "security-debug-log-sink",
+    "skill": "rust-security-boundary-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-security-boundary-review to review src/lib.rs and its credential boundary.",
+    "files": {
+      "src/lib.rs": "#[derive(Debug, serde::Serialize)]\nstruct Credential { value: String }\npub fn authorization_header(raw: String) -> Result<http::HeaderValue, http::header::InvalidHeaderValue> {\n    let secret = Credential { value: raw };\n    tracing::info!(credential = ?secret, \"preparing upstream request\");\n    let mut header = http::HeaderValue::from_str(&format!(\"Bearer {}\", secret.value))?;\n    header.set_sensitive(true);\n    Ok(header)\n}\n",
+      "README.md": "raw is a long-lived upstream bearer token. Production info-level logs go to a support vendor that is not authorized to receive credentials.\n"
+    },
+    "findings": { "min": 1, "max": 1 },
+    "criteria": [{ "id": "sink", "requirement": "Traces the raw bearer token through Credential's derived Debug to the info-level log and unauthorized support-vendor sink. Does not treat HeaderValue::set_sensitive as protecting an earlier independent log." }]
+  },
+  {
+    "id": "react-effect-safe-no-lint-config",
+    "skill": "react-hooks-effects-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-hooks-effects-review to review src/Room.tsx for hook correctness.",
+    "files": {
+      "src/Room.tsx": "import { useEffect } from 'react';\nimport { connect } from './connection';\nexport function Room({ roomId }: { roomId: string }) {\n  useEffect(() => {\n    const connection = connect(roomId);\n    return () => connection.close();\n  }, [roomId]);\n  return <p>Room: {roomId}</p>;\n}\n",
+      "src/connection.ts": "export function connect(roomId: string) {\n  const socket = new WebSocket('wss://rooms.example/' + encodeURIComponent(roomId));\n  return { close: () => socket.close() };\n}\n",
+      "README.md": "The parent can switch between room IDs. Connections are per mounted component and must track its current room. This small fixture has no lint configuration.\n"
+    },
+    "findings": { "min": 0, "max": 0 },
+    "criteria": [{ "id": "safe-effect", "requirement": "Accepts the roomId dependency and cleanup; no finding merely for absent lint configuration, missing dependency-rationale comments, or using an Effect for a real external connection." }]
+  },
+  {
+    "id": "react-effect-stale-room",
+    "skill": "react-hooks-effects-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-hooks-effects-review to review src/Room.tsx for hook correctness.",
+    "files": {
+      "src/Room.tsx": "import { useEffect } from 'react';\nimport { connect } from './connection';\nexport function Room({ roomId }: { roomId: string }) {\n  useEffect(() => {\n    const connection = connect(roomId);\n    return () => connection.close();\n  }, []);\n  return <p>Room: {roomId}</p>;\n}\n",
+      "src/connection.ts": "export function connect(roomId: string) {\n  const socket = new WebSocket('wss://rooms.example/' + encodeURIComponent(roomId));\n  return { close: () => socket.close() };\n}\n",
+      "README.md": "The parent changes roomId on the same mounted component, without changing its key. The active connection must track that current room.\n"
+    },
+    "findings": { "min": 1, "max": 1 },
+    "criteria": [{ "id": "stale-room", "requirement": "Reports that the empty dependency array retains the initial room connection after roomId changes while the UI displays the new room. Connects the missing dependency to this consequence and recognizes existing unmount cleanup." }]
+  },
+  {
+    "id": "loop-loaded-one-pass-fix",
+    "skill": "review-fix-loop",
+    "mode": "loaded",
+    "expectInvoke": null,
+    "prompt": "Review classify in src/lib.rs against README.md and fix any behavior bug you find.",
+    "files": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
+      "README.md": "classify must be true for strictly positive values and false for zero and negative values.\n"
+    },
+    "allowedChanges": ["src/lib.rs"],
+    "requiredChanges": ["src/lib.rs"],
+    "forbidWorkflowLaunches": true,
+    "findings": { "min": 0, "max": 1 },
+    "criteria": [{ "id": "one-pass", "requirement": "Fixes the zero boundary to value > 0 and reports the repair. Does not start or claim repeated review rounds or external reviewers merely because the loop skill was loaded. A one-pass local review and tests are allowed." }]
+  },
+  {
+    "id": "loop-discovery-one-pass-fix",
+    "skill": "review-fix-loop",
+    "mode": "implicit",
+    "expectInvoke": null,
+    "prompt": "Review classify in src/lib.rs against README.md and fix any behavior bug you find.",
+    "files": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
+      "README.md": "classify must be true for strictly positive values and false for zero and negative values.\n"
+    },
+    "allowedChanges": ["src/lib.rs"],
+    "requiredChanges": ["src/lib.rs"],
+    "forbidWorkflowLaunches": true,
+    "findings": { "min": 0, "max": 1 },
+    "criteria": [{ "id": "one-pass", "requirement": "Fixes the zero boundary to value > 0 without initiating repeated or external reviews. Reading a relevant skill to determine applicability is allowed; automatic discovery is not itself a scope violation." }]
+  },
+  {
+    "id": "loop-explicit-preview",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "I intend to use $review-fix-loop --max-rounds 1 to review and fix these Git changes. Read its skill instructions, then explain what the workflow would authorize and wait for me to say start. Reading instructions is allowed, but do not launch the workflow, run reviewers, or change files yet.",
+    "files": { "src/lib.rs": "pub fn classify(value: i32) -> bool { value > 0 }\n" },
+    "forbidWorkflowLaunches": true,
+    "findings": { "min": 0, "max": 0 },
+    "criteria": [{ "id": "preview", "requirement": "Explains a bounded review/fix/test workflow with at most one repair round, no commits/pushes/deployments or unrelated cleanup. Does not execute the loop before the requested start confirmation; recognizes explicit selection without treating it as permission to ignore the preview-only constraint." }]
+  },
+  {
+    "id": "react-test-valid-testid",
+    "skill": "react-test-quality-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-test-quality-review to review the Counter tests against README.md. Inspect relevant references. Report only concrete coverage defects; do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Counter is a synchronous local demo: initially zero, increment by one per button activation, expose the button name and current count accessibly. There are no network, loading, error, permission, or persistence states. These are the complete component and tests.\n",
+      "Counter.tsx": "import { useState } from 'react';\nexport function Counter() { const [n, setN] = useState(0); return <section data-testid='counter'><button onClick={() => setN(x => x + 1)}>Increment</button><output aria-label='Count'>{n}</output></section>; }\n",
+      "Counter.test.tsx": "import { render, screen } from '@testing-library/react';\nimport userEvent from '@testing-library/user-event';\nimport { Counter } from './Counter';\nit('renders the container', () => { render(<Counter />); expect(screen.getByTestId('counter')).toBeVisible(); });\nit('exposes the control and initial count', () => { render(<Counter />); expect(screen.getByRole('button', {name:'Increment'})).toBeEnabled(); expect(screen.getByRole('status', {name:'Count'})).toHaveTextContent(/^0$/); });\nit('increments for mouse and keyboard activation', async () => { const user = userEvent.setup(); render(<Counter />); const button = screen.getByRole('button', {name:'Increment'}); await user.click(button); expect(screen.getByRole('status', {name:'Count'})).toHaveTextContent(/^1$/); button.focus(); await user.keyboard('{Enter}'); expect(screen.getByRole('status', {name:'Count'})).toHaveTextContent(/^2$/); });\n"
+    },
+    "findings": { "min": 0, "max": 0 },
+    "criteria": [{ "id": "counterevidence", "requirement": "Accepts the intentional test-ID smoke check because separate role/name and mouse/keyboard tests protect the complete synchronous contract. Does not report query choice or inapplicable loading/error states as defects." }]
+  },
+  {
+    "id": "react-test-missed-confirmation",
+    "skill": "react-test-quality-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-test-quality-review to review the confirmation tests against README.md. Inspect relevant references. Report concrete coverage defects; do not edit files or install dependencies.",
+    "files": {
+      "README.md": "DeleteConfirmation confirms deletion of the selected draft by invoking onConfirm exactly once per activation. There is no cancel, async, modal, error, or loading contract in this leaf component. This directory is the complete test suite; there are no integration or end-to-end tests for confirmation.\n",
+      "DeleteConfirmation.tsx": "export function DeleteConfirmation({ onConfirm }: { onConfirm: () => void }) { return <button onClick={onConfirm}>Delete draft</button>; }\n",
+      "DeleteConfirmation.test.tsx": "import { render, screen } from '@testing-library/react';\nimport { vi } from 'vitest';\nimport { DeleteConfirmation } from './DeleteConfirmation';\nit('renders confirmation', () => { render(<DeleteConfirmation onConfirm={vi.fn()} />); expect(screen.getByRole('button', {name:'Delete draft'})).toBeVisible(); });\n"
+    },
+    "findings": { "min": 1, "max": 2 },
+    "criteria": [{ "id": "surviving-regression", "requirement": "Identifies that a no-op or disconnected confirmation handler would pass the sole test, leaving the required callback operation unprotected. Recommends activation plus an exactly-once callback assertion, with severity grounded in this consequence rather than rendering syntax. Does not invent missing async/modal contracts." }]
+  },
+  {
+    "id": "react-test-minor-display-gap",
+    "skill": "react-test-quality-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-test-quality-review to review the Greeting tests against README.md. Inspect relevant references. Give impact-supported severity for concrete findings. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Greeting is optional decorative text in a local demo. It must say Hello followed by the supplied first name, or Hello guest when the name is absent. It has no controls, persistence, network, permissions, or other behavior. Incorrect greeting text has no effect on any operation. These are the complete tests.\n",
+      "Greeting.tsx": "export function Greeting({name}: {name?: string}) { return <p>Hello {name ?? 'guest'}</p>; }\n",
+      "Greeting.test.tsx": "import { render, screen } from '@testing-library/react';\nimport { Greeting } from './Greeting';\nit('greets a named visitor', () => { render(<Greeting name='Ada' />); expect(screen.getByText('Hello Ada')).toBeVisible(); });\n"
+    },
+    "findings": { "min": 1, "max": 1 },
+    "criteria": [{ "id": "minor-impact", "requirement": "Identifies the untested absent-name fallback: replacing guest with incorrect or missing text would pass the named-visitor test. Rates this Low (or explicitly equivalent minor priority), not Medium/High/Critical, explaining the decorative-only consequence. Recommends an absent-name assertion without inventing interaction, loading, or accessibility contracts." }]
+  },
+  {
+    "id": "sqlx-minor-display-defect",
+    "skill": "sqlx-query-safety-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $sqlx-query-safety-review to review src/lib.rs against schema.sql and README.md. Inspect relevant references. Give impact-supported severity for concrete findings. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "This helper supplies only optional decorative profile captions in an offline single-user demo; it does not select or authorize a user. The caller already has the correct user ID and renders all functional content independently. The caption contract is to return display_name, not login_name, for that ID. Both columns are public demo labels with no privacy implications. Some rows deliberately have different values. No downstream operation consumes this caption. Missing rows return None; database errors are handled separately. CI integration checks verify decoding, and runtime query APIs are intentional.\n",
+      "schema.sql": "CREATE TABLE users (id bigint PRIMARY KEY, login_name text NOT NULL, display_name text NOT NULL);\n",
+      "src/lib.rs": "pub async fn caption(pool: &sqlx::PgPool, id: i64) -> Result<Option<String>, sqlx::Error> {\n    sqlx::query_scalar::<_, String>(\"SELECT login_name FROM users WHERE id = $1\")\n        .bind(id).fetch_optional(pool).await\n}\n"
+    },
+    "findings": { "min": 1, "max": 1 },
+    "criteria": [{ "id": "minor-impact", "requirement": "Identifies selecting login_name instead of required display_name and recommends the correct selected column. Rates this Low (or explicitly equivalent minor priority), not Medium/High/Critical, because it only mislabels optional decorative text. Does not suppress the real contract defect as an optional preference or invent disclosure, authorization, cardinality, or macro-adoption defects." }]
+  },
+  {
+    "id": "react-performance-cheap-provider",
+    "skill": "react-render-performance-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-render-performance-review to review Counter.tsx under the workload in README.md. Inspect relevant references. Report concrete performance defects, not optional memoization preferences. Do not edit files.",
+    "files": {
+      "README.md": "This demo has exactly one context consumer, a label displaying the current counter. Counter state updates only on button clicks. No other components, effects, expensive calculations, memoized children, or identity-sensitive contracts exist.\n",
+      "Counter.tsx": "import { createContext, useContext, useState } from 'react';\nconst Value = createContext({count: 0});\nfunction Label() { const {count} = useContext(Value); return <span>{count}</span>; }\nexport function Counter() { const [count, setCount] = useState(0); return <Value.Provider value={{count}}><button onClick={() => setCount(n => n + 1)}>Increment</button><Label /></Value.Provider>; }\n"
+    },
+    "findings": { "min": 0, "max": 0 },
+    "criteria": [{ "id": "cheap-counterexample", "requirement": "Accepts the cheap inline provider value and necessary update of its sole label consumer. Does not rate missing useMemo, inline callbacks, or cheap object creation as findings without demonstrated cost." }]
+  },
+  {
+    "id": "react-performance-quadratic-derivation",
+    "skill": "react-render-performance-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-render-performance-review to review Search.tsx under the workload in README.md. Inspect relevant references. Report source-backed performance defects. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Search receives a stable array of 10,000 users, changing only on explicit dataset refresh. Typing updates query on every keystroke. The result is a count, not a list. Users with a unique email whose names match the query are counted.\n",
+      "Search.tsx": "import { useState } from 'react';\ntype User = {id: string; email: string; name: string};\nexport function Search({users}: {users: User[]}) { const [query, setQuery] = useState(''); const unique = users.filter(user => users.filter(other => other.email === user.email).length === 1); const count = unique.filter(user => user.name.includes(query)).length; return <><input aria-label='Search' value={query} onChange={event => setQuery(event.target.value)} /><output>{count}</output></>; }\n"
+    },
+    "findings": { "min": 1, "max": 2 },
+    "criteria": [{ "id": "demonstrated-cost", "requirement": "Identifies the nested full-array scan as quadratic (about 100 million email comparisons for 10,000 users) on every keystroke despite stable users. Recommends a linear frequency-map calculation and/or avoiding recomputation on query-only updates while preserving unique-email semantics. Does not use the inline onChange callback alone as a defect." }]
+  }
+]

@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 3,
+  "sourceRun": "/tmp/jig-skill-evals-hUtCV7",
+  "sourceSummaryHash": "4195485a79535b494a379357fa371aca40aaae770e33ba8d9a98dd781c19ae5f",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-loaded-explain",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-test-valid-testid",
+      "react-test-missed-confirmation",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation"
+    ],
+    "missingTrials": [],
+    "plannedTrials": [
+      {
+        "id": "rust-test-only-weakened",
+        "iteration": 1
+      },
+      {
+        "id": "rust-test-only-valid-consolidation",
+        "iteration": 1
+      },
+      {
+        "id": "rust-implicit-simplify",
+        "iteration": 1
+      },
+      {
+        "id": "rust-simplify-negative-discovery",
+        "iteration": 1
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-09-11T16:40:22.680Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "CLI default (--ignore-user-config)",
+  "sourceCommit": "0f106352c36bde312a0621971c2a894a6f51be3c",
+  "harnessHash": "84a110e79e285ec43237c0a0b6bbe286de31c8455123ab309438a00ac069e1df",
+  "suiteHash": "34514d54935e5f6e6c150354ba6c0ca02e6af59dea549aff9c4e67ede2a46e6f",
+  "exporterHash": "db3354d9ef416e852807d1e6e73135dcca86e3db5f2a57253789a550f93e7daa",
+  "skillHashes": {
+    "audit-common": "4541cf948ba3b149b518980bb68878a5231911fe1206a14a9a2dac69a6141bb7",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "f339d51670eca15e50272b74491121bef28a55fbe5603fdebb6b015d2d0163ab",
+    "comprehensive-review": "b4ca4736d52689c460ad68159efe956ef88852eb643de7988cc707c685ee23e1",
+    "crypto-architecture-review": "aebe7e8f47d88f355e9e86d23b5a4ad722689814711bbfe22d125b691d17e11a",
+    "crypto-implementation-static-review": "4a5a23e0c783b971f8443197a30c8a3786fa235cb5ca354d6fb759b20cd0c411",
+    "cursor-implement-exec-plan": "67cfcb1a75abd7f1892167fe12a7e8068f17272bfc6d4e47164e8cb96e3b1fed",
+    "fowler-ruby-rails-refactoring": "6e50bac47b632ccf51e189cb6bdab4a3ed49b0ea696b69947943368436ab48be",
+    "fowler-rust-refactoring": "8d9d0709d1b36975b4f760537ac896a527b4c1e80793252bbf0c00ff5210999b",
+    "improve-exec-plan": "a543f2ec104c87216b2751bf3a9f31e1c7a8249d3825818613e11d1955c7960c",
+    "metadata-leakage-inventory": "b944ca38cf4df60622c7c6690849a81867bd8475ee3615033b78671374e1d063",
+    "network-payload-zero-knowledge-test": "7b4c66b11fa379a547066eeb810c3fb2cbdd9a0fd90c43dab74eb7ecff67e3aa",
+    "privacy-claims-field-classifier": "d4d74596291b9ecebc9ad65f8ee2b2531035123eb3f2e23660af9e8ad6025ad1",
+    "react-hooks-component-api-review": "a5331dd4595243c7c6732a284a2666c3c4db25694cacec73956a04b2511cc144",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "218cbeab12fb14c396dc5cc4467c035225b5dbdcc8e68fc96bdd23d8cc5790ba",
+    "react-test-quality-review": "88cc09d0aac44c6fc05b66ef468bc04c33968ae00a992621d54dd436be08d980",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "25f70d06bc8af873dde8446666ef7c84141a408fc71fcb1424312d27e3de6196",
+    "rust-dup-unifier": "548cd04652a3713ecee5834e3590630b2cc8a797e0acbfae848fb496fff77e8e",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "906db0c9ad82dcf012eb970ce0e9937daee50c3dd2c47d6d0e253475bca12091",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "bff89abcc34bb24f721b9478fe45c0f036075a3898c77fdaba910fe439d7d0b5",
+    "rust-test-quality-review": "45b4096320f491ebe88d4ccb6dc6e3788cc2105c1bc08e9987673ef7595ec6c2",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "c7e8b0dcc6f5729d5ffcd8675cc55a739f29f1d258f1c3caa9e978c9f81c19f2",
+    "sqlx-query-safety-review": "6f49fa0093f81fc48f41cb4f2877af253138badb1ecffdcffc945209060bada8",
+    "swift-simplify": "80b7c9d245726d933ebee9517a2f0db42f7958a9b06cd38b3d4a6594da20d388",
+    "telemetry-crash-logs-support-leakage-audit": "6fc8675f5c7208acbe52439198ce7786abb7480120754b57b36748b81637deea",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "4b4bc5ac3ef6fff3d39c3fe2eea8ce54fff3b4720bc68b53470f5c3179e06e38",
+    "typescript-react-dup-unifier": "32a5c6312fb187900d7ecf9468b32edf7d640eb9a349fd94c659d8866cc20a0d",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "5caed888b99c97f8a6d5b002b31cd984b90b503c59375c5311710f3d4cfd1af8",
+    "write-exec-plan": "00dd36c664085d5b59854fd72fbf864790ae48859a93b9c313d5f14a0a0567e1"
+  },
+  "passed": 4,
+  "total": 4,
+  "skillsEvaluated": 2,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Current source verification covers every discovery entrypoint and all files of evaluated skills; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "rust-test-only-weakened",
+      "iteration": 1,
+      "skill": "rust-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && cat .agents/skills/rust-test-quality-review/SKILL.md && git status --short && git diff --stat && git diff --cached --stat && rg --files -g 'AGENTS.md' -g 'README.md' -g 'Cargo.toml' -g '*.rs' -g '*.yml' -g '*.yaml'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md && git diff HEAD -- tests/age.rs && nl -ba README.md && nl -ba tests/age.rs && nl -ba src/lib.rs && cat Cargo.toml && rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"'\""
+      ],
+      "answer": {
+        "answer": "Found two concrete test-quality regressions against README.md’s unchanged age contract. Review was static; no files were changed or tests run.",
+        "findings": [
+          {
+            "location": "tests/age.rs:3",
+            "issue": "[P2] The adult-boundary assertion is now a tautology: `result || !result` passes for either boolean. Restore `assert!(accepts(18))`.",
+            "consequence": "Changing the implementation to `age > 18` would pass the suite while incorrectly rejecting 18-year-olds.",
+            "counterevidence": "The implementation currently uses the correct `age >= 18`, but README.md confirms there is no other coverage. The previous assertion rejected this regression."
+          },
+          {
+            "location": "tests/age.rs:5",
+            "issue": "[P2] `#[ignore]` disables the sole minor-boundary check under CI’s plain `cargo test`. Remove the ignore attribute.",
+            "consequence": "Changing the threshold to `age >= 17` would pass CI while incorrectly admitting 17-year-olds.",
+            "counterevidence": "The ignored test retains a valid rejection assertion, but README.md explicitly states there are no ignored-test or external jobs to execute it and the contract is unchanged."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "weakened-assertion",
+            "passed": true,
+            "evidence": "The finding at tests/age.rs:3 identifies result || !result as a tautology and explains that changing age >= 18 to age > 18 would pass while rejecting 18-year-olds. It acknowledges the currently correct implementation and the loss of protection provided by the previous assertion."
+          },
+          {
+            "id": "ignored-regression",
+            "passed": true,
+            "evidence": "The finding at tests/age.rs:5 explains that #[ignore] skips the sole minor-boundary test under plain cargo test, allowing age >= 17 to pass CI. It explicitly checks README.md’s statement that no replacement coverage, ignored-test jobs, or external jobs exist."
+          }
+        ]
+      },
+      "artifactHash": "26e3d202a1de4f65cd7b8093d53ac46aad89718fc88acb9b6774ee1e5fb5a39b"
+    },
+    {
+      "id": "rust-test-only-valid-consolidation",
+      "iteration": 1,
+      "skill": "rust-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-test-quality-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-test-quality-review/SKILL.md'",
+        "/usr/bin/bash -lc \"git status --short && git diff --stat && git diff --cached --stat && rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md && nl -ba tests/age.rs && nl -ba src/lib.rs && rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"'\"",
+        "/usr/bin/bash -lc 'git diff HEAD -- tests/age.rs && cat README.md && cat Cargo.toml'"
+      ],
+      "answer": {
+        "answer": "No concrete test-quality regressions found. The replacement test checks every u8 age against README.md’s contract, preserving both boundary checks and expanding coverage. Static review only; tests were not run. No files were changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "replacement-coverage",
+            "passed": true,
+            "evidence": "The replacement loops over all u8 ages and asserts accepts(age) equals age >= 18, covering both 17 and 18. The response correctly reports no regressions, explicitly recognizes preserved boundaries and expanded coverage, and raises no defect about deleted tests, fewer functions, or unchanged production."
+          }
+        ]
+      },
+      "artifactHash": "d09c3cdee9d6b733b7143b23588db8b1df1a33848ff6279fbe95ec445cb7130e"
+    },
+    {
+      "id": "rust-implicit-simplify",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "reads": [
+        "rust-simplify"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-simplify/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g 'lib.rs' -g '*test*'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md; cat src/lib.rs'",
+        "/usr/bin/bash -lc \"git status --short; rg --files -g '\"'! .git'\"' -g '\"'! .agents'\"' -g '\"'! .codex'\"' -g '\"'!**/SKILL.md'\"'\"",
+        "/usr/bin/bash -lc 'git diff -- src/lib.rs; git diff --cached -- src/lib.rs; command -v rustc; command -v rustfmt'",
+        "/usr/bin/bash -lc 'rustfmt --check src/lib.rs; rustc --crate-type lib --emit=metadata src/lib.rs -o /tmp/jig-skill-case-wca1i6/classify-check.rmeta'",
+        "/usr/bin/bash -lc 'rm classify-check.rmeta; git diff -- src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "Simplified `classify` in `src/lib.rs` to return `value > 0` directly, preserving current behavior, including `false` for zero. Compilation and formatting checks passed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The resulting function returns `value > 0`, which is true exactly for positive inputs and false for zero and negative inputs, preserving the before state."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The if/else branches and explicit true/false returns were replaced with the single expression `value > 0`."
+          }
+        ]
+      },
+      "artifactHash": "8d142fc1465beaa3f2338b7ca6507783a499456b4c4f9ea211c209f10f4a1805"
+    },
+    {
+      "id": "rust-simplify-negative-discovery",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'lib.rs' -g 'Cargo.toml'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "`classify(0)` returns `false` because `0 > 0` is false, so execution takes the `else` branch.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The answer correctly states that classify(0) returns false because 0 > 0 is false. Findings are empty, fileChanges is empty, and before and after are identical, so no review or code simplification was added."
+          }
+        ]
+      },
+      "artifactHash": "78f40ce011fe7c24e2d20aecc31226bef748775d48638a37c7259214a3b45c41"
+    }
+  ]
+}

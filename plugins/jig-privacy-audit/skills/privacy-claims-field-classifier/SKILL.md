@@ -1,6 +1,6 @@
 ---
 name: privacy-claims-field-classifier
-description: Classify fields against privacy and encryption claims across schemas, APIs, migrations, frontend models, logs, traces, and storage. Use to produce an evidence-backed privacy field matrix.
+description: Map observed fields to privacy and encryption claims in an evidence-backed field matrix.
 ---
 
 # Privacy Claims Field Classifier

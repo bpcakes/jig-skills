@@ -1,6 +1,6 @@
 ---
 name: client-encryption-boundary-audit
-description: Audit client-side encryption boundaries in privacy, zero-knowledge, and E2EE products. Use to trace content flows to encryption, serialization, upload, telemetry, local persistence, and plaintext sinks.
+description: Audit whether protected client plaintext is encrypted before upload, persistence, logs, or telemetry.
 ---
 
 # Client Encryption Boundary Audit

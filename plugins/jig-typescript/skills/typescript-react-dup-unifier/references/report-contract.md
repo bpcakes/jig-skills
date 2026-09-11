@@ -24,8 +24,10 @@ Do not equate candidate count with technical-debt severity.
 
 ## Priority Table
 
-| ID | Decision | Confidence | Score | Abstractions | Expected payoff | Primary risk |
-|---|---|---|---:|---|---|---|
+| ID | Decision | Confidence | Abstractions | Expected payoff | Primary risk |
+|---|---|---|---|---|---|
+
+Optionally add a Score column when using the decision rubric's comparison aid; omit it otherwise. Scores do not determine the decision.
 
 Order by expected reduction in duplicated change cost, not scanner score alone.
 
@@ -35,8 +37,9 @@ Order by expected reduction in duplicated change cost, not scanner score alone.
 
 **Decision:** `unify-now | shared-core | standardize-contract | intentional-duplicate | false-positive`  
 **Confidence:** `high | medium | low`  
-**Decision score:** `N/20 after deductions`  
-**Scanner signal:** Include score and relationship only as supporting evidence.
+**Decision score (optional):** `N/20 after deductions`; omit when not using numeric scoring.
+
+**Scanner signal (if scanned):** Include the observed relationship and any score only as supporting evidence.
 
 **Source anchors**
 

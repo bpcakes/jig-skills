@@ -51,6 +51,8 @@ This example uses your Codex session without a second reviewer CLI. The commands
 
 The seven plugins contain 39 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
+Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
+
 For marketplace installs, invoke `$plugin:skill` followed by your request in Codex. For example: `$jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
 
 [Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [ExecPlans](#jig-execplans) · [Privacy audit](#jig-privacy-audit)

@@ -1,6 +1,6 @@
 ---
 name: fowler-ruby-rails-refactoring
-description: Analyze Ruby and Ruby on Rails code for refactoring opportunities and produce a prioritized, behavior-preserving plan grounded in Martin Fowler's refactoring principles. Use for code-smell reviews, refactoring assessments, Rails model/controller/query/callback simplification, legacy-code preparation, or requests to explain how to restructure Ruby/Rails code safely. Default to read-only analysis. Do not treat bug fixes, performance tuning, framework upgrades, schema/data migrations, public API changes, or architecture rewrites as refactoring; identify and separate them explicitly.
+description: Assess Ruby/Rails code smells and produce a behavior-preserving refactoring plan; excludes upgrades and behavior changes.
 ---
 
 # Fowler-Grounded Ruby and Rails Refactoring

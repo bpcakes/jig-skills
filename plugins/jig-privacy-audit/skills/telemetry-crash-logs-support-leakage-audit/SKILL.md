@@ -1,6 +1,6 @@
 ---
 name: telemetry-crash-logs-support-leakage-audit
-description: Audit telemetry, crash reports, logs, traces, support tools, exports, redaction, and observability payloads for privacy leakage. Use to find exposed content, metadata, identifiers, credentials, keys, tokens, or claim-conflicting plaintext.
+description: Audit logs, telemetry, crash reports, and support tools for sensitive data leakage and redaction failures.
 ---
 
 # Telemetry Crash Logs Support Leakage Audit

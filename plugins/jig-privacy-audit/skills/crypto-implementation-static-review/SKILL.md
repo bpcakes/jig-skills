@@ -1,6 +1,6 @@
 ---
 name: crypto-implementation-static-review
-description: Statically review source-code cryptography in privacy, E2EE, and encrypted-app audits. Use for crypto APIs, call graphs, randomness, KDFs, serialization, custom crypto, insecure modes, and plaintext sinks.
+description: Statically review encryption code for primitive, randomness, KDF, envelope, and plaintext-handling defects.
 ---
 
 # Crypto Implementation Static Review

@@ -1,6 +1,6 @@
 ---
 name: network-payload-zero-knowledge-test
-description: Test whether claimed zero-knowledge or E2EE products leak controlled plaintext, keys, recovery secrets, or sensitive metadata through HAR/network payloads, telemetry, or third-party requests.
+description: Test HAR/network captures for controlled plaintext or secret leakage against zero-knowledge and E2EE claims.
 ---
 
 # Network Payload Zero-Knowledge Test

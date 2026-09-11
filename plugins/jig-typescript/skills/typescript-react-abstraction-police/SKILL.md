@@ -1,6 +1,6 @@
 ---
 name: typescript-react-abstraction-police
-description: Finds and validates leaky abstractions in TypeScript and React code. Use for code review, PR or diff review, API and component design, refactoring, or architecture work involving implementation coupling, prop explosions, Context or provider leaks, raw query/form/router/store details, third-party type escape, DOM/CSS contracts, deep imports, wrapper debt, or change amplification.
+description: Review TypeScript/React abstractions for implementation coupling and concrete consumer or compatibility costs.
 metadata:
   compatibility: TypeScript/TSX and React repositories. Optional Node.js 18+ runs the bundled dependency-free candidate scanner. No network access required.
   version: "1.0.0"
@@ -9,6 +9,8 @@ metadata:
 ---
 
 # Abstraction Police: TypeScript + React
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
 Find abstraction boundaries that claim to hide a concern but force consumers to understand, preserve, or compensate for the hidden implementation.
 

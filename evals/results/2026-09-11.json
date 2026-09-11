@@ -1,0 +1,689 @@
+{
+  "date": "2026-09-11",
+  "baselineCommit": "0f106352c36bde312a0621971c2a894a6f51be3c",
+  "passed": 16,
+  "total": 16,
+  "skillsEvaluated": 8,
+  "selection": "Final matrix uses the full frozen-bundle run, superseding its six scope cases with dirty-worktree trials and its SQLx case with the post-refinement trial. Every selected skill hash matches the final source tree.",
+  "currentSuiteSha256": "7ca4fb3c8f215ae58d6e0c53654027bc987d65223b902cd81fcbe5bad8a3d8f9",
+  "runs": {
+    "full": {
+      "artifacts": "/tmp/jig-skill-evals-vdcVfC",
+      "cli": "codex-cli 0.154.0",
+      "model": "CLI default (--ignore-user-config)",
+      "startedAt": "2026-09-11T14:28:27.496Z",
+      "suiteHash": "3746428b3d4ce3d8b074d6b2435b99084b4a71a55336c0d643a1472af8986868",
+      "harnessHash": "d295dfde4d339f10cdb2e7083541dfb551c9ebcd9e44b63da3ac570acfaf46fe",
+      "passed": 16,
+      "total": 16
+    },
+    "sqlx": {
+      "artifacts": "/tmp/jig-skill-evals-GYULkm",
+      "cli": "codex-cli 0.154.0",
+      "model": "CLI default (--ignore-user-config)",
+      "startedAt": "2026-09-11T14:33:08.200Z",
+      "suiteHash": "3746428b3d4ce3d8b074d6b2435b99084b4a71a55336c0d643a1472af8986868",
+      "harnessHash": "d295dfde4d339f10cdb2e7083541dfb551c9ebcd9e44b63da3ac570acfaf46fe",
+      "passed": 1,
+      "total": 1
+    },
+    "dirty": {
+      "artifacts": "/tmp/jig-skill-evals-IuppNV",
+      "cli": "codex-cli 0.154.0",
+      "model": "CLI default (--ignore-user-config)",
+      "startedAt": "2026-09-11T14:35:13.724Z",
+      "suiteHash": "7ca4fb3c8f215ae58d6e0c53654027bc987d65223b902cd81fcbe5bad8a3d8f9",
+      "harnessHash": "5c58c5edb204b52ca68325d0f5a99303e2d29ad7390e0aece95f6b774955de48",
+      "passed": 6,
+      "total": 6
+    }
+  },
+  "limits": [
+    "Representative regression cases across eight skills; not exhaustive catalog coverage.",
+    "Semantic grading uses a separate Codex pass with the same CLI-default model selection.",
+    "No baseline-versus-revision model benchmark or statistical improvement claim.",
+    "Raw traces and frozen bundles are retained locally at the recorded temporary paths; this file preserves selected outcomes and trace digests."
+  ],
+  "results": [
+    {
+      "id": "rust-loaded-explain",
+      "skill": "rust-simplify",
+      "mode": "loaded",
+      "sourceRun": "dirty",
+      "passed": true,
+      "skillHash": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+      "caseHash": "7b4ce75e0981d5cba599aa44a5b79515401dca8a0a5d58c49960e3cdcd4a7376",
+      "prompt": "Explain what classify in src/lib.rs returns for positive, zero, and negative inputs.",
+      "dirtyFixture": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "`classify` returns `true` for positive inputs and `false` for both zero and negative inputs.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The answer states that positive inputs return true and zero and negative inputs return false, matching the value > 0 condition. It makes no code-simplification claim, and findings is empty."
+          }
+        ]
+      },
+      "traceSha256": "01e84b594db1f4f0a3849e61161b3dc4e1312b8330c860b04982ea2e783a6233",
+      "rawArtifacts": "/tmp/jig-skill-evals-IuppNV/rust-loaded-explain-1"
+    },
+    {
+      "id": "rust-implicit-simplify",
+      "skill": "rust-simplify",
+      "mode": "implicit",
+      "sourceRun": "dirty",
+      "passed": true,
+      "skillHash": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+      "caseHash": "7831640ae72c8131895ff6aba96be56588e0550defc40bba9cdc34da863e38d0",
+      "prompt": "Simplify classify in src/lib.rs while preserving its behavior.",
+      "dirtyFixture": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "skillReads": [
+        "rust-simplify"
+      ],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "Simplified `classify` in `src/lib.rs` to return `value > 0` directly, preserving current behavior, including `false` at zero. Formatting, compilation, and diff checks passed. Unrelated changes were left untouched.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The updated function returns `value > 0`, which is true for positive inputs and false for zero and negative inputs, matching the original branches."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The updated body contains only `value > 0`, removing the if/else branching and both explicit return statements."
+          }
+        ]
+      },
+      "traceSha256": "658aa2e25cda2618b22cde1cefc542b7eb3e7930413d9dc2a409ca4805985bf7",
+      "rawArtifacts": "/tmp/jig-skill-evals-IuppNV/rust-implicit-simplify-1"
+    },
+    {
+      "id": "typescript-loaded-explain",
+      "skill": "typescript-simplify",
+      "mode": "loaded",
+      "sourceRun": "dirty",
+      "passed": true,
+      "skillHash": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+      "caseHash": "c8e0d89fc546eb599bf7d3c800d9d451ef69f72827273ce8fde5c1e0b6c12da5",
+      "prompt": "Explain what classify in src/classify.ts returns for positive, zero, and negative inputs.",
+      "dirtyFixture": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "`classify` returns `true` for positive inputs and `false` for zero or negative inputs.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The answer correctly states that classify returns true for positive inputs and false for zero or negative inputs, matching the value > 0 condition. It makes no code-simplification claim, and findings is empty."
+          }
+        ]
+      },
+      "traceSha256": "4843bf1e5f48881bc03a120baec0bba3714c90a26c12330da345200b63e60956",
+      "rawArtifacts": "/tmp/jig-skill-evals-IuppNV/typescript-loaded-explain-1"
+    },
+    {
+      "id": "typescript-implicit-simplify",
+      "skill": "typescript-simplify",
+      "mode": "implicit",
+      "sourceRun": "dirty",
+      "passed": true,
+      "skillHash": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+      "caseHash": "7f04b458bcfb9b963304839f80ca08083b535fd7d854d2147fdb75a22d1fa820",
+      "prompt": "Simplify classify in src/classify.ts while preserving its behavior.",
+      "dirtyFixture": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/classify.ts"
+      ],
+      "skillReads": [
+        "typescript-simplify"
+      ],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "Simplified `src/classify.ts` to return `value > 0` directly, preserving the working copy’s behavior. `git diff --check` passed. Unrelated changes were left untouched.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The updated function returns `value > 0` directly: true for positive inputs and false for zero and negative inputs, matching the original conditional."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The original if/else with two return statements is replaced by a single `return value > 0;` statement."
+          }
+        ]
+      },
+      "traceSha256": "716c32d99b9613e8fd79c304561bdb35547c4ace7cf9077b7ed5218bad1b3647",
+      "rawArtifacts": "/tmp/jig-skill-evals-IuppNV/typescript-implicit-simplify-1"
+    },
+    {
+      "id": "error-four-from-valid",
+      "skill": "rust-error-handling-review",
+      "mode": "explicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+      "caseHash": "5f6c1499b6c52a37ca68edf6f02aff5eae0921899c11d1c982e3cfac9e82e1b2",
+      "prompt": "Use $rust-error-handling-review to review src/lib.rs for error-handling defects.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "rust-error-handling-review"
+      ],
+      "referenceCommands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-error-handling-review/references/propagation-and-design.md; cat .agents/skills/rust-error-handling-review/references/recovery-and-resilience.md'"
+      ],
+      "answer": {
+        "answer": "No supported error-handling defects found in src/lib.rs. All fallible operations propagate errors through distinct, descriptive variants that preserve their sources. README.md confirms the caller prints the selected path and error chain. Caller behavior could not be independently verified; no caller implementation, tests, or Cargo manifest were available, so validation was static only.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "no_count_defect",
+            "passed": true,
+            "evidence": "The response reports no findings and recognizes distinct, descriptive variants that preserve sources. It does not flag enum size, four #[from] conversions, missing explicit #[source], or unobserved variant matching as defects."
+          }
+        ]
+      },
+      "traceSha256": "04e000b781412fe335a63c3a38caa1dbb7eef2088f33688aa1f9bbbf393ea19c",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/error-four-from-valid-1"
+    },
+    {
+      "id": "error-one-from-context-loss",
+      "skill": "rust-error-handling-review",
+      "mode": "explicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+      "caseHash": "41702ed873e7ef5227e91fa63ed6615226e7539c9f130d86ff342edc808a2423",
+      "prompt": "Use $rust-error-handling-review to review src/lib.rs for diagnostic correctness.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "rust-error-handling-review"
+      ],
+      "referenceCommands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-error-handling-review/SKILL.md\ncat .agents/skills/rust-error-handling-review/references/propagation-and-design.md\npwd\nrg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.git'\""
+      ],
+      "answer": {
+        "answer": "Found one diagnostic correctness defect. Static review only: no Cargo manifest or tests were provided. No files changed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:7–8",
+            "issue": "Low severity: both reads convert failures into the same LoadError::Io without identifying the configuration role or path. Preserve the source and add primary/fallback context using operation-specific variants or contextual fields.",
+            "consequence": "A missing primary file and a missing fallback file produce indistinguishable diagnostics through run’s eprintln!(\"{error}\"). Operators cannot identify which file to repair, violating the documented requirement.",
+            "counterevidence": "#[from] preserves the underlying I/O source, but that source does not identify the read’s path or role. The sole diagnostic sink adds no context, and README.md confirms there is no other logging and both paths are safe to report."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "lost_origin",
+            "passed": true,
+            "evidence": "The finding explains that both reads become LoadError::Io and produce indistinguishable diagnostics at run’s eprintln!, preventing operators from identifying the file to repair. It recommends primary/fallback variants or contextual fields while preserving the source, notes that paths are safe to report, and uses no conversion-count threshold."
+          }
+        ]
+      },
+      "traceSha256": "1b0920bfec1ffeb52645d6d536d0b70052e6f178cee6ca736e2e02fdc7674e26",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/error-one-from-context-loss-1"
+    },
+    {
+      "id": "error-required-write-discarded",
+      "skill": "rust-error-handling-review",
+      "mode": "implicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+      "caseHash": "d7ac170d0106cafe6e33d4fd2b4f17056dcf1e38ae4309efd27764db2db2da1b",
+      "prompt": "Review the Rust error handling in src/lib.rs, including how failures reach callers.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "rust-error-handling-review"
+      ],
+      "referenceCommands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-error-handling-review/references/propagation-and-design.md && rg --files -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.git/**'\""
+      ],
+      "answer": {
+        "answer": "Found one error-propagation defect. Static review covered src/lib.rs and the caller contract in README.md; no caller implementations, tests, or Cargo manifest were available.",
+        "findings": [
+          {
+            "location": "src/lib.rs:2–3",
+            "issue": "High: `.ok()` discards every write error, and `persist` unconditionally returns `Ok(())`. Return `std::fs::write(path, bytes)` directly to preserve the failure for callers.",
+            "consequence": "A missing parent directory, permission denial, or full disk is reported as successful persistence. Under the documented caller contract, callers acknowledge completed work even when data was not written, risking data loss and preventing error handling or retries.",
+            "counterevidence": "Ignoring errors could suit a best-effort write, but README.md explicitly requires an error when writing fails and says callers acknowledge work only on `Ok(())`. No caller-side mitigation is provided."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "false_success",
+            "passed": true,
+            "evidence": "The finding correctly identifies that `.ok()` discards write errors and the unconditional `Ok(())` reports success. It connects this behavior to README.md’s caller contract: callers acknowledge completed work even when data was not written, risking data loss and preventing retries."
+          }
+        ]
+      },
+      "traceSha256": "b1976d0e417094eca84cd21cd878f8e4f102b878a5f7fa1ce067a9de7e7f7e92",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/error-required-write-discarded-1"
+    },
+    {
+      "id": "error-optional-parse-valid",
+      "skill": "rust-error-handling-review",
+      "mode": "explicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+      "caseHash": "17981b478e082fe86fe502e1cbadb55a00101d56e07c8518db076f7e5e62df50",
+      "prompt": "Use $rust-error-handling-review to review src/lib.rs.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "rust-error-handling-review"
+      ],
+      "referenceCommands": [
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba src/lib.rs; cat .agents/skills/rust-error-handling-review/references/propagation-and-design.md; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"'\""
+      ],
+      "answer": {
+        "answer": "No supported findings in src/lib.rs. Discarding parse errors and returning 30 matches README.md’s explicit contract for absent, malformed, negative, and out-of-range inputs; diagnostics are not required. Valid u64 values are preserved. Static review only: no callers, tests, or Cargo manifest were available.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "intentional_default",
+            "passed": true,
+            "evidence": "The response accepts discarded parse errors and the 30-second fallback as matching README.md’s explicit contract, preserves valid u64 values, and reports no findings or demands for comments, propagation, or logging."
+          }
+        ]
+      },
+      "traceSha256": "c793458994bf48cfc731a846fd930b47ad7e44db67de6658878767719e9e0069",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/error-optional-parse-valid-1"
+    },
+    {
+      "id": "typescript-validated-assertion",
+      "skill": "typescript-type-system-review",
+      "mode": "explicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+      "caseHash": "b51e69520ab7ca24b4bfdaf1b80a6062eed429dbcd16bc31732d8989d9dc6c05",
+      "prompt": "Use $typescript-type-system-review to review src/input.ts.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "typescript-type-system-review"
+      ],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "Overall type-system health: Strong. No supported findings. parseName checks that the input is a non-null object with a string-valued name before asserting Name; the assertion is supported by runtime validation. No improvements warranted. No compiler configuration, callers, or tests were available, so compiler settings and integration behavior could not be assessed. No files changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "valid_narrowing",
+            "passed": true,
+            "evidence": "The response correctly accepts the non-null object check, name-property existence check, and string-value check as supporting the Name assertion. It reports no defects for unknown, the assertion, or the plain string name."
+          }
+        ]
+      },
+      "traceSha256": "4064b379750e3c6acbbf846c98f1fcbc3b099cc2aa6a3bb95dad45d9ba98995b",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/typescript-validated-assertion-1"
+    },
+    {
+      "id": "typescript-unchecked-boundary",
+      "skill": "typescript-type-system-review",
+      "mode": "implicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+      "caseHash": "22f7580fa9a9c9fe4fbb109ec4a0a8cec39092b21c1893fa525438c9ecd53800",
+      "prompt": "Review src/input.ts for TypeScript type safety at its input boundary.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "typescript-type-system-review"
+      ],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "Overall type-system health: Unsafe at the input boundary. One supported finding. No callers, tests, or compiler configuration were available; compiler strictness would not make this assertion validate runtime input.",
+        "findings": [
+          {
+            "location": "src/input.ts:3–4",
+            "issue": "Major: `value as Name` treats untrusted JSON as validated data without checking it. Validate that `value` is a non-null object and `name` is a string before accessing it; otherwise throw a TypeError identifying `name`.",
+            "consequence": "Inputs such as `null`, `{}`, and `{ \"name\": 42 }` cause incidental runtime errors instead of the field-specific validation errors required by README.md.",
+            "counterevidence": "Valid string names normalize correctly, and malformed examples already throw TypeError. However, those errors do not reliably identify the invalid field, and the assertion provides no runtime validation."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "unvalidated_input",
+            "passed": true,
+            "evidence": "The finding identifies `value as Name` as unchecked validation of untrusted input, cites `null`, `{}`, and `{ \"name\": 42 }` as causing incidental runtime errors, and recommends checking for a non-null object with a string `name`, otherwise throwing a TypeError identifying `name`."
+          }
+        ]
+      },
+      "traceSha256": "5b86f4ecffbb6ae98814a4e50e8151c5e9c0c60d629c326bb7c5f2a7afd180f8",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/typescript-unchecked-boundary-1"
+    },
+    {
+      "id": "rust-read-only-review-loaded",
+      "skill": "rust-architecture-review",
+      "mode": "loaded",
+      "sourceRun": "dirty",
+      "passed": true,
+      "skillHash": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+      "caseHash": "59a096712b4c90888ac5db28821e2aa743abf93fe8858ff83b925810d90f3e0b",
+      "prompt": "Explain how src/lib.rs determines whether a number is positive.",
+      "dirtyFixture": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "In src/lib.rs, classify(value: i32) checks whether value > 0. It returns true for positive integers and false for zero or negative integers.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "no_review",
+            "passed": true,
+            "evidence": "The answer explains that classify checks value > 0, returning true for positive integers and false for zero or negative integers. It includes no architecture audit or refactoring recommendation."
+          }
+        ]
+      },
+      "traceSha256": "8d7a4c3673bd6f422c43c3eb5234e351b91f674b7da4fbc68be17a8bcd1b2e3d",
+      "rawArtifacts": "/tmp/jig-skill-evals-IuppNV/rust-read-only-review-loaded-1"
+    },
+    {
+      "id": "rust-simplify-negative-discovery",
+      "skill": "rust-simplify",
+      "mode": "negative",
+      "sourceRun": "dirty",
+      "passed": true,
+      "skillHash": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+      "caseHash": "67c2a4db4d943654cf86c1e11b27aa82183856a0e553642ed799956581b26e46",
+      "prompt": "What does src/lib.rs return when classify receives zero?",
+      "dirtyFixture": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "`classify(0)` returns `false` because `0 > 0` is false.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The response correctly states that classify(0) returns false because 0 > 0 is false. Both files are unchanged, and no review findings were added."
+          }
+        ]
+      },
+      "traceSha256": "c7a2efd5f8535df55102acd240cea4abca07a0a5d2a78943dc05ee1c7b297812",
+      "rawArtifacts": "/tmp/jig-skill-evals-IuppNV/rust-simplify-negative-discovery-1"
+    },
+    {
+      "id": "sqlx-runtime-query-valid",
+      "skill": "sqlx-query-safety-review",
+      "mode": "explicit",
+      "sourceRun": "sqlx",
+      "passed": true,
+      "skillHash": "6f49fa0093f81fc48f41cb4f2877af253138badb1ecffdcffc945209060bada8",
+      "caseHash": "c2e6def7b8d763e6742b41ec7f2829400692534dd75bd99ad27146f3aae7f8ee",
+      "prompt": "Use $sqlx-query-safety-review to review src/lib.rs.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "sqlx-query-safety-review"
+      ],
+      "referenceCommands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/references/results-and-boundaries.md .agents/skills/sqlx-query-safety-review/references/query-checking.md .agents/skills/sqlx-query-safety-review/references/sql-construction.md'"
+      ],
+      "answer": {
+        "answer": "No material findings in src/lib.rs. The query safely binds id; i64 matches bigint, String matches text NOT NULL, and the primary key guarantees fetch_optional’s zero-or-one cardinality. Runtime query use is intentional per README.md. Static review only: no Cargo manifest or runnable tests were provided to verify the documented CI coverage.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "supported_runtime_api",
+            "passed": true,
+            "evidence": "The review reports no defects and correctly identifies bound id, i64 matching bigint, String matching text NOT NULL, and primary-key uniqueness supporting fetch_optional’s zero-or-one result. It accepts intentional runtime query use without requiring macros."
+          }
+        ]
+      },
+      "traceSha256": "9a29c0d40083b9f67d36bf42a56ea853be763da763262bc85198335d6601846f",
+      "rawArtifacts": "/tmp/jig-skill-evals-GYULkm/sqlx-runtime-query-valid-1"
+    },
+    {
+      "id": "rust-test-unit-result-valid",
+      "skill": "rust-test-quality-review",
+      "mode": "explicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "c95360272363f76a811b6328937f74b2510b0db652478e6ee2158474a73da327",
+      "caseHash": "6212b8470eb4977f8da00b8b314376d47fffcd90c0ce99e0e7201d390480fedb",
+      "prompt": "Use $rust-test-quality-review to review src/lib.rs and its tests.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "rust-test-quality-review"
+      ],
+      "referenceCommands": [],
+      "answer": {
+        "answer": "No supported findings. Tests cover positive acceptance, zero rejection, and negative rejection, including the error message. `is_ok()` fully asserts the successful `Result<(), _>` outcome. All 3 tests passed using `rustc --test`; no coverage measurement was performed. No source files changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "unit_success_contract",
+            "passed": true,
+            "evidence": "The response accepts is_ok() as fully asserting Result<(), _> success and reports no findings. The supplied tests cover 1, 0, and -1, with exact error assertions for rejection. It requires neither property tests nor stronger success-value assertions."
+          }
+        ]
+      },
+      "traceSha256": "0138b48731325e93b56da346188257815cd92e98aa55efdac8d3657c31ba9399",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/rust-test-unit-result-valid-1"
+    },
+    {
+      "id": "rust-abstraction-invariant-escape",
+      "skill": "rust-abstraction-police",
+      "mode": "explicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+      "caseHash": "1dc960f0c6486fa92d436799089f9502f4e73f91cfcd1fc22a8eb923301a9366",
+      "prompt": "Use $rust-abstraction-police to review src/lib.rs and its public contract.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "rust-abstraction-police"
+      ],
+      "referenceCommands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/references/leak-taxonomy.md .agents/skills/rust-abstraction-police/references/report-template.md .agents/skills/rust-abstraction-police/references/remediation-playbook.md'"
+      ],
+      "answer": {
+        "answer": "Confirmed one high-severity abstraction leak. Reviewed HeaderName, its constructor and Deref/DerefMut implementations, and wire_header against README.md. Read-only String access is not a separate confirmed defect. This was a static, offline review; no files changed or tests run. No project Cargo.toml or external consumers were available.",
+        "findings": [
+          {
+            "location": "src/lib.rs:14-15; src/lib.rs:17; README.md:1",
+            "issue": "AP-RUST-001 — DerefMut bypasses HeaderName validation. Severity: high. Confidence: high. Boundary: HeaderName. Leak kind: invariant/state machine and representation. Returning &mut String exposes unrestricted mutation despite the documented lifetime-long validity promise. For example, `let mut name = HeaderName::new(\"X-Test\".into()).unwrap(); name.push_str(\": injected\\r\\nX-Extra\");` creates an invalid header name entirely through safe public APIs.",
+            "consequence": "wire_header interpolates the modified value without validation, producing `X-Test: injected\\r\\nX-Extra: value\\r\\n`. If transmitted as documented, this injects an additional header. Callers must therefore preserve or recheck the constructor's rules themselves. Change test: enforcing validity on every mutation requires removing DerefMut, forcing callers using String mutation methods to migrate. Smallest repair: remove DerefMut and provide validated replacement through construction or a setter that leaves the original value unchanged on failure. This is a breaking API change; adding a setter alone does not close the bypass.",
+            "counterevidence": "README.md explicitly allows downstream mutation, but also promises validation throughout the value's lifetime; mutation permission does not authorize arbitrary invalid String contents. The private field and validating constructor at src/lib.rs:2-7 reinforce that promise. Actual connection-writing code is absent: src/lib.rs:17 returns a String, so the malformed output is directly established while transmission relies on the documented consumer behavior."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "boundary",
+            "passed": true,
+            "evidence": "The finding identifies unrestricted mutation through DerefMut's &mut String and demonstrates safe name.push_str(\": injected\\r\\nX-Extra\") after valid construction. It shows wire_header then produces \"X-Test: injected\\r\\nX-Extra: value\\r\\n\", violating the documented lifetime validity invariant and allowing an additional header if transmitted."
+          }
+        ]
+      },
+      "traceSha256": "1aacc6ac462993336b0a3d1a3f57f46403a88ffc9c2b536974f3db3e8ae5b3dc",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/rust-abstraction-invariant-escape-1"
+    },
+    {
+      "id": "rust-abstraction-transparent-contract",
+      "skill": "rust-abstraction-police",
+      "mode": "explicit",
+      "sourceRun": "full",
+      "passed": true,
+      "skillHash": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+      "caseHash": "d2501693ed8ef029052ec59bd08fcf5e1e0eeb48ddf02b82523d07a026d81a1f",
+      "prompt": "Use $rust-abstraction-police to review src/lib.rs and its public contract.",
+      "dirtyFixture": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "outcome": true
+      },
+      "changed": [],
+      "skillReads": [
+        "rust-abstraction-police"
+      ],
+      "referenceCommands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/references/leak-taxonomy.md .agents/skills/rust-abstraction-police/references/report-template.md .agents/skills/rust-abstraction-police/references/remediation-playbook.md'"
+      ],
+      "answer": {
+        "answer": "No abstraction leaks confirmed (0 high, 0 medium, 0 low).\n\nReviewed `UserId`, its public tuple field and derived traits, `UserId::new`, and `wire_id` in `src/lib.rs:1–6` against `README.md:1`.\n\nRejected candidate: exposing unrestricted `u64` values is explicitly the protocol contract. Direct construction and mutation cannot bypass validation because every value is valid. Changing this representation would change the documented contract, so the resulting compatibility cost is intentional.\n\nCoverage: static source review only; no Cargo manifest, tests, or local consumers were available. External downstream usage was not inspected. No files changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "boundary",
+            "passed": true,
+            "evidence": "The response reports no findings and explicitly accepts unrestricted u64 exposure as the documented protocol contract. Its reasoning matches the README: all values are valid, so direct construction or mutation cannot bypass validation, and representation compatibility costs are intentional."
+          }
+        ]
+      },
+      "traceSha256": "72d360d5f4be3b9f276e9fa1be0b43ad3f214fe03d8d87c735172a6b21215dc9",
+      "rawArtifacts": "/tmp/jig-skill-evals-vdcVfC/rust-abstraction-transparent-contract-1"
+    }
+  ]
+}

@@ -1,9 +1,11 @@
 ---
 name: rust-abstraction-police
-description: "Use when reviewing a Rust crate, workspace, module boundary, patch, or public API for leaky abstractions: implementation details crossing boundaries, backend/runtime/protocol/representation coupling, invariant escape hatches, generic or lifetime contagion, foreign error types, serialization and layout commitments, public lock guards or raw handles, feature-shaped APIs, and callers compensating for hidden behavior. Do not use as a general Rust style review."
+description: Review Rust abstractions for implementation details that violate boundary promises and burden callers; not a style audit.
 ---
 
 # Rust Abstraction Police
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
 Find abstraction boundaries that claim to hide a detail but force consumers to know, preserve, or compensate for that detail.
 

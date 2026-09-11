@@ -1,11 +1,13 @@
 ---
 name: review-fix-loop
-description: Run bounded cycles of independent comprehensive review, evidence-based triage, minimal or comprehensive fixes, tests, and fresh re-review over working-tree or branch changes. Branch rounds include committed changes and uncommitted repairs together. Use when the user explicitly asks to review and fix iteratively until qualifying defects are cleared or a round limit is reached. Do not use for review-only requests.
+description: Run bounded review/fix/test cycles when the user explicitly requests iterative review and repair; not a one-pass review or fix.
 ---
 
 # Review Fix Loop
 
-Turn review findings into validated working-file fixes through a bounded convergence loop. Invoking this skill authorizes edits inside the reviewed repository, but not commits, pushes, releases, deployments, or unrelated cleanup.
+Turn review findings into validated working-file fixes through a bounded convergence loop. Execute the loop only when the user explicitly invokes this skill or asks for iterative review and repair (for example, "review and fix until qualifying defects are cleared"). Automatic discovery, previously loaded instructions, a code change, or a one-pass "review and fix" request does not authorize the loop or repeated external reviews. For those tasks, follow the requested review or repair scope without starting this workflow.
+
+An authorized loop permits edits inside the reviewed repository, but not commits, pushes, releases, deployments, or unrelated cleanup.
 
 ## Controls
 

@@ -1,11 +1,15 @@
 ---
 name: sql-transaction-consistency-review
-description: Use when reviewing Rust code that reads or mutates SQL-backed state and may affect transaction boundaries, isolation assumptions, commit/rollback behavior, multi-step invariants, SELECT-before-INSERT races, side effects around commits, retries, or connection lifetime safety.
+description: Review SQL-backed Rust changes for transaction atomicity, races, isolation, retries, and side effects around commit.
 ---
 
 # SQL Transaction Consistency Review
 
-Use this skill when reviewing code that reads or mutates SQL-backed state and the change may affect transactional correctness, concurrency safety, or domain invariants. Trigger strongly for pull requests involving multi-step writes, SQLx transactions, repository/executor abstractions, SELECT-before-INSERT flows, cache/email/webhook/queue side effects, isolation-level changes, idempotency, retries, or long-running async work near database code.
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
+
+Treat checklist patterns, counts, and missing comments as investigation signals. Report a defect only after tracing a concrete consequence and checking counterevidence in callers, invariants, tests, and configuration. Missing context is a limitation, not a finding. Assign severity from impact and reachability; keep optional preferences separate and allow no findings.
+
+Use this skill when reviewing code that reads or mutates SQL-backed state and the change may affect transactional correctness, concurrency safety, or domain invariants. Within that review, prioritize multi-step writes, SQLx transactions, repository/executor abstractions, SELECT-before-INSERT flows, cache/email/webhook/queue side effects, isolation-level changes, idempotency, retries, or long-running async work near database code.
 
 This is a correctness review, not a style review. Prefer specific findings with a concrete failure mode over generic advice such as "wrap this in a transaction."
 
@@ -168,7 +172,7 @@ Preferred fix: do slow work before acquiring the transaction if it only gathers 
 
 ### 9. Retry behavior exists where needed
 
-Require bounded retry of the whole transaction when the code deliberately uses isolation/locking patterns that can fail transiently, especially serializable/repeatable-read transactions, deadlock-prone lock acquisition, and high-contention conditional writes.
+Investigate recovery from transient serialization or deadlock failures. Inspect caller retries and the service contract before reporting: returning a retryable error can be intentional. When recovery is required here, retry the whole transaction with a bounded, safe policy; a second retry layer can amplify load or repeat side effects.
 
 Check that retry logic:
 

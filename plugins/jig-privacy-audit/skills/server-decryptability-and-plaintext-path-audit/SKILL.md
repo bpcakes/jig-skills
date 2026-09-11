@@ -1,6 +1,6 @@
 ---
 name: server-decryptability-and-plaintext-path-audit
-description: Audit backend decryptability and plaintext paths that conflict with zero-knowledge, E2EE, client-side encryption, or "only you can read it" claims. Use for handlers, key unwraps, stores, queues, logs, admin tools, and sentinel searches.
+description: Audit backend plaintext and decryption paths against E2EE, zero-knowledge, and client-encryption claims.
 ---
 
 # Server Decryptability and Plaintext Path Audit

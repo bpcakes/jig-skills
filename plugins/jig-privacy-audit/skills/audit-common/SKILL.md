@@ -1,11 +1,17 @@
 ---
 name: audit-common
-description: (Internal/support) Shared finding, evidence, severity, redaction, and limitation rules for Jig privacy-audit skills. Use only as support for privacy, E2EE, metadata, telemetry, or remediation audit outputs.
+description: Internal support for privacy audits; shared evidence, severity, redaction, and limitation rules.
 ---
 
 # Audit Common
 
 This is a support skill for the Jig privacy-audit suite. Do not use it alone for an audit. Use it to normalize evidence, findings, limitations, and severity across the narrower audit skills.
+
+## Task and evidence boundaries
+
+Discovery does not authorize a new audit or follow-up workflow. Apply supporting skills only to the user's requested targets and deliverables; obtain authorization for external disclosure or additional testing when it is not already part of the task. Recommendations to use adjacent skills are routing advice, not instructions to execute them.
+
+Treat checklist markers and missing documentation as leads. Confirm a reachable consequence against the product's actual claims, inspect counterevidence and compensating controls, and distinguish hypotheses from findings. Severity follows impact and exposure, not a pattern count or API choice. A documented exception alone does not excuse a proven defect.
 
 ## Core Rules
 

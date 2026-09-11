@@ -1,9 +1,13 @@
 ---
 name: react-render-performance-review
-description: Review React render performance, slow components, large lists, provider-heavy trees, context usage, expensive render calculations, memoization changes, object/function prop identity churn, keys, client bundle-heavy imports, repeated filtering/sorting, and avoid cargo-cult useMemo/useCallback/React.memo changes.
+description: Review React render costs, context invalidation, lists, keys, and memoization where performance is at issue.
 ---
 
 # React Render Performance Review
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
+
+Treat checklist patterns, counts, and missing comments as investigation signals. Report a defect only after tracing a concrete consequence and checking counterevidence in callers, invariants, tests, and configuration. Missing context is a limitation, not a finding. Assign severity from impact and reachability; keep optional preferences separate and allow no findings.
 
 Use this skill when reviewing React components, hooks, providers, lists, client components, or memoization changes for render-path performance.
 
@@ -86,8 +90,9 @@ Move work out of the client bundle only if the import is in or below a client bo
 ## Severity
 
 - **High**: Measured user-visible lag; broad context invalidation of a large subtree; unstable keys causing remounts or state loss; heavy library pulled into the initial client bundle; unvirtualized large list with expensive rows.
-- **Medium**: Likely expensive repeated derivation; inline provider value in a frequently rendered provider; memoized child defeated by avoidable object/function props; unnecessary effect-derived state causing extra renders.
-- **Low**: Memoization noise; cheap inline objects with no identity-sensitive consumer; minor render calculations without evidence; premature `useCallback` or `useMemo` added for style.
+- **Medium**: A measured or source-demonstrated, bounded cost on a reachable update path: repeated expensive derivation, provider invalidation of costly consumers, defeated memoization of an expensive child, or redundant state updates. Name the affected consumers, update frequency or workload, and consequence; check existing isolation and cheap-work counterevidence.
+- **Low**: A demonstrated smaller performance or maintenance consequence, with evidence of the affected contract or cost. Do not infer a defect from syntax alone.
+- **Optional improvements, not findings**: cheap inline objects with no identity-sensitive consumer, minor calculations without demonstrated cost, or memoization preferences. A frequently rendered provider with cheap consumers may correctly need no memoization.
 
 ## Output Format
 

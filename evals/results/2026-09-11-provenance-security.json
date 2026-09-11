@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 3,
+  "sourceRun": "/tmp/jig-skill-evals-oGSozf",
+  "sourceSummaryHash": "61dd0d44bba2f62b8b759f6b37782a2ca4b83eb7746b893998978971ecdf4b73",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-test-only-weakened",
+      "rust-test-only-valid-consolidation",
+      "rust-loaded-explain",
+      "rust-implicit-simplify",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-test-valid-testid",
+      "react-test-missed-confirmation",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation"
+    ],
+    "missingTrials": [],
+    "plannedTrials": [
+      {
+        "id": "security-debug-without-sink",
+        "iteration": 1
+      },
+      {
+        "id": "security-debug-without-sink",
+        "iteration": 2
+      },
+      {
+        "id": "security-debug-log-sink",
+        "iteration": 1
+      },
+      {
+        "id": "security-debug-log-sink",
+        "iteration": 2
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-09-11T17:44:40.463Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "CLI default (--ignore-user-config)",
+  "sourceCommit": "0f106352c36bde312a0621971c2a894a6f51be3c",
+  "harnessHash": "afc9ed07f523f10ed19a5554dfc807efc5f5d9e7402adde2d7f1422d0913eb14",
+  "suiteHash": "34514d54935e5f6e6c150354ba6c0ca02e6af59dea549aff9c4e67ede2a46e6f",
+  "exporterHash": "28942754f767c8ef8210c3900aac88c81e2d4b375d105ce8dfc4dfa6e95f2860",
+  "skillHashes": {
+    "audit-common": "4541cf948ba3b149b518980bb68878a5231911fe1206a14a9a2dac69a6141bb7",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "f339d51670eca15e50272b74491121bef28a55fbe5603fdebb6b015d2d0163ab",
+    "comprehensive-review": "b4ca4736d52689c460ad68159efe956ef88852eb643de7988cc707c685ee23e1",
+    "crypto-architecture-review": "aebe7e8f47d88f355e9e86d23b5a4ad722689814711bbfe22d125b691d17e11a",
+    "crypto-implementation-static-review": "4a5a23e0c783b971f8443197a30c8a3786fa235cb5ca354d6fb759b20cd0c411",
+    "cursor-implement-exec-plan": "67cfcb1a75abd7f1892167fe12a7e8068f17272bfc6d4e47164e8cb96e3b1fed",
+    "fowler-ruby-rails-refactoring": "6e50bac47b632ccf51e189cb6bdab4a3ed49b0ea696b69947943368436ab48be",
+    "fowler-rust-refactoring": "8d9d0709d1b36975b4f760537ac896a527b4c1e80793252bbf0c00ff5210999b",
+    "improve-exec-plan": "a543f2ec104c87216b2751bf3a9f31e1c7a8249d3825818613e11d1955c7960c",
+    "metadata-leakage-inventory": "b944ca38cf4df60622c7c6690849a81867bd8475ee3615033b78671374e1d063",
+    "network-payload-zero-knowledge-test": "7b4c66b11fa379a547066eeb810c3fb2cbdd9a0fd90c43dab74eb7ecff67e3aa",
+    "privacy-claims-field-classifier": "d4d74596291b9ecebc9ad65f8ee2b2531035123eb3f2e23660af9e8ad6025ad1",
+    "react-hooks-component-api-review": "a5331dd4595243c7c6732a284a2666c3c4db25694cacec73956a04b2511cc144",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "218cbeab12fb14c396dc5cc4467c035225b5dbdcc8e68fc96bdd23d8cc5790ba",
+    "react-test-quality-review": "88cc09d0aac44c6fc05b66ef468bc04c33968ae00a992621d54dd436be08d980",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "25f70d06bc8af873dde8446666ef7c84141a408fc71fcb1424312d27e3de6196",
+    "rust-dup-unifier": "548cd04652a3713ecee5834e3590630b2cc8a797e0acbfae848fb496fff77e8e",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "7f3b4e08d6651fd27ffa7105e356e718a715c25764ded77df90625ed9caaecdb",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "bff89abcc34bb24f721b9478fe45c0f036075a3898c77fdaba910fe439d7d0b5",
+    "rust-test-quality-review": "45b4096320f491ebe88d4ccb6dc6e3788cc2105c1bc08e9987673ef7595ec6c2",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "c7e8b0dcc6f5729d5ffcd8675cc55a739f29f1d258f1c3caa9e978c9f81c19f2",
+    "sqlx-query-safety-review": "6f49fa0093f81fc48f41cb4f2877af253138badb1ecffdcffc945209060bada8",
+    "swift-simplify": "80b7c9d245726d933ebee9517a2f0db42f7958a9b06cd38b3d4a6594da20d388",
+    "telemetry-crash-logs-support-leakage-audit": "6fc8675f5c7208acbe52439198ce7786abb7480120754b57b36748b81637deea",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "4b4bc5ac3ef6fff3d39c3fe2eea8ce54fff3b4720bc68b53470f5c3179e06e38",
+    "typescript-react-dup-unifier": "32a5c6312fb187900d7ecf9468b32edf7d640eb9a349fd94c659d8866cc20a0d",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "5caed888b99c97f8a6d5b002b31cd984b90b503c59375c5311710f3d4cfd1af8",
+    "write-exec-plan": "00dd36c664085d5b59854fd72fbf864790ae48859a93b9c313d5f14a0a0567e1"
+  },
+  "passed": 4,
+  "total": 4,
+  "skillsEvaluated": 1,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Current source verification covers every discovery entrypoint and all files of recorded target skills and skills read or possibly read in completed trials; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "security-debug-without-sink",
+      "iteration": 1,
+      "skill": "rust-security-boundary-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-security-boundary-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g '*.rs' -g '*test*'; cat .agents/skills/rust-security-boundary-review/SKILL.md; cat src/lib.rs\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md; cat .agents/skills/rust-security-boundary-review/references/secrets-and-authorization.md; cat .agents/skills/rust-security-boundary-review/references/browser-tokens-and-diagnostics.md; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"'; nl -ba src/lib.rs\"",
+        "/usr/bin/bash -lc 'cat README.md; cat .agents/skills/rust-security-boundary-review/references/input-sinks.md'"
+      ],
+      "answer": {
+        "answer": "# Rust Security Boundary Review\n\nScope reviewed: `src/lib.rs` and credential-use context in `README.md`; static review only.\n\n## Confirmed findings\n\nNone.\n\n## Needs verification\n\nNone within the supplied scope. No Cargo manifest is available for executable validation.\n\n## Checked but OK\n\n- `src/lib.rs:4–7`: Credentials flow into a validated `HeaderValue`, marked sensitive before return. Header parsing rejects CR/LF injection.\n- `src/lib.rs:1–2`: `Debug` and `Serialize` derives have no reachable formatting or serialization sink; they do not establish disclosure.\n- `README.md` states the header goes only to a trusted upstream and is neither logged nor returned to clients.\n- No credential URLs, token comparisons, cookies, CORS configuration, or authentication endpoints occur in this module.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "no-speculation",
+            "passed": true,
+            "evidence": "The review reports no confirmed findings and explicitly states that Debug/Serialize derives have no reachable formatting or serialization sink. This matches the supplied complete-module context: Credential has no other consumers, and the header is neither logged nor returned to clients."
+          }
+        ]
+      },
+      "artifactHash": "357f0c309dfc7e19d707958dff0948937dbcba684065abd692d86043e8c3d4d3"
+    },
+    {
+      "id": "security-debug-without-sink",
+      "iteration": 2,
+      "skill": "rust-security-boundary-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-security-boundary-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-security-boundary-review/SKILL.md; pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.git'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md; nl -ba src/lib.rs; cat .agents/skills/rust-security-boundary-review/references/secrets-and-authorization.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-security-boundary-review/references/input-sinks.md .agents/skills/rust-security-boundary-review/references/browser-tokens-and-diagnostics.md'"
+      ],
+      "answer": {
+        "answer": "# Rust Security Boundary Review\n\nScope reviewed: `src/lib.rs` and credential-use context in `README.md`; static review only.\n\n## Confirmed findings\n\nNone.\n\n## Needs verification\n\nNone within the supplied scope. Caller behavior is documented in `README.md`, not independently available for inspection.\n\n## Checked but OK\n\n- `src/lib.rs:1`: `Credential` derives `Debug` and `Serialize`, but neither is invoked. No reachable disclosure sink exists in the supplied module.\n- `src/lib.rs:5`: Credentials enter a typed Authorization header; `HeaderValue::from_str` rejects header-injection characters.\n- `src/lib.rs:6`: The header is marked sensitive before return. The documented caller sends it only to a trusted upstream and never logs or returns it to clients.\n- No credential URLs, token comparisons, browser cookies, CORS configuration, or authentication endpoints occur in this module.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "no-speculation",
+            "passed": true,
+            "evidence": "The review reports no confirmed findings and explicitly notes that Debug and Serialize are never invoked and no reachable disclosure sink exists in the supplied module. This matches the code and README context."
+          }
+        ]
+      },
+      "artifactHash": "7445479d6135332e9822aa2687723987020e0210f55b5aa881119244d9b91935"
+    },
+    {
+      "id": "security-debug-log-sink",
+      "iteration": 1,
+      "skill": "rust-security-boundary-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-security-boundary-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-security-boundary-review/SKILL.md; pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**' -g 'AGENTS.md' -g 'Cargo.toml' -g '*.rs' -g 'README*' -g '*.toml'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md; nl -ba src/lib.rs; cat .agents/skills/rust-security-boundary-review/references/secrets-and-authorization.md; cat .agents/skills/rust-security-boundary-review/references/browser-tokens-and-diagnostics.md'"
+      ],
+      "answer": {
+        "answer": "Reviewed src/lib.rs and README.md. One confirmed credential disclosure. The token is placed in a header rather than a URL, and the header is marked sensitive, but neither protects the earlier log event. Static review only; upstream token permissions were not provided. No files changed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:5",
+            "issue": "High: `tracing::info!(credential = ?secret, ...)` uses derived Debug to log the complete long-lived bearer token. README.md confirms production info logs reach a support vendor unauthorized to receive credentials. Remove the credential field from the event or implement redacted Debug formatting.",
+            "consequence": "Vendor log readers receive a reusable upstream credential and can act with its permissions until expiration or revocation.",
+            "counterevidence": "`header.set_sensitive(true)` at line 7 protects sensitive-header formatting, but does not redact the separate Credential object already logged at line 5. The Serialize derive has no demonstrated disclosure sink and is not a separate finding."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "sink",
+            "passed": true,
+            "evidence": "The finding identifies that derived Debug prints the complete long-lived bearer token through tracing::info!(credential = ?secret), and cites README.md confirming production info logs reach an unauthorized support vendor. It explicitly explains that header.set_sensitive(true) does not redact the earlier, independent Credential log."
+          }
+        ]
+      },
+      "artifactHash": "5a9978a1c604a4a0cfe6bc2ab912be4aabe8c12ce80f126cf7003f9ed7c2b80b"
+    },
+    {
+      "id": "security-debug-log-sink",
+      "iteration": 2,
+      "skill": "rust-security-boundary-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-security-boundary-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.git'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-security-boundary-review/SKILL.md; nl -ba src/lib.rs'",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md .agents/skills/rust-security-boundary-review/references/secrets-and-authorization.md .agents/skills/rust-security-boundary-review/references/browser-tokens-and-diagnostics.md'"
+      ],
+      "answer": {
+        "answer": "Reviewed src/lib.rs and README.md’s credential/logging context. One High-severity secret-boundary failure is confirmed. Header construction validates the value and marks it sensitive, but that does not protect the earlier log event. No files changed; review was static.",
+        "findings": [
+          {
+            "location": "src/lib.rs:5",
+            "issue": "High: The info-level tracing event formats Credential using derived Debug, exposing the complete long-lived upstream bearer token. Remove the credential field from the event or implement redacted Debug.",
+            "consequence": "README.md confirms production info logs reach a support vendor unauthorized to receive credentials. The vendor receives reusable bearer tokens, enabling upstream access within their granted permissions.",
+            "counterevidence": "header.set_sensitive(true) protects the subsequently constructed header’s sensitive handling; it cannot redact the earlier Credential log. The Serialize derive has no demonstrated serialization sink and is not a separate finding."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "sink",
+            "passed": true,
+            "evidence": "The finding traces the long-lived raw bearer token through Credential’s derived Debug into the info-level tracing event at src/lib.rs:5, then to the unauthorized support vendor identified in README.md. It explicitly explains that header.set_sensitive(true) cannot redact the earlier independent Credential log."
+          }
+        ]
+      },
+      "artifactHash": "37e2755127560ec9fe28039ee2e961edfd5dc6bf3d863fb349788fd493c1aa20"
+    }
+  ]
+}

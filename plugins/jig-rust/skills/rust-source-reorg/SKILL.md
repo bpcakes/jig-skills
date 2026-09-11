@@ -1,9 +1,11 @@
 ---
 name: rust-source-reorg
-description: Reorganize Rust source files without behavior changes, focusing on canonical top-level item ordering and precise use-statement grouping/merging/cleanup. Use when asked to reorder imports, restructure Rust file layout, or apply style rules to Rust source reorganization.
+description: Reorder Rust items and imports without behavior changes when source layout cleanup is requested.
 ---
 
 # Rust Source Reorg
+
+Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
 ## Overview
 

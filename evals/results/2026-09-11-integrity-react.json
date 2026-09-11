@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 3,
+  "sourceRun": "/tmp/jig-skill-evals-fOQRWF",
+  "sourceSummaryHash": "d29367e119153defce13551663407941aded38c5b2a63c708bcfbe8c790f3686",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-loaded-explain",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix"
+    ],
+    "missingTrials": [],
+    "plannedTrials": [
+      {
+        "id": "rust-implicit-simplify",
+        "iteration": 1
+      },
+      {
+        "id": "loop-explicit-preview",
+        "iteration": 1
+      },
+      {
+        "id": "react-test-valid-testid",
+        "iteration": 1
+      },
+      {
+        "id": "react-test-missed-confirmation",
+        "iteration": 1
+      },
+      {
+        "id": "react-performance-cheap-provider",
+        "iteration": 1
+      },
+      {
+        "id": "react-performance-quadratic-derivation",
+        "iteration": 1
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-09-11T16:10:02.559Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "CLI default (--ignore-user-config)",
+  "sourceCommit": "0f106352c36bde312a0621971c2a894a6f51be3c",
+  "harnessHash": "d5b06bcdf3dca2eec45d22807390b354d8c4f1390c24c288b84610db59069fed",
+  "suiteHash": "5b42978bda44ec6e5eae8170aa4164bec7c208326428eeda09a218b64d558f92",
+  "exporterHash": "bf41ab754817f2b84cd0f44284791ab3689449c295357488c37429e854dd2b81",
+  "skillHashes": {
+    "audit-common": "4541cf948ba3b149b518980bb68878a5231911fe1206a14a9a2dac69a6141bb7",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "f339d51670eca15e50272b74491121bef28a55fbe5603fdebb6b015d2d0163ab",
+    "comprehensive-review": "b4ca4736d52689c460ad68159efe956ef88852eb643de7988cc707c685ee23e1",
+    "crypto-architecture-review": "aebe7e8f47d88f355e9e86d23b5a4ad722689814711bbfe22d125b691d17e11a",
+    "crypto-implementation-static-review": "4a5a23e0c783b971f8443197a30c8a3786fa235cb5ca354d6fb759b20cd0c411",
+    "cursor-implement-exec-plan": "67cfcb1a75abd7f1892167fe12a7e8068f17272bfc6d4e47164e8cb96e3b1fed",
+    "fowler-ruby-rails-refactoring": "6e50bac47b632ccf51e189cb6bdab4a3ed49b0ea696b69947943368436ab48be",
+    "fowler-rust-refactoring": "8d9d0709d1b36975b4f760537ac896a527b4c1e80793252bbf0c00ff5210999b",
+    "improve-exec-plan": "a543f2ec104c87216b2751bf3a9f31e1c7a8249d3825818613e11d1955c7960c",
+    "metadata-leakage-inventory": "b944ca38cf4df60622c7c6690849a81867bd8475ee3615033b78671374e1d063",
+    "network-payload-zero-knowledge-test": "7b4c66b11fa379a547066eeb810c3fb2cbdd9a0fd90c43dab74eb7ecff67e3aa",
+    "privacy-claims-field-classifier": "d4d74596291b9ecebc9ad65f8ee2b2531035123eb3f2e23660af9e8ad6025ad1",
+    "react-hooks-component-api-review": "a5331dd4595243c7c6732a284a2666c3c4db25694cacec73956a04b2511cc144",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "218cbeab12fb14c396dc5cc4467c035225b5dbdcc8e68fc96bdd23d8cc5790ba",
+    "react-test-quality-review": "88cc09d0aac44c6fc05b66ef468bc04c33968ae00a992621d54dd436be08d980",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "25f70d06bc8af873dde8446666ef7c84141a408fc71fcb1424312d27e3de6196",
+    "rust-dup-unifier": "548cd04652a3713ecee5834e3590630b2cc8a797e0acbfae848fb496fff77e8e",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "906db0c9ad82dcf012eb970ce0e9937daee50c3dd2c47d6d0e253475bca12091",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "bff89abcc34bb24f721b9478fe45c0f036075a3898c77fdaba910fe439d7d0b5",
+    "rust-test-quality-review": "c95360272363f76a811b6328937f74b2510b0db652478e6ee2158474a73da327",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "c7e8b0dcc6f5729d5ffcd8675cc55a739f29f1d258f1c3caa9e978c9f81c19f2",
+    "sqlx-query-safety-review": "6f49fa0093f81fc48f41cb4f2877af253138badb1ecffdcffc945209060bada8",
+    "swift-simplify": "80b7c9d245726d933ebee9517a2f0db42f7958a9b06cd38b3d4a6594da20d388",
+    "telemetry-crash-logs-support-leakage-audit": "6fc8675f5c7208acbe52439198ce7786abb7480120754b57b36748b81637deea",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "4b4bc5ac3ef6fff3d39c3fe2eea8ce54fff3b4720bc68b53470f5c3179e06e38",
+    "typescript-react-dup-unifier": "32a5c6312fb187900d7ecf9468b32edf7d640eb9a349fd94c659d8866cc20a0d",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "5caed888b99c97f8a6d5b002b31cd984b90b503c59375c5311710f3d4cfd1af8",
+    "write-exec-plan": "00dd36c664085d5b59854fd72fbf864790ae48859a93b9c313d5f14a0a0567e1"
+  },
+  "passed": 6,
+  "total": 6,
+  "skillsEvaluated": 4,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Current source verification covers every discovery entrypoint and all files of evaluated skills; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "rust-implicit-simplify",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "reads": [
+        "rust-simplify"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-simplify/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g 'lib.rs' -g '*test*' -g 'Cargo.lock'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md && cat src/lib.rs'",
+        "/usr/bin/bash -lc \"git status --short && rg --files -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.git/**'\"",
+        "/usr/bin/bash -lc 'rustc --edition=2021 --crate-type lib --emit=metadata -o /tmp/jig-skill-case-V8Wbuy/classify-check.rmeta src/lib.rs && rustfmt --check src/lib.rs && git diff --check && git diff -- src/lib.rs'",
+        "/usr/bin/bash -lc 'rm classify-check.rmeta'"
+      ],
+      "answer": {
+        "answer": "Simplified `classify` in `src/lib.rs` to return `value > 0` directly, preserving its existing behavior. Compilation, formatting, and diff checks passed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The updated function returns `value > 0`, which is true for positive inputs and false for zero and negative inputs, matching the original branches."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The if/else branches and explicit return statements are replaced by the single expression `value > 0`."
+          }
+        ]
+      },
+      "artifactHash": "7915020907bb35d35b7b33896667575bc7920ee8ecfaf4aef0cfde91c6fcf045"
+    },
+    {
+      "id": "loop-explicit-preview",
+      "iteration": 1,
+      "skill": "review-fix-loop",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "comprehensive-review",
+        "review-fix-loop"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/review-fix-loop/SKILL.md .agents/skills/review-fix-loop/references/loop-runtime.md .agents/skills/comprehensive-review/SKILL.md .agents/skills/comprehensive-review/references/parallel-review-runtime.md'",
+        "/usr/bin/bash -lc \"sed -n '110,240p' .agents/skills/review-fix-loop/references/loop-runtime.md; sed -n '1,100p' .agents/skills/comprehensive-review/SKILL.md\"",
+        "/usr/bin/bash -lc \"sed -n '80,112p' .agents/skills/review-fix-loop/references/loop-runtime.md\""
+      ],
+      "answer": {
+        "answer": "I read the skill and relevant runtime instructions. Saying “start” would authorize:\n\n- Reviewing working-tree changes, including staged, unstaged, untracked, and initialized submodule changes.\n- Minimal fixes for verified medium, high, or critical defects, with at most one repair round and focused validation.\n- An initial independent review and a fresh full-scope review after successful repairs—even with `--max-rounds 1`. A verified empty scope is the documented exception.\n- Necessary related code and test edits while preserving existing work, the index, and excluded paths.\n\nIt would not authorize staging, commits, pushes, releases, deployments, or unrelated cleanup. The final report would describe findings, fixes, validation, remaining issues, and any staging needed.\n\nDefault reviewers are Claude and native Codex. Your repository instructions prohibit network access and external services, so Claude could not run under those constraints; missing reviewer coverage would prevent claiming convergence. I would not silently change the reviewer selection.\n\nOnly instructions were read. No workflow, reviewers, Git inspection, or edits were started. I’m waiting for you to say “start,” as requested.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "preview",
+            "passed": true,
+            "evidence": "The response describes verified-defect fixes, focused validation, and at most one repair round, and explicitly excludes commits, pushes, deployments, and unrelated cleanup. It waits for “start.” Recorded commands only read skill/runtime instructions using cat and sed; fileChanges is empty and src/lib.rs is unchanged, supporting that the selected workflow was not launched."
+          }
+        ]
+      },
+      "artifactHash": "dd88d7b15db20ac819e9660f18e71f96b3c4ccc48e5b323f6103d64d3b724cd3"
+    },
+    {
+      "id": "react-test-valid-testid",
+      "iteration": 1,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"' -g '\"'!*'\"\\\\.git*'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md .agents/skills/react-test-quality-review/references/test-quality-rules.md .agents/skills/react-test-quality-review/references/review-example.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba README.md; nl -ba Counter.tsx; nl -ba Counter.test.tsx; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"'\"",
+        "/usr/bin/bash -lc \"sed -n '95,255p' .agents/skills/react-test-quality-review/references/test-quality-rules.md\""
+      ],
+      "answer": {
+        "answer": "No concrete coverage defects found against README.md. Tests verify accessible control/count names, initial zero, and exact increments after mouse and Enter activation. The container smoke test is supplemented by behavioral assertions. README explicitly excludes async and other lifecycle states. Reviewed both skill references. Static review only; no test runner configuration is provided. No files changed or dependencies installed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "counterevidence",
+            "passed": true,
+            "evidence": "The response reports no defects and recognizes that behavioral assertions supplement the container smoke test. The supplied tests independently verify accessible button/count names, initial zero, and exact counts of 1 after clicking and 2 after Enter activation. It does not flag the test-ID query or demand loading/error coverage, which README explicitly excludes."
+          }
+        ]
+      },
+      "artifactHash": "d03adf5fdd24ae3233a80bcae175c7f788e2ebc71a070e9e4a728f9bad6fb78c"
+    },
+    {
+      "id": "react-test-missed-confirmation",
+      "iteration": 1,
+      "skill": "react-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-test-quality-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!pnpm-lock.yaml'\"' -g '\"'!yarn.lock'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-test-quality-review/SKILL.md .agents/skills/react-test-quality-review/references/test-quality-rules.md .agents/skills/react-test-quality-review/references/review-example.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba README.md; nl -ba DeleteConfirmation.test.tsx; nl -ba DeleteConfirmation.tsx; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"'\""
+      ],
+      "answer": {
+        "answer": "Found one concrete coverage defect. Reviewed README.md, the component, the complete test suite, and both skill references. Static review only; no files changed or dependencies installed.",
+        "findings": [
+          {
+            "location": "DeleteConfirmation.test.tsx:4",
+            "issue": "Medium: The test never activates confirmation or verifies the callback count required by README.md:1. Activate the rendered “Delete draft” button and assert onConfirm was called exactly once; repeat activation to verify one additional call.",
+            "consequence": "Removing the click handler or invoking onConfirm twice per activation would leave the visibility assertion passing, while confirmation either stops working or triggers duplicate deletion requests.",
+            "counterevidence": "The existing accessible query protects the button’s role, name, and visibility, and the current component correctly forwards onConfirm. However, README.md explicitly identifies this as the complete suite with no integration coverage. Cancel, async, modal, error, and loading behaviors are expressly outside the contract."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "surviving-regression",
+            "passed": true,
+            "evidence": "The finding identifies that removing the click handler or calling onConfirm twice would still pass the sole visibility assertion. It recommends activating “Delete draft,” asserting exactly one callback call, and repeating activation to verify one additional call. Medium severity is grounded in broken confirmation or duplicate deletion requests, and async/modal behaviors are explicitly excluded from scope."
+          }
+        ]
+      },
+      "artifactHash": "d4ec8a17e6c215bace36bcb2ef1a68aa4f09d2873f97d5587035ef1df935c349"
+    },
+    {
+      "id": "react-performance-cheap-provider",
+      "iteration": 1,
+      "skill": "react-render-performance-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-render-performance-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"' -g '\"'!*lock*'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-render-performance-review/SKILL.md .agents/skills/react-render-performance-review/references/render-performance-rules.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba Counter.tsx; nl -ba README.md; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"'\""
+      ],
+      "answer": {
+        "answer": "No concrete performance defects found under the README workload. Inspected Counter.tsx, README.md, and the skill’s render-performance reference.\n\nEach click changes count, so the sole context consumer must update its inexpensive span. Memoizing the provider value would not prevent that update. The inline button handler crosses no identity-sensitive boundary. Leave both unchanged; no patch is warranted.\n\nThis is a static assessment; no runtime profiling was performed. React Compiler status is unknown because no build configuration is provided.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "cheap-counterexample",
+            "passed": true,
+            "evidence": "The response reports no findings and explains that each click changes count, requiring the sole label consumer to update its inexpensive span. It correctly states that memoizing the provider value would not prevent this update and that the inline handler crosses no identity-sensitive boundary. It does not flag cheap object creation or missing memoization as defects."
+          }
+        ]
+      },
+      "artifactHash": "893a0dbfd82aa9cc8c442aeb5558266a3684274b9df8917d3866c5a92e413f6f"
+    },
+    {
+      "id": "react-performance-quadratic-derivation",
+      "iteration": 1,
+      "skill": "react-render-performance-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-render-performance-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-render-performance-review/SKILL.md && cat .agents/skills/react-render-performance-review/references/render-performance-rules.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md && nl -ba README.md && nl -ba Search.tsx && rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"'\""
+      ],
+      "answer": {
+        "answer": "Found one source-backed performance defect. Inspected Search.tsx, README.md, and the skill’s render-performance reference. Costs are inferred from source; no runtime measurements or build configuration are available, so React Compiler status is unknown. No files changed.\n\nSuggested fix: count email frequencies once per dataset, then retain users whose frequency is exactly one. Cache that query-independent derivation by the stable users array; each keystroke should only scan eligible names. Preserve case-sensitive matching and exclusion of all users sharing an email. Validate those semantics, then compare keystroke latency and calculation time with 10,000 users.\n\nThe count-only output needs no virtualization. The input’s inline event handler has no identity-sensitive consumer and needs no optimization.",
+        "findings": [
+          {
+            "location": "Search.tsx:3",
+            "issue": "[Medium] Recompute quadratic email-uniqueness filtering on every keystroke. The outer users.filter runs an inner full-array filter for each user. README.md specifies 10,000 users with stable array identity and query updates on every keystroke.",
+            "consequence": "Each executed uniqueness calculation performs 100 million email comparisons and creates 10,000 temporary inner arrays. Without caching, query updates repeat this synchronous render work even though uniqueness does not depend on query, creating avoidable CPU and allocation pressure on the typing path. An email-frequency map reduces dataset preparation to linear work; caching it removes that preparation from query-only updates.",
+            "counterevidence": "Only a count is rendered, so large-list DOM costs do not apply. Stable dataset identity makes reuse practical, but the supplied source contains no cache. React Compiler could potentially reuse query-independent work if enabled; configuration is absent, and the quadratic calculation would still occur on initial render and dataset refresh. User-visible latency has not been measured."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "demonstrated-cost",
+            "passed": true,
+            "evidence": "The finding identifies nested full-array filters as quadratic: 100 million email comparisons for 10,000 users, repeated on query updates despite stable users. It recommends a linear email-frequency map cached by users identity, retaining only users with frequency exactly one. It explicitly rejects the inline onChange handler as an optimization target."
+          }
+        ]
+      },
+      "artifactHash": "e90bb702b50a3c43ee84b6424741cfbf1484d80186d5995a1405b3eb401197a8"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 name: comprehensive-review
-description: Run configurable, independent Claude Code, native Codex, and Cursor/Grok reviews in parallel over the same Git changes, then deduplicate and merge their findings. Use for comprehensive, combined, merged, multi-model, or Claude-plus-Codex code reviews. Defaults to Claude and Codex; Cursor is opt-in. Each selected external reviewer requires its authenticated CLI. This skill reviews working-tree or branch diffs, not unchanged artifacts from scratch.
+description: Run independent Claude and Codex reviews of Git diffs and merge findings; Cursor is opt-in. Use for multi-model reviews.
 ---
 
 # Comprehensive Review

@@ -1,6 +1,6 @@
 ---
 name: metadata-leakage-inventory
-description: Inventory metadata leakage in privacy, E2EE, zero-knowledge, messaging, collaboration, sync, telemetry, and claims audits. Use to map metadata to linkability, identifiability, behavioral inference, social graph, timing, and minimization risks.
+description: Inventory observable metadata and assess linkability, inference, minimization, and privacy-claim conflicts.
 ---
 
 # Metadata Leakage Inventory

@@ -2,6 +2,8 @@
 
 Use these rules when reviewing React component tests, hook tests, Testing Library tests, Vitest/Jest suites, Storybook interaction tests, Playwright component tests, and regression tests.
 
+Stay within the requested review. Every pattern below is an investigation signal, not an automatic finding or severity. Identify a specific meaningful regression that survives the suite, check other tests and the component's actual contract, and report only the remaining gap. Missing context is a limitation. Optional query or style improvements belong outside findings; a review may have none.
+
 React tests can pass while proving almost nothing. Your job is not to praise coverage or confirm that a suite is green. Your job is to determine whether the tests would catch the user-visible breakages the product actually cares about.
 
 ## Core standard
@@ -10,13 +12,13 @@ A good React test demonstrates observable behavior from the user's point of view
 
 > If this feature broke in production, would this test fail for the same reason a user would notice the breakage?
 
-If the answer is no, call it out.
+If the answer is no, check whether another test protects that contract before reporting the surviving gap.
 
-Treat render-only tests, shallow snapshots, implementation-detail assertions, and over-mocked tests as weak by default until they prove behavior.
+Investigate render-only tests, shallow snapshots, implementation-detail assertions, and extensive mocks against their claimed contract. Intentional smoke checks and isolated unit tests need not prove every UI behavior; check the relevant suite before judging a gap.
 
 ## What to review
 
-Review all tests that exercise React UI or React-derived behavior, including:
+Within the requested target, review relevant tests that exercise React UI or React-derived behavior, including:
 
 - React Testing Library component tests.
 - Hook tests using `renderHook` or wrapper components.
@@ -54,11 +56,11 @@ Prefer queries in this order:
 7. `getByTitle` only when title is meaningful to users.
 8. `getByTestId` only as a last resort.
 
-Flag `data-testid` use when an accessible query should work. A test ID is acceptable only when the target has no stable semantic or user-visible representation, such as a canvas region, virtualized measurement sentinel, skeleton primitive, instrumentation-only element, or unavoidable duplicate content where accessible names cannot distinguish the target. Even then, the test should assert behavior or visible state, not just existence.
+Prefer accessible queries when they express the intended contract. A test ID can intentionally locate a container or a control whose accessibility is protected by separate tests. Query choice alone is not a defect: show which required role, name, or interaction can regress without any test failing before reporting it.
 
 ### Examples
 
-Weak:
+If the claimed contract includes an enabled submit control and no other coverage protects it, this assertion alone misses that contract:
 
 ```ts
 expect(screen.getByTestId('submit-button')).toBeInTheDocument();
@@ -70,7 +72,7 @@ Stronger:
 expect(screen.getByRole('button', { name: /submit order/i })).toBeEnabled();
 ```
 
-Weak:
+If the claimed contract includes visible submission feedback, this assertion alone misses that contract:
 
 ```ts
 const button = container.querySelector('.primary');
@@ -88,13 +90,13 @@ expect(await screen.findByRole('status')).toHaveTextContent(/order submitted/i);
 
 ## Findings rubric
 
-Use severity based on confidence loss, not style preference.
+Assign severity from the impact and reachability of the specific regression the suite would miss, not from assertion syntax or a checklist category. Use the entrypoint's evidence standard throughout this reference.
 
-### Critical
+### Potentially high-impact gaps
 
-Use when the test gives false confidence or is disconnected from the behavior it claims to protect.
+Investigate these when a critical behavior may be unprotected. Confirm the claimed contract, demonstrate the surviving regression, and check counterevidence before rating it.
 
-Typical critical findings:
+Signals:
 
 - The test mocks the component, hook, reducer, or module whose behavior it claims to verify.
 - The test only asserts render/existence for a feature whose value is interaction or state transition.
@@ -102,23 +104,23 @@ Typical critical findings:
 - Async behavior is asserted before the observable result can occur.
 - The only protection for a complex component is a broad snapshot.
 
-### Major
+### Other gaps to investigate
 
-Use when the test exercises some behavior but misses an important user-visible failure path.
+Identify an important user-visible failure path and whether another layer already tests it.
 
-Typical major findings:
+Signals:
 
-- Uses `data-testid`, CSS selectors, DOM traversal, or class names where accessible queries should work.
+- Uses selectors that survive a required accessibility or behavior regression not caught elsewhere.
 - Asserts internal state, props, hook return shape, private helper calls, or implementation details instead of user-visible output.
 - Tests mouse interaction but not keyboard/focus behavior for a component that must be keyboard accessible.
 - Covers happy path only and omits error, loading, empty, invalid, disabled, or negative states.
 - Waits on a mock call instead of the resulting UI state.
 
-### Minor
+### Optional improvements, not findings without a concrete consequence
 
-Use when the test is mostly valuable but could be clearer, more resilient, or more user-centered.
+Keep these separate when the existing suite already protects the meaningful contract.
 
-Typical minor findings:
+Examples:
 
 - Test name describes implementation rather than user outcome.
 - Assertion is vague but accompanied by stronger assertions elsewhere.
@@ -129,7 +131,7 @@ Typical minor findings:
 
 ### 1. Render happened, behavior unproven
 
-Flag tests whose only assertion is one of:
+Investigate tests whose only assertion is one of:
 
 ```ts
 render(<Component />);
@@ -140,7 +142,7 @@ expect(container.firstChild).toMatchSnapshot();
 
 These are smoke tests. They may be useful as minimal crash checks, but they do not prove behavior.
 
-Demand the missing behavior:
+For claimed behavior coverage, identify what remains unprotected elsewhere:
 
 - What can the user do?
 - What changes after interaction?
@@ -150,7 +152,7 @@ Demand the missing behavior:
 
 ### 2. Implementation details instead of user-visible output
 
-Flag assertions against:
+Investigate assertions against:
 
 - Component instance state.
 - Hook internals not exposed through intended API.
@@ -160,11 +162,11 @@ Flag assertions against:
 - Props passed into mocked children when the integration matters.
 - Store action names instead of resulting UI behavior, unless the unit under test is the action creator itself.
 
-Replace with assertions against accessible output, enabled/disabled state, focus, selected state, expanded/collapsed state, form values, validation messages, navigation effects, or network boundary calls.
+When a surviving regression is established, replace or supplement with assertions against accessible output, enabled/disabled state, focus, selected state, expanded/collapsed state, form values, validation messages, navigation effects, or network boundary calls. Preserve intentional public API or representation-contract tests.
 
 ### 3. Overuse of `data-testid`
 
-Flag test IDs when the same element can be found by:
+Consider these alternatives to test IDs when they better express the tested contract:
 
 - Role and accessible name: `button`, `link`, `textbox`, `checkbox`, `radio`, `combobox`, `tab`, `dialog`, `menuitem`, `alert`, `status`, `heading`.
 - Label text.
@@ -172,11 +174,11 @@ Flag test IDs when the same element can be found by:
 - Display value.
 - Alt text.
 
-Test IDs often hide accessibility defects. If a button cannot be found by role and name, that may be a product problem, not a test inconvenience.
+If a required button role or name is absent, investigate an accessibility defect. Do not infer absence from a test ID alone; inspect the rendered component and other coverage.
 
 ### 4. Missing interaction coverage
 
-For interactive components, require tests for the primary user paths.
+For interactive components, compare coverage with the required primary user paths. The lists below are conditional on the component's contract, not a mandatory test inventory; account for coverage in other layers.
 
 #### Forms
 
@@ -236,7 +238,7 @@ Check that tests cover:
 
 ### 5. Async tests wait for the wrong thing
 
-Flag patterns like:
+Investigate scheduling and the required completion signal in patterns like:
 
 ```ts
 await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -269,7 +271,7 @@ Acceptable mocks usually include:
 - Time, random IDs, feature flags, and external services.
 - Expensive or unstable dependencies outside the component's responsibility.
 
-Flag mocks that replace:
+Investigate whether these mocks remove the behavior the test claims to protect:
 
 - The component under review.
 - The hook whose behavior the test claims to verify.
@@ -281,7 +283,7 @@ A useful test can mock transport while keeping rendering, state changes, validat
 
 ### 7. Snapshot tests freeze noise instead of behavior
 
-Flag snapshots when they are:
+Investigate snapshots when they are:
 
 - Large DOM trees.
 - The only test for an interactive component.
@@ -289,7 +291,7 @@ Flag snapshots when they are:
 - Sensitive to class names, generated IDs, style churn, or layout wrappers.
 - Used to claim coverage for forms, dialogs, menus, tabs, or async flows.
 
-Snapshots are acceptable only when they are narrow, intentional, and paired with behavior assertions. Prefer explicit assertions such as:
+Narrow, intentional snapshots can protect rendering contracts. For interaction claims, check for behavior assertions elsewhere before reporting a gap. When a gap exists, useful explicit assertions include:
 
 ```ts
 expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
@@ -299,7 +301,7 @@ expect(screen.getByRole('tab', { name: /billing/i })).toHaveAttribute('aria-sele
 
 ### 8. Missing negative, error, loading, disabled, and empty states
 
-For each component, identify the states users can observe and require meaningful coverage.
+For each scoped component, identify required observable states and inspect whether the relevant suite protects them.
 
 Common missing states:
 
@@ -314,11 +316,11 @@ Common missing states:
 - Already-selected or duplicate action.
 - Unavailable feature flag or degraded browser support.
 
-A suite that only tests the happy path is not complete for review purposes.
+A happy-path-only suite is a signal to inspect required negative states, not a finding by itself. Check scope, product requirements, and coverage in other layers before claiming a gap.
 
 ### 9. Keyboard interaction missing
 
-Flag missing keyboard coverage for:
+Investigate whether required keyboard behavior lacks coverage across the relevant suite for:
 
 - Dialogs.
 - Menus.
@@ -388,7 +390,7 @@ Check:
 - Are async hook updates awaited through observable result changes?
 - Are providers, query clients, routers, stores, and feature flags realistic enough to preserve behavior?
 
-Flag hook tests that:
+Investigate hook tests that:
 
 - Assert every intermediate state but never verify the UI behavior the hook enables.
 - Mock the hook's own dependencies so deeply that no meaningful logic remains.
@@ -421,7 +423,7 @@ Check:
 
 ## Assertion quality
 
-Flag weak assertions:
+Investigate what these assertions actually protect; syntax alone does not establish weakness:
 
 ```ts
 expect(element).toBeTruthy();
@@ -464,63 +466,11 @@ For each match, ask whether the pattern is justified by the user-visible behavio
 
 ## Review output format
 
-Use this structure when reporting findings.
-
-````md
-## React test quality review
-
-### Verdict
-
-[Strong / Mixed / Weak / False confidence]
-
-### Highest-risk issue
-
-[One paragraph explaining the biggest confidence gap.]
-
-### Findings
-
-#### Critical: [title]
-
-Evidence:
-```ts
-[small excerpt]
-```
-
-Why this is weak:
-[Explain the false confidence or missed failure mode.]
-
-What to test instead:
-```ts
-[replacement pattern or pseudocode]
-```
-
-#### Major: [title]
-...
-
-### Missing behavior coverage
-
-- [User behavior/state missing]
-- [User behavior/state missing]
-
-### Query/accessibility review
-
-- [Where accessible queries should replace test IDs/selectors]
-- [Where inability to query by role/name suggests an accessibility defect]
-
-### Async/mocking/snapshot review
-
-- [Async waits that do or do not wait for observable results]
-- [Mocks that preserve or destroy behavior]
-- [Snapshots that are useful or noisy]
-
-### Minimum fix plan
-
-1. [Most important test rewrite]
-2. [Second]
-3. [Third]
-````
+Before reporting, read [the report contract](report-format.md). It owns the reusable template and severity guidance; do not derive a finding or a rating from the checklist category.
 
 ## Rewrite patterns
+
+These are conditional repairs for demonstrated gaps, not mandatory replacements. Keep a smoke test if it has a useful purpose and add missing behavior coverage separately. A test-ID rewrite is optional hardening unless a required accessibility contract remains unprotected.
 
 ### Render-only to behavior test
 

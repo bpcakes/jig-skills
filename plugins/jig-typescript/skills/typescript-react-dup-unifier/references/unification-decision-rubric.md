@@ -1,6 +1,6 @@
 # Unification Decision Rubric
 
-Score a candidate only after reading definitions, usages, tests, and package ownership. Scanner similarity is supporting evidence; it is not one of the decision dimensions below.
+Evaluate a candidate after reading definitions, usages, tests, and package ownership. Optional scores help compare candidates; neither totals nor flag counts establish a defect or authorize unification. Scanner similarity is supporting evidence; it is not one of the decision dimensions below.
 
 ## Positive Dimensions
 
@@ -50,7 +50,7 @@ Positive subtotal: 0–20.
 
 ## Risk Deductions
 
-Deduct the stated points when applicable.
+If using scores, these deductions are rough comparison aids. Explain the actual cost and consider counterevidence.
 
 - Different domain ownership or release cadence: −3.
 - Shared location would violate dependency direction or create a cycle: −5.
@@ -58,31 +58,23 @@ Deduct the stated points when applicable.
 - Material accessibility or state-ownership divergence: −4.
 - Server/client boundary mismatch: −4.
 - Public API or multi-package migration risk: −2.
-- More than three independent behavioral flags: −4.
+- Behavioral flags that create conflicting combinations or repeated caller compensation: up to −4. Count alone is not evidence.
 - Generic callback or `options` bag required to express the difference: −3.
 - Same shape but distinct regulated, authorization, identity, or money semantics: −5.
 - Call sites become less legible: −2.
 
-## Decision Thresholds
+## Decisions
 
-- 16 or more: `unify-now`, unless a hard stop applies.
-- 11–15: `shared-core` is usually the maximum safe move.
-- 7–10: `standardize-contract` or retain separate wrappers.
-- 3–6: `intentional-duplicate` is usually cheaper and clearer.
-- 2 or less: `false-positive` unless other evidence is compelling.
-
-A hard stop in `SKILL.md` overrides the numeric score.
+Choose `unify-now`, `shared-core`, `standardize-contract`, `intentional-duplicate`, or `false-positive` from the demonstrated invariant, ownership, caller costs, and migration risks. No numeric threshold determines the choice. A hard stop in `SKILL.md` still applies; a high score cannot override it.
 
 ## Required Written Rationale
 
 For every candidate not marked `false-positive`, record:
 
-- Positive subtotal and each dimension score.
-- Risk deductions.
-- Final score.
+- Supporting evidence and material risks; include scores only if used.
 - The shared invariant in one sentence.
 - The strongest counterargument against the decision.
 - The smallest stable seam.
 - The canonical owner and why it is the correct owner.
 
-Do not inflate scores to justify a preferred refactor. When evidence is missing, score the dimension lower and state the gap.
+Do not inflate scores to justify a preferred refactor. When evidence is missing, state the gap without treating it as a negative finding.

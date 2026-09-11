@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 2,
+  "sourceRun": "/tmp/jig-skill-evals-XRpuT7",
+  "sourceSummaryHash": "02b110599d1ecc33fd6b5fd8370e7969fa611fe011039fa9a9701a6d1514a96d",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-loaded-explain",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix"
+    ]
+  },
+  "startedAt": "2026-09-11T15:45:55.989Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "CLI default (--ignore-user-config)",
+  "sourceCommit": "0f106352c36bde312a0621971c2a894a6f51be3c",
+  "harnessHash": "8b29960c1439ed98660635389fd035ae355da3873f0d1cbfa7d45cb20ee1a603",
+  "suiteHash": "652f5000f13699f4fac439a438cc7a29cdf94e6d687ef735cd946a832bcf6f60",
+  "exporterHash": "ff67dad4076667f6d556b3df7849f6d9d6661d2ab19d3bd1e56a64174e26b681",
+  "skillHashes": {
+    "audit-common": "4541cf948ba3b149b518980bb68878a5231911fe1206a14a9a2dac69a6141bb7",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "f339d51670eca15e50272b74491121bef28a55fbe5603fdebb6b015d2d0163ab",
+    "comprehensive-review": "b4ca4736d52689c460ad68159efe956ef88852eb643de7988cc707c685ee23e1",
+    "crypto-architecture-review": "aebe7e8f47d88f355e9e86d23b5a4ad722689814711bbfe22d125b691d17e11a",
+    "crypto-implementation-static-review": "4a5a23e0c783b971f8443197a30c8a3786fa235cb5ca354d6fb759b20cd0c411",
+    "cursor-implement-exec-plan": "67cfcb1a75abd7f1892167fe12a7e8068f17272bfc6d4e47164e8cb96e3b1fed",
+    "fowler-ruby-rails-refactoring": "6e50bac47b632ccf51e189cb6bdab4a3ed49b0ea696b69947943368436ab48be",
+    "fowler-rust-refactoring": "8d9d0709d1b36975b4f760537ac896a527b4c1e80793252bbf0c00ff5210999b",
+    "improve-exec-plan": "a543f2ec104c87216b2751bf3a9f31e1c7a8249d3825818613e11d1955c7960c",
+    "metadata-leakage-inventory": "b944ca38cf4df60622c7c6690849a81867bd8475ee3615033b78671374e1d063",
+    "network-payload-zero-knowledge-test": "7b4c66b11fa379a547066eeb810c3fb2cbdd9a0fd90c43dab74eb7ecff67e3aa",
+    "privacy-claims-field-classifier": "d4d74596291b9ecebc9ad65f8ee2b2531035123eb3f2e23660af9e8ad6025ad1",
+    "react-hooks-component-api-review": "a5331dd4595243c7c6732a284a2666c3c4db25694cacec73956a04b2511cc144",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "9edab6b5b4667c91162dc48b9ee5048cc89baee9530dc87837be2483eefba84f",
+    "react-state-data-flow-review": "218cbeab12fb14c396dc5cc4467c035225b5dbdcc8e68fc96bdd23d8cc5790ba",
+    "react-test-quality-review": "93abb877a293054abc58b09701e03b21771d68a2f0166f9d31db6e350d6d29fb",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "25f70d06bc8af873dde8446666ef7c84141a408fc71fcb1424312d27e3de6196",
+    "rust-dup-unifier": "548cd04652a3713ecee5834e3590630b2cc8a797e0acbfae848fb496fff77e8e",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "906db0c9ad82dcf012eb970ce0e9937daee50c3dd2c47d6d0e253475bca12091",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "bff89abcc34bb24f721b9478fe45c0f036075a3898c77fdaba910fe439d7d0b5",
+    "rust-test-quality-review": "c95360272363f76a811b6328937f74b2510b0db652478e6ee2158474a73da327",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "c7e8b0dcc6f5729d5ffcd8675cc55a739f29f1d258f1c3caa9e978c9f81c19f2",
+    "sqlx-query-safety-review": "6f49fa0093f81fc48f41cb4f2877af253138badb1ecffdcffc945209060bada8",
+    "swift-simplify": "80b7c9d245726d933ebee9517a2f0db42f7958a9b06cd38b3d4a6594da20d388",
+    "telemetry-crash-logs-support-leakage-audit": "6fc8675f5c7208acbe52439198ce7786abb7480120754b57b36748b81637deea",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "4b4bc5ac3ef6fff3d39c3fe2eea8ce54fff3b4720bc68b53470f5c3179e06e38",
+    "typescript-react-dup-unifier": "32a5c6312fb187900d7ecf9468b32edf7d640eb9a349fd94c659d8866cc20a0d",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "5caed888b99c97f8a6d5b002b31cd984b90b503c59375c5311710f3d4cfd1af8",
+    "write-exec-plan": "00dd36c664085d5b59854fd72fbf864790ae48859a93b9c313d5f14a0a0567e1"
+  },
+  "passed": 2,
+  "total": 2,
+  "skillsEvaluated": 2,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Current source verification covers every discovery entrypoint and all files of evaluated skills; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "rust-implicit-simplify",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "reads": [
+        "rust-simplify"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-simplify/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g '*.rs' -g 'Cargo.lock'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md && cat src/lib.rs'",
+        "/usr/bin/bash -lc \"git status --short && ls -a && rg --files src -g 'AGENTS.md'\"",
+        "/usr/bin/bash -lc 'rustc --crate-type lib --emit metadata -o /tmp/classify-check.rmeta src/lib.rs && rustfmt --check src/lib.rs && git diff -- src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "Simplified `classify` in `src/lib.rs` to return `value > 0` directly, preserving the working copy’s behavior. Compilation and formatting checks passed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The updated function returns `value > 0`, which is true for positive inputs and false for zero and negative inputs, matching the original branches."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The updated body is a single expression, `value > 0`, replacing the if/else and both explicit return statements."
+          }
+        ]
+      },
+      "artifactHash": "cbb874521e6d0262252171e6b225d346db326b668a9e2a61ad476d21a83475c8"
+    },
+    {
+      "id": "loop-explicit-preview",
+      "iteration": 1,
+      "skill": "review-fix-loop",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "comprehensive-review",
+        "review-fix-loop"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/review-fix-loop/SKILL.md .agents/skills/review-fix-loop/references/loop-runtime.md .agents/skills/comprehensive-review/SKILL.md .agents/skills/comprehensive-review/references/parallel-review-runtime.md'",
+        "/usr/bin/bash -lc \"sed -n '105,230p' .agents/skills/review-fix-loop/references/loop-runtime.md; sed -n '1,115p' .agents/skills/comprehensive-review/SKILL.md\"",
+        "/usr/bin/bash -lc \"sed -n '78,108p' .agents/skills/review-fix-loop/references/loop-runtime.md\""
+      ],
+      "answer": {
+        "answer": "Read the skill and relevant runtime instructions. After you say “start,” the workflow would authorize:\n\n- Reviewing local staged, unstaged, untracked, and initialized submodule changes, respecting exclusions.\n- Default independent Claude and Codex reviews, followed by verification of findings.\n- At most one repair round, using minimal fixes for verified medium-or-higher defects, with relevant validation. Necessary changes to callers and tests are allowed.\n- A fresh full-scope review after successful validation, even after the sole repair round, unless the verified-empty-scope exception applies. One round does not mean one review.\n\nIt preserves existing work and the index. It does not authorize staging, commits, pushes, deployments, unrelated cleanup, or edits to excluded paths. Failures, scope drift, missing material information, or exhausted rounds trigger the documented stop rules.\n\nYour repository instructions prohibit network access and external services, so the default external Claude review cannot run; that limitation must be reported and prevents claiming full convergence with the default reviewer set.\n\nOnly instruction files have been read. No workflow, reviewers, or file changes have started. Waiting for you to say “start,” as you requested.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "preview",
+            "passed": true,
+            "evidence": "The response explains reviews, verified fixes, relevant validation, and a fresh review with at most one repair round; explicitly excludes commits, pushes, deployments, and unrelated cleanup; and waits for “start.” Recorded commands only read instruction files using cat and sed. fileChanges is empty, and src/lib.rs is identical before and after, supporting that no review/fix loop was launched."
+          }
+        ]
+      },
+      "artifactHash": "74d02d5f1b5edade3e02c1f820f10f7645ee97ce87d7dd18e07abc943dcb6cce"
+    }
+  ]
+}

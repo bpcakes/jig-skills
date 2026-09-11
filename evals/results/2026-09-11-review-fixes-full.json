@@ -1,0 +1,1066 @@
+{
+  "schemaVersion": 1,
+  "sourceRun": "/tmp/jig-skill-evals-0d0zEI",
+  "sourceSummaryHash": "b1990fb0dd71bfa5ec4a5cccff8f6a548e4dc99dff9f1e8577f2accd38439252",
+  "coverage": {
+    "allowPartial": false,
+    "completeSuite": true,
+    "missingCases": []
+  },
+  "startedAt": "2026-09-11T15:00:01.633Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "CLI default (--ignore-user-config)",
+  "sourceCommit": "0f106352c36bde312a0621971c2a894a6f51be3c",
+  "harnessHash": "86432b9c7c51c187a46a9f40cbf6e00692ea82004d1915efd2b3fcaa8ea3126d",
+  "suiteHash": "12aa766630ae2dcdaf70addd9d969487510adaedfc7256b7ba98efd80128a811",
+  "exporterHash": "c6594856cf4d0b4200769d5954ab8e40d50baa7256e706d6860b55c5883a0764",
+  "skillHashes": {
+    "audit-common": "4541cf948ba3b149b518980bb68878a5231911fe1206a14a9a2dac69a6141bb7",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "f339d51670eca15e50272b74491121bef28a55fbe5603fdebb6b015d2d0163ab",
+    "comprehensive-review": "b4ca4736d52689c460ad68159efe956ef88852eb643de7988cc707c685ee23e1",
+    "crypto-architecture-review": "aebe7e8f47d88f355e9e86d23b5a4ad722689814711bbfe22d125b691d17e11a",
+    "crypto-implementation-static-review": "4a5a23e0c783b971f8443197a30c8a3786fa235cb5ca354d6fb759b20cd0c411",
+    "cursor-implement-exec-plan": "67cfcb1a75abd7f1892167fe12a7e8068f17272bfc6d4e47164e8cb96e3b1fed",
+    "fowler-ruby-rails-refactoring": "6e50bac47b632ccf51e189cb6bdab4a3ed49b0ea696b69947943368436ab48be",
+    "fowler-rust-refactoring": "8d9d0709d1b36975b4f760537ac896a527b4c1e80793252bbf0c00ff5210999b",
+    "improve-exec-plan": "a543f2ec104c87216b2751bf3a9f31e1c7a8249d3825818613e11d1955c7960c",
+    "metadata-leakage-inventory": "b944ca38cf4df60622c7c6690849a81867bd8475ee3615033b78671374e1d063",
+    "network-payload-zero-knowledge-test": "7b4c66b11fa379a547066eeb810c3fb2cbdd9a0fd90c43dab74eb7ecff67e3aa",
+    "privacy-claims-field-classifier": "d4d74596291b9ecebc9ad65f8ee2b2531035123eb3f2e23660af9e8ad6025ad1",
+    "react-hooks-component-api-review": "a5331dd4595243c7c6732a284a2666c3c4db25694cacec73956a04b2511cc144",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "9edab6b5b4667c91162dc48b9ee5048cc89baee9530dc87837be2483eefba84f",
+    "react-state-data-flow-review": "218cbeab12fb14c396dc5cc4467c035225b5dbdcc8e68fc96bdd23d8cc5790ba",
+    "react-test-quality-review": "93abb877a293054abc58b09701e03b21771d68a2f0166f9d31db6e350d6d29fb",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "25f70d06bc8af873dde8446666ef7c84141a408fc71fcb1424312d27e3de6196",
+    "rust-dup-unifier": "548cd04652a3713ecee5834e3590630b2cc8a797e0acbfae848fb496fff77e8e",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "906db0c9ad82dcf012eb970ce0e9937daee50c3dd2c47d6d0e253475bca12091",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "bff89abcc34bb24f721b9478fe45c0f036075a3898c77fdaba910fe439d7d0b5",
+    "rust-test-quality-review": "c95360272363f76a811b6328937f74b2510b0db652478e6ee2158474a73da327",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "c7e8b0dcc6f5729d5ffcd8675cc55a739f29f1d258f1c3caa9e978c9f81c19f2",
+    "sqlx-query-safety-review": "6f49fa0093f81fc48f41cb4f2877af253138badb1ecffdcffc945209060bada8",
+    "swift-simplify": "80b7c9d245726d933ebee9517a2f0db42f7958a9b06cd38b3d4a6594da20d388",
+    "telemetry-crash-logs-support-leakage-audit": "6fc8675f5c7208acbe52439198ce7786abb7480120754b57b36748b81637deea",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "4b4bc5ac3ef6fff3d39c3fe2eea8ce54fff3b4720bc68b53470f5c3179e06e38",
+    "typescript-react-dup-unifier": "3dc7ebbe54f3745e044e014de5b9fe4259dc48b60ac2ca7db73d309fdfd48ac9",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "5caed888b99c97f8a6d5b002b31cd984b90b503c59375c5311710f3d4cfd1af8",
+    "write-exec-plan": "00dd36c664085d5b59854fd72fbf864790ae48859a93b9c313d5f14a0a0567e1"
+  },
+  "passed": 24,
+  "total": 25,
+  "skillsEvaluated": 12,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Current source verification covers every discovery entrypoint and all files of evaluated skills; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "rust-loaded-explain",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "loaded",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"sed -n '1,200p' src/lib.rs\""
+      ],
+      "answer": {
+        "answer": "`classify(value: i32)` returns `true` for positive inputs and `false` for zero or negative inputs.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The answer states that classify returns true for positive inputs and false for zero or negative inputs, matching the value > 0 condition. It makes no simplification claim and includes no review findings."
+          }
+        ]
+      },
+      "artifactHash": "3c5bb576927e8a77547504a5d3da22b1d2d70458c1071040137302e7f49d3b31"
+    },
+    {
+      "id": "rust-implicit-simplify",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "reads": [
+        "rust-simplify"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-simplify/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g '*.rs' -g 'Cargo.lock'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md src/lib.rs; git status --short; ls -a'",
+        "/usr/bin/bash -lc 'rustc --crate-type lib --emit metadata -o /tmp/jig-classify.rmeta src/lib.rs; rustfmt --check src/lib.rs; git diff -- src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "Simplified `classify` in `src/lib.rs` to return `value > 0` directly, preserving its existing working-tree behavior. Compilation and formatting checks passed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The updated function returns `value > 0`, which is true for positive i32 values and false for zero and negative values, matching the original branches."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The if/else branches and explicit true/false returns are replaced by a single expression: `value > 0`."
+          }
+        ]
+      },
+      "artifactHash": "15df9a7e4d655488d2ba6184efe780734f45a2031a60860c234537853bad30e9"
+    },
+    {
+      "id": "typescript-loaded-explain",
+      "iteration": 1,
+      "skill": "typescript-simplify",
+      "mode": "loaded",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat src/classify.ts'"
+      ],
+      "answer": {
+        "answer": "`classify` returns `true` for positive inputs and `false` for both zero and negative inputs.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The answer correctly states that positive inputs return true, while zero and negative inputs return false, matching the value > 0 condition. It makes no simplification claim and adds no review findings."
+          }
+        ]
+      },
+      "artifactHash": "c49afcf1840e8e4cb2ab845f4bcf9cd42bb7bf2381992f47409ee3afa93f32d6"
+    },
+    {
+      "id": "typescript-implicit-simplify",
+      "iteration": 1,
+      "skill": "typescript-simplify",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/classify.ts"
+      ],
+      "reads": [
+        "typescript-simplify"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/typescript-simplify/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd && rg --files -g '\"'!node_modules'\"' -g '\"'!'\"\\\\.git'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md && cat src/classify.ts'",
+        "/usr/bin/bash -lc 'git status --short && git diff -- src/classify.ts && ls -a && command -v node && command -v tsc'",
+        "/usr/bin/bash -lc 'git diff --check && git diff -- src/classify.ts'"
+      ],
+      "answer": {
+        "answer": "Simplified `src/classify.ts` to `return value > 0;`, preserving its current behavior, including returning false for zero. `git diff --check` passed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The resulting function returns value > 0 directly, yielding true exactly for positive inputs and false for zero and negative inputs, preserving the original behavior."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The if/else branches and separate true/false returns were replaced with the single statement return value > 0;."
+          }
+        ]
+      },
+      "artifactHash": "5e1f2c7d4ed1b9a535605057a1234917c4f8cebacbcb630dddd6ac27df03cc82"
+    },
+    {
+      "id": "error-four-from-valid",
+      "iteration": 1,
+      "skill": "rust-error-handling-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-error-handling-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-error-handling-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.git/**'\"",
+        "/usr/bin/bash -lc 'cat src/lib.rs'",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-error-handling-review/references/propagation-and-design.md'",
+        "/usr/bin/bash -lc \"cat README.md AGENTS.md; rg -n 'read_count|ReadError|elapsed|\\\\[package\\\\]' --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"' .\""
+      ],
+      "answer": {
+        "answer": "No supported error-handling defects found in src/lib.rs. All fallible operations propagate distinct errors with operation-specific messages and preserved source chains. README.md states that the caller prints the selected file and error chain, addressing filename context. Validation was static: no Cargo manifest, tests, or caller implementation were available.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "no_count_defect",
+            "passed": true,
+            "evidence": "The response reports no findings and explicitly recognizes distinct errors, operation-specific messages, and preserved source chains. It does not flag enum size, the four #[from] conversions, missing explicit #[source], or unobserved variant matching as defects."
+          }
+        ]
+      },
+      "artifactHash": "816d6df9347971cc5bc53a61492e368aad7bcdb2110c2aca64794b896b4bc252"
+    },
+    {
+      "id": "error-one-from-context-loss",
+      "iteration": 1,
+      "skill": "rust-error-handling-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-error-handling-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-error-handling-review/SKILL.md; cat src/lib.rs'",
+        "/usr/bin/bash -lc \"rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**' -g 'AGENTS.md' -g '*.rs' -g 'Cargo.toml'\"",
+        "/usr/bin/bash -lc \"rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"'; rg -n 'LoadError|load\\\\(|run\\\\(' --glob '*.rs' --glob '\"'!target/**'\"' .\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-error-handling-review/references/propagation-and-design.md; cat AGENTS.md; nl -ba src/lib.rs'",
+        "/usr/bin/bash -lc 'cat README.md'"
+      ],
+      "answer": {
+        "answer": "Found one diagnostic correctness defect. Static review only; the repository has no Cargo manifest or tests. No files changed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:7–8",
+            "issue": "Low severity: both reads convert failures into the same LoadError::Io variant, losing which configuration failed. Attach the primary/fallback role and path with map_err while preserving the source error.",
+            "consequence": "A missing primary file and a missing fallback file produce indistinguishable diagnostics through load → run → eprintln!. Operators cannot identify which file to repair, violating the requirement documented in README.md.",
+            "counterevidence": "#[from] preserves the underlying I/O error and source chain, but those do not identify the path or configuration role. The sole handler adds no context, and README.md confirms there is no other logging and neither path is secret."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "lost_origin",
+            "passed": true,
+            "evidence": "The finding identifies that both reads become LoadError::Io and produce indistinguishable diagnostics at run’s eprintln!, preventing operators from identifying which file to repair. It recommends attaching the primary/fallback role and path via map_err while preserving the source error, and explains why the source chain and sole handler cannot recover that context. It does not rely on a conversion-count threshold."
+          }
+        ]
+      },
+      "artifactHash": "79fe8a31f6de913de2cee8207d3d95a469f6c1e8ac6596ac0486c739c61b4232"
+    },
+    {
+      "id": "error-required-write-discarded",
+      "iteration": 1,
+      "skill": "rust-error-handling-review",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-error-handling-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-error-handling-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g '*.rs'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-error-handling-review/references/propagation-and-design.md; cat .agents/skills/rust-error-handling-review/references/recovery-and-resilience.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba src/lib.rs; rg --files -g '\"'!.agents/**'\"' -g '\"'!.git/**'\"'\"",
+        "/usr/bin/bash -lc \"cat README.md; rg -n 'persist|best.effort|write' --glob '\"'!.agents/**'\"' --glob '\"'!.git/**'\"' .\""
+      ],
+      "answer": {
+        "answer": "Found one error-propagation defect. Static review only; no caller implementations, tests, or Cargo manifest were available.",
+        "findings": [
+          {
+            "location": "src/lib.rs:2–3",
+            "issue": "High: `.ok()` discards every `std::fs::write` error, and `persist` unconditionally returns `Ok(())`. Return `std::fs::write(path, bytes)` directly to preserve failures.",
+            "consequence": "A missing parent directory, permission denial, or disk-full error reaches callers as success. Under README.md’s contract, callers acknowledge completed work even when data was not saved or was only partially written, and cannot diagnose or recover from the failure.",
+            "counterevidence": "Ignoring errors could suit best-effort writes, but README.md explicitly requires an error when writing fails and states that callers acknowledge work on `Ok(())`. No caller implementation was available to inspect further."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "false_success",
+            "passed": true,
+            "evidence": "The finding correctly identifies that `.ok()` discards write errors and `persist` unconditionally returns `Ok(())`, matching src/lib.rs. It connects this behavior to README.md’s contract: callers acknowledge completed work even when data was not saved or was only partially written."
+          }
+        ]
+      },
+      "artifactHash": "2364ca552636fc1e239828b2c9599316aa9e25750c78b8ac2af4c93681e7c10b"
+    },
+    {
+      "id": "error-optional-parse-valid",
+      "iteration": 1,
+      "skill": "rust-error-handling-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-error-handling-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-error-handling-review/SKILL.md; pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md .agents/skills/rust-error-handling-review/references/propagation-and-design.md; nl -ba src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "No supported findings in src/lib.rs. Discarding parse errors and defaulting to 30 matches the README contract for absent, malformed, negative, and out-of-range inputs; valid u64 values are preserved. No diagnostics are required. Review was static; no callers, tests, or Cargo manifest were available.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "intentional_default",
+            "passed": true,
+            "evidence": "The implementation preserves valid u64 values and defaults to 30 for absent or invalid inputs, matching README.md. The review reports no findings, explicitly accepts discarded parse errors and the fallback, and demands no comments, propagation, or logging."
+          }
+        ]
+      },
+      "artifactHash": "c20a1feb997c1694d418b4357dcaf7c48d7dc5c556349a3f9a64371f907b0b87"
+    },
+    {
+      "id": "typescript-validated-assertion",
+      "iteration": 1,
+      "skill": "typescript-type-system-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "typescript-type-system-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/typescript-type-system-review/SKILL.md; git status --short; git diff -- src/input.ts; git diff --cached -- src/input.ts; rg --files -g '\"'!node_modules'\"' -g '\"'!'\"\\\\.git'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba src/input.ts; rg --files --hidden -g '\"'!'\"\\\\.git/**' -g '\"'!'\"\\\\.agents/**' -g '\"'!node_modules/**'\"'\""
+      ],
+      "answer": {
+        "answer": "Overall type-system health: Strong. `parseName` checks for a non-null object and a string `name` before asserting `Name`; the assertion is supported by runtime validation. No supported improvements found. No callers, tests, or compiler configuration were available, so compiler-setting safety could not be assessed. No files changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "valid_narrowing",
+            "passed": true,
+            "evidence": "The response accepts the non-null object and string `name` checks as runtime validation supporting `value as Name`, and reports no findings. It does not flag `unknown`, the assertion, or the plain string name as defects."
+          }
+        ]
+      },
+      "artifactHash": "61ba301a7e8a3d2bc8b67c4c89887c7701e690124046adc8a4f8eb8847db90f9"
+    },
+    {
+      "id": "typescript-unchecked-boundary",
+      "iteration": 1,
+      "skill": "typescript-type-system-review",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "typescript-type-system-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/typescript-type-system-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'tsconfig*' -g 'package.json' -g '*input*'; git status --short\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba src/input.ts; rg --files -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.git/**'\"",
+        "/usr/bin/bash -lc \"cat README.md; rg -n 'normalized|Name|strict' src README.md; command -v node\""
+      ],
+      "answer": {
+        "answer": "Overall type-system health: Unsafe at the input boundary. Validate the runtime shape before accessing name. No compiler configuration or tests were provided; compiler strictness alone cannot make this assertion safe.",
+        "findings": [
+          {
+            "location": "src/input.ts:3–4, normalized",
+            "issue": "Major: `value as Name` asserts that untrusted JSON has a string name without validating it. Check for a non-null object and a string-valued name; otherwise throw a TypeError identifying the name field.",
+            "consequence": "Inputs such as null, {}, or {\"name\":42} reach property access or toUpperCase and throw incidental errors instead of the required field-specific validation error.",
+            "counterevidence": "The parameter correctly uses unknown, but the assertion bypasses its protection. README.md explicitly confirms malformed JSON is expected and requires validation. No callers, validators, or tests establish a stronger input invariant."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "unvalidated_input",
+            "passed": true,
+            "evidence": "The review identifies `value as Name` as bypassing unknown safety, gives null, {}, and {\"name\":42} as invalid inputs that cause incidental property-access or toUpperCase errors, and recommends checking for a non-null object with a string name and otherwise throwing a TypeError identifying the name field."
+          }
+        ]
+      },
+      "artifactHash": "021eb9e1623a69488659b92a85b28944a190c2af2d431cc2e4874e795774ad35"
+    },
+    {
+      "id": "rust-read-only-review-loaded",
+      "iteration": 1,
+      "skill": "rust-architecture-review",
+      "mode": "loaded",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "In `src/lib.rs`, `classify(value: i32)` checks whether `value > 0`. It returns `true` for positive numbers and `false` for zero or negative numbers.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "no_review",
+            "passed": true,
+            "evidence": "The response explains that classify checks value > 0, returning true for positive numbers and false for zero or negative numbers. It includes no architecture audit or refactoring recommendation."
+          }
+        ]
+      },
+      "artifactHash": "c8fb3d980690348ba2e0e616f4a88ec03cb2922a658384f6761d8d717fa23181"
+    },
+    {
+      "id": "rust-simplify-negative-discovery",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'pwd; rg --files -g AGENTS.md -g lib.rs -g Cargo.toml'",
+        "/usr/bin/bash -lc 'cat AGENTS.md src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "`classify(0)` returns `false` because `0 > 0` is false, so the `else` branch runs.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The answer correctly states that classify(0) returns false because 0 > 0 is false. Both files are unchanged, fileChanges is empty, and no review findings were added."
+          }
+        ]
+      },
+      "artifactHash": "f93e3a9155e4f91cd0fa1f6a8dc73481911ae345123704d51afccdeef13f5776"
+    },
+    {
+      "id": "sqlx-runtime-query-valid",
+      "iteration": 1,
+      "skill": "sqlx-query-safety-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "sqlx-query-safety-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.git/**'\"",
+        "/usr/bin/bash -lc 'nl -ba src/lib.rs'",
+        "/usr/bin/bash -lc 'cat README.md schema.sql AGENTS.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/sqlx-query-safety-review/references/query-checking.md .agents/skills/sqlx-query-safety-review/references/sql-construction.md .agents/skills/sqlx-query-safety-review/references/results-and-boundaries.md'"
+      ],
+      "answer": {
+        "answer": "No material findings in src/lib.rs. The query correctly binds the i64 ID to PostgreSQL bigint, decodes NOT NULL text as String, and uses fetch_optional for a primary-key lookup. Runtime query use is intentional per README.md. Review was static; no runnable test setup was provided.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "supported_runtime_api",
+            "passed": true,
+            "evidence": "The review reports no findings and correctly recognizes that bound i64 matches bigint, NOT NULL text decodes as String, and fetch_optional matches a primary-key lookup that may return no row. It accepts runtime query_scalar as intentional per README.md without requiring macros."
+          }
+        ]
+      },
+      "artifactHash": "49dba75ad9ef8ca77834d7055001b41ecf71202e2c0e86a5fd66c316c96ffe4c"
+    },
+    {
+      "id": "rust-test-unit-result-valid",
+      "iteration": 1,
+      "skill": "rust-test-quality-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-test-quality-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-test-quality-review/SKILL.md\npwd\nrg --files -g 'AGENTS.md' -g 'Cargo.toml' -g 'Cargo.lock' -g '*.rs' -g '\"'!target'\"'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md\nnl -ba src/lib.rs\nrg --files -g '\"'! .git'\"'\ngit status --short\"",
+        "/usr/bin/bash -lc 'test_dir=$(mktemp -d .rust-test-review.XXXXXX)\nrustc --test src/lib.rs -o \"$test_dir/lib-tests\" && \"$test_dir/lib-tests\"\nif [ -f \"$test_dir/lib-tests\" ]; then rm \"$test_dir/lib-tests\"; fi\nrmdir \"$test_dir\"'"
+      ],
+      "answer": {
+        "answer": "No supported findings. The tests cover positive acceptance, zero rejection, and negative rejection, including the error message. `is_ok()` fully checks the successful `Result<(), _>` contract. All three tests passed using `rustc --test`. Review was limited to src/lib.rs and its inline tests; no files were changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "unit_success_contract",
+            "passed": true,
+            "evidence": "The review correctly accepts is_ok() for Result<(), _> and finds the tests for 1, 0, and -1 sufficient, with exact error assertions for rejection. It requests neither property tests nor stronger success-value assertions."
+          }
+        ]
+      },
+      "artifactHash": "66959b8662ef5639a4b64701b94b3f82fe39b0d573c2b6320b9a4b2e0c0f12a6"
+    },
+    {
+      "id": "rust-abstraction-invariant-escape",
+      "iteration": 1,
+      "skill": "rust-abstraction-police",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-abstraction-police"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.git' | head -80\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/SKILL.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md; nl -ba src/lib.rs; nl -ba README.md'",
+        "/usr/bin/bash -lc \"rg --files --hidden -g '\"'!'\"\\\\.git/**' -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.codex/**'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/references/leak-taxonomy.md .agents/skills/rust-abstraction-police/references/report-template.md .agents/skills/rust-abstraction-police/references/remediation-playbook.md'"
+      ],
+      "answer": {
+        "answer": "Confirmed one high-severity, high-confidence abstraction leak. Reviewed HeaderName, its constructor and Deref/DerefMut implementations, wire_header, and the README contract. Immutable string access and returning an owned String are not independently confirmed defects. Review was static and offline; no Cargo manifest, tests, or downstream callers were available. No files changed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:14–15; src/lib.rs:5; src/lib.rs:17; README.md:1",
+            "issue": "AP-RUST-001 — HeaderName exposes unchecked mutation through DerefMut. Severity: high. Confidence: high. Boundary: HeaderName. Leak kind: invariant/state machine. Returning &mut String lets safe callers bypass constructor validation: `let mut name = HeaderName::new(\"X-Test\".into()).unwrap(); name.push_str(\": injected\\r\\nX-Other\");`. The resulting name violates the promised lifetime invariant.",
+            "consequence": "wire_header trusts the invalid value and returns `X-Test: injected\\r\\nX-Other: value\\r\\n`, enabling an extra header when transmitted as described in the README. Callers must therefore preserve or repeat validation themselves. Change test: enforcing validation on every mutation requires removing unrestricted mutable access, forcing downstream String mutations to migrate to checked operations. Smallest repair: remove DerefMut and provide a validated replacement method that leaves the old value intact on rejection. This is a breaking API change; adding checked methods alone does not close the bypass.",
+            "counterevidence": "README.md explicitly permits downstream mutation, but also promises a validated header name throughout its lifetime. Checked mutation satisfies both commitments; unrestricted String mutation does not. The private field and validating constructor further support invariant ownership. The source only returns formatted bytes; actual connection writes are documented but not present for inspection."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "boundary",
+            "passed": true,
+            "evidence": "The finding identifies DerefMut's &mut String as bypassing constructor validation and demonstrates push_str(\": injected\\r\\nX-Other\"). It shows wire_header then returns \"X-Test: injected\\r\\nX-Other: value\\r\\n\", violating the lifetime validation contract and enabling an extra header when transmitted."
+          }
+        ]
+      },
+      "artifactHash": "408fb9cbb524df17d8e58da574125fd942f6e2db4391d2a836a5bf951f93c4fe"
+    },
+    {
+      "id": "rust-abstraction-transparent-contract",
+      "iteration": 1,
+      "skill": "rust-abstraction-police",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-abstraction-police"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!.git'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/SKILL.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/references/leak-taxonomy.md .agents/skills/rust-abstraction-police/references/report-template.md .agents/skills/rust-abstraction-police/references/remediation-playbook.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md; nl -ba src/lib.rs; nl -ba README.md'"
+      ],
+      "answer": {
+        "answer": "No abstraction leaks confirmed (0 high, 0 medium, 0 low).\n\nReviewed `UserId`, its public tuple field and derived traits, `UserId::new`, and `wire_id` in src/lib.rs:1–6 against README.md:1.\n\nRejected candidate: exposing unrestricted `u64` construction and access is deliberate. The README explicitly defines the public representation as the protocol contract and states that all values are valid. No validation invariant is bypassed; changing that representation would change the contract itself.\n\nCoverage: static source review only. No Cargo manifest or downstream consumers were available; no files were changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "boundary",
+            "passed": true,
+            "evidence": "The review rejects unrestricted u64 construction and access as a leak because README.md explicitly makes the public representation the protocol contract and all values valid. It reports no findings for the tuple field, primitive representation, derives, or lack of validation, consistent with the supplied source and README."
+          }
+        ]
+      },
+      "artifactHash": "951b279f26c8d84ce4922148bd9dc5f06700213254c8727ff63038b5e3b5f0cb"
+    },
+    {
+      "id": "async-finite-channel-no-spans",
+      "iteration": 1,
+      "skill": "rust-async-concurrency-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-async-concurrency-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!*SKILL*'\"' -g '\"'!*.md'\"'; cat .agents/skills/rust-async-concurrency-review/SKILL.md; cat src/lib.rs\"",
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-async-concurrency-review/references/lifecycle-and-cancellation.md .agents/skills/rust-async-concurrency-review/references/locks-and-backpressure.md .agents/skills/rust-async-concurrency-review/references/shutdown-and-runtime.md; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"'; nl -ba src/lib.rs\"",
+        "/usr/bin/bash -lc 'cat README.md AGENTS.md'"
+      ],
+      "answer": {
+        "answer": "Async concurrency review: pass. No correctness findings.\n\nInspected task ownership, cancellation, channel termination, backpressure, scheduling, shutdown, and error propagation. The queue holds at most three values; worker completion drops the sole sender, ending reception; awaiting the worker propagates JoinError. Cancellation drops the receiver, and the worker exits on send failure or after at most three sends. This matches README’s permission to abandon results. No locks, select!, external I/O, or blocking work are present.\n\nValidation was static only: no Cargo manifest or tests are provided. Tests to add or run: None required.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "counterevidence",
+            "passed": true,
+            "evidence": "The review correctly identifies the three-value queue bound, sole-sender drop terminating reception, and worker.await? propagating JoinError. It explains that cancellation drops the receiver and the worker finishes within three sends, consistent with README allowing abandonment. It requires no justification comment, tracing spans, or cancellation token."
+          }
+        ]
+      },
+      "artifactHash": "67e76a3adfafb4be3ed5579aabaddcb8cd73b9f0d793664fa7ffc71e84ff194b"
+    },
+    {
+      "id": "async-lost-required-write",
+      "iteration": 1,
+      "skill": "rust-async-concurrency-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-async-concurrency-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'!'\"\\\\.git'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-async-concurrency-review/SKILL.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md; nl -ba src/main.rs'",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-async-concurrency-review/references/lifecycle-and-cancellation.md .agents/skills/rust-async-concurrency-review/references/locks-and-backpressure.md .agents/skills/rust-async-concurrency-review/references/shutdown-and-runtime.md'"
+      ],
+      "answer": {
+        "answer": "Async concurrency review: fail. Reviewed task ownership, scheduling, filesystem I/O, result propagation, and runtime shutdown against README.md. Static review only; no Cargo manifest is available to run tests. Tests to add: verify receipt.txt exists when confirmation is emitted; force a write failure and assert nonzero exit with no confirmation.",
+        "findings": [
+          {
+            "location": "src/main.rs:3",
+            "issue": "High — Required write is detached and its result discarded. On the current-thread runtime, main never yields after spawning, so it prints confirmation and returns before the write task runs. Fix by replacing the spawn with `tokio::fs::write(\"receipt.txt\", b\"confirmed\").await?;` before printing.",
+            "consequence": "The command reports success without creating the required receipt. Write errors cannot propagate to main, violating the documented nonzero-exit requirement.",
+            "counterevidence": "Tokio filesystem I/O is asynchronous, but that does not establish completion or error handling. The JoinHandle is immediately dropped, and README.md explicitly states that nothing else owns the task."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "consequence",
+            "passed": true,
+            "evidence": "The finding identifies the dropped JoinHandle and explains that main prints confirmation and returns before the write task runs, leaving the required receipt uncreated and write errors unable to affect exit status. It recommends replacing the spawn with `tokio::fs::write(\"receipt.txt\", b\"confirmed\").await?;` before printing, ensuring completion and error propagation."
+          }
+        ]
+      },
+      "artifactHash": "1ec3a468fccbdd2ffa78a152b4997c8f95e50538acd252e023a83775aeb5919b"
+    },
+    {
+      "id": "security-debug-without-sink",
+      "iteration": 1,
+      "skill": "rust-security-boundary-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-security-boundary-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-security-boundary-review/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'! .git'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-security-boundary-review/references/secrets-and-authorization.md; cat .agents/skills/rust-security-boundary-review/references/browser-tokens-and-diagnostics.md'",
+        "/usr/bin/bash -lc 'nl -ba src/lib.rs; cat README.md; cat AGENTS.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-security-boundary-review/references/input-sinks.md'"
+      ],
+      "answer": {
+        "answer": "# Rust Security Boundary Review\n\nScope reviewed: `src/lib.rs`, with caller context from `README.md`; static review only.\n\n## Confirmed findings\n\nNone.\n\n## Needs verification\n\nNone within the supplied scope. Trusted-upstream usage and absence of caller logging are documented in README rather than independently inspected caller code.\n\n## Checked but OK\n\n- `raw` flows through private `Credential` into a Bearer header (lines 3–5). `HeaderValue::from_str` rejects CR/LF header injection.\n- The header is marked sensitive before return (line 6).\n- `Debug` and `Serialize` derives (line 1) have no reachable formatting or serialization sink. Their presence alone does not establish secret exposure.\n- The documented caller sends credentials only to a trusted upstream and never logs or returns the header to clients. No credential URLs, token comparisons, cookies, or CORS configuration occur in this module.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "no-speculation",
+            "passed": true,
+            "evidence": "The review reports no confirmed findings and explicitly states that Debug/Serialize derives have no reachable formatting or serialization sink. This matches the supplied complete module and README, which show only trusted-upstream Authorization header construction and no logging or serialization consumers."
+          }
+        ]
+      },
+      "artifactHash": "2a18a22c6d52ddb52b97bf519f124f82ac465fe44cdec0bb5b57b54eb3e6d1a7"
+    },
+    {
+      "id": "security-debug-log-sink",
+      "iteration": 1,
+      "skill": "rust-security-boundary-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-security-boundary-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-security-boundary-review/SKILL.md; rg --files -g '\"'!target'\"' -g '\"'!Cargo.lock'\"' -g '\"'! .git'\"'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md; nl -ba src/lib.rs; cat .agents/skills/rust-security-boundary-review/references/secrets-and-authorization.md'"
+      ],
+      "answer": {
+        "answer": "Reviewed `src/lib.rs` and the credential/logging context in `README.md`. Found one confirmed high-severity credential disclosure. The returned header is marked sensitive, but that does not protect the preceding log event. No separate serialization disclosure is established. Static review only; no files changed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:5",
+            "issue": "High: `tracing::info!(credential = ?secret, ...)` uses derived `Debug` to log the complete long-lived bearer token. Remove the credential field from this event or use a redacted representation.",
+            "consequence": "Production info logs reach a support vendor explicitly unauthorized to receive credentials, exposing a reusable token that permits upstream access with its granted privileges.",
+            "counterevidence": "`header.set_sensitive(true)` protects the subsequently constructed header's sensitive representation; it cannot redact the earlier log of `Credential`. The `Serialize` derive has no demonstrated serialization sink and is not a separate finding."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "sink",
+            "passed": true,
+            "evidence": "The finding traces the long-lived bearer token through Credential's derived Debug into tracing::info! and production logs delivered to an unauthorized support vendor. It explicitly explains that header.set_sensitive(true) cannot redact the earlier Credential log."
+          }
+        ]
+      },
+      "artifactHash": "188108cbeba972e56210fbe51e74e2c90d85e11094992826ac24dca479091f9f"
+    },
+    {
+      "id": "react-effect-safe-no-lint-config",
+      "iteration": 1,
+      "skill": "react-hooks-effects-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-hooks-effects-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/react-hooks-effects-review/SKILL.md\npwd\nrg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"' -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.git/**'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md README.md\nnl -ba src/Room.tsx\nnl -ba src/connection.ts\ncat .agents/skills/react-hooks-effects-review/references/effects-and-dependencies.md .agents/skills/react-hooks-effects-review/references/closures-cleanup-and-loops.md\nrg --files --hidden -g '\"'!'\"\\\\.git/**' -g '\"'!'\"\\\\.agents/**' -g '\"'!node_modules/**'\"'\""
+      ],
+      "answer": {
+        "answer": "Pass. No hook/effect lifecycle issues found in src/Room.tsx.\n\nThe Effect correctly synchronizes a WebSocket with roomId. Its dependency is complete, and cleanup closes the specific connection created by that Effect on room changes and unmount, supporting Strict Mode setup–cleanup–setup.\n\nStatic checks passed for hook order, render purity, dependencies, stale closures, and cleanup. No refs or custom hooks are present. Reviewed src/connection.ts and README.md for supporting context. React version and framework configuration are unavailable; no lint configuration or test scripts are provided. No files changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "safe-effect",
+            "passed": true,
+            "evidence": "The review accepts [roomId] as complete and explains that cleanup closes the connection created by that Effect on room changes and unmount. It recognizes WebSocket synchronization as valid Effect usage, reports no findings, and makes no changes. Missing lint configuration is noted only as context; no dependency-rationale comments are demanded."
+          }
+        ]
+      },
+      "artifactHash": "1aece79f66a636dcaab6823f0058c509c77aba9ae67ecc9290a7c4c0293f8ce1"
+    },
+    {
+      "id": "react-effect-stale-room",
+      "iteration": 1,
+      "skill": "react-hooks-effects-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-hooks-effects-review"
+      ],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; cat .agents/skills/react-hooks-effects-review/SKILL.md; rg --files -g '\"'!node_modules'\"' -g '\"'!package-lock.json'\"' -g '\"'!yarn.lock'\"' -g '\"'!pnpm-lock.yaml'\"'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md README.md; nl -ba src/Room.tsx; nl -ba src/connection.ts; cat .agents/skills/react-hooks-effects-review/references/effects-and-dependencies.md .agents/skills/react-hooks-effects-review/references/closures-cleanup-and-loops.md; rg --files --hidden -g '\"'! .git'\"' -g '*eslint*' -g 'package.json' -g '*test*' -g '*spec*'\""
+      ],
+      "answer": {
+        "answer": "Needs changes: one hook correctness issue in src/Room.tsx. Static review covered dependencies, stale closures, render purity, and cleanup. The socket Effect is appropriate and has matching cleanup; no refs or custom hooks are present. React version, Strict Mode, and lint configuration were unavailable. No project test or lint scripts were found; no files were changed.",
+        "findings": [
+          {
+            "location": "src/Room.tsx:7",
+            "issue": "[High] Empty dependencies prevent the connection from tracking roomId. Change [] to [roomId].",
+            "consequence": "When roomId changes on the mounted component, the displayed room updates but the WebSocket stays connected to the initial room. Including roomId makes React close the previous connection and connect to the current room.",
+            "counterevidence": "The Effect correctly closes its captured connection during cleanup, but that cleanup does not run on roomId changes with []. README.md explicitly says the parent changes roomId without remounting; src/connection.ts binds each socket to the supplied room and provides no retargeting mechanism."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "stale-room",
+            "passed": true,
+            "evidence": "The finding explains that [] leaves the WebSocket connected to the initial room when roomId changes while the displayed room updates, and recommends [roomId]. It also recognizes that cleanup closes the captured connection on unmount but does not run on roomId changes with []."
+          }
+        ]
+      },
+      "artifactHash": "e0bec3c9bd8386c13784b6caceeab0b9e0071bf7cde8e66a824e9cfb648a4c4f"
+    },
+    {
+      "id": "loop-loaded-one-pass-fix",
+      "iteration": 1,
+      "skill": "review-fix-loop",
+      "mode": "loaded",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "reads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"git status --short; pwd; rg --files -g 'AGENTS.md' -g 'README.md' -g 'Cargo.toml' -g 'lib.rs'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md README.md src/lib.rs; rg --files -g '\"'! .git'\"' -g '\"'! .agents'\"'\"",
+        "/usr/bin/bash -lc 'command -v rustc; git diff --check; git diff -- src/lib.rs'",
+        "/usr/bin/bash -lc 'check_dir=$(mktemp -d /tmp/classify-check.XXXXXX)\nrustc --edition=2021 -o \"$check_dir/check\" - <<'\"'RS'\ninclude\"'!(\"/tmp/jig-skill-case-HRVFcm/src/lib.rs\");\nfn main() {\n    for (value, expected) in [(i32::MIN, false), (-1, false), (0, false), (1, true), (i32::MAX, true)] {\n        assert_eq!(classify(value), expected, \"value={value}\");\n    }\n}\nRS\n\"$check_dir/check\"'"
+      ],
+      "answer": {
+        "answer": "Fixed `classify` to use `> 0`. Validation passed for zero, ±1, and both i32 limits; `git diff --check` passed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:1",
+            "issue": "The original `>= 0` comparison violated README.md’s strictly-positive contract.",
+            "consequence": "Zero incorrectly returned true.",
+            "counterevidence": "Positive and negative inputs were already handled correctly; only zero was misclassified."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "one-pass",
+            "passed": true,
+            "evidence": "The supplied after-state changes classify from value >= 0 to value > 0, correctly returning false for zero and negatives and true for positives. The response reports this repair. The record shows local review and a boundary-test command, with no repeated review rounds or external reviewers started or claimed."
+          }
+        ]
+      },
+      "artifactHash": "dff78476b89427b1467c14d0b1e5d814b2ce2dbd2140fec644661f0f1981aa7f"
+    },
+    {
+      "id": "loop-discovery-one-pass-fix",
+      "iteration": 1,
+      "skill": "review-fix-loop",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "reads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'README.md' -g 'Cargo.toml' -g '*.rs'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md src/lib.rs'",
+        "/usr/bin/bash -lc \"rustc --edition=2021 -o /tmp/classify-check - <<'RS'\ninclude\"'!(\"/tmp/jig-skill-case-a4WKgJ/src/lib.rs\");\nfn main() {\n    for (value, expected) in [(i32::MIN, false), (-1, false), (0, false), (1, true), (i32::MAX, true)] {\n        assert_eq!(classify(value), expected, \"value: {value}\");\n    }\n}\nRS\n/tmp/classify-check'",
+        "/usr/bin/bash -lc 'git diff --check && git diff -- src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "Fixed classify to use value > 0. Checks passed for i32::MIN, -1, 0, 1, and i32::MAX; git diff --check passed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:1",
+            "issue": "The >= 0 comparison violated README.md’s strictly-positive requirement.",
+            "consequence": "Zero incorrectly returned true. Fixed to return false.",
+            "counterevidence": "Positive and negative inputs already behaved correctly; only zero was misclassified."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "one-pass",
+            "passed": true,
+            "evidence": "The supplied after state changes classify from value >= 0 to value > 0, making zero false while preserving correct positive and negative behavior. The recorded commands show local inspection and validation, with no repeated or external reviews."
+          }
+        ]
+      },
+      "artifactHash": "73a5ca6a7c96489443acba54c7679edcf63bd4f453c74596b6546f44a616756a"
+    },
+    {
+      "id": "loop-explicit-preview",
+      "iteration": 1,
+      "skill": "review-fix-loop",
+      "mode": "explicit",
+      "passed": false,
+      "checks": {
+        "invocation": false,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "commands": [],
+      "answer": {
+        "answer": "Saying “start” would authorize the review-fix-loop with these defaults:\n\n- Review the working-tree Git changes with independent reviewers.\n- Verify findings and make minimal fixes for medium, high, or critical defects.\n- Run focused validation and, after successful repairs, review the entire scope again. `--max-rounds 1` allows one repair round, so remaining defects would be reported without another repair round.\n- Preserve existing changes and the Git index. No staging, commits, pushes, deployments, or unrelated cleanup.\n\nYour repository’s restrictions still apply: no network, dependency installation, or external services. If required reviewers cannot run within those limits, I would report the workflow as blocked.\n\nI have not run commands, reviewers, or changed files. I’ll wait for you to say “start.”",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "preview",
+            "passed": true,
+            "evidence": "The response describes review, finding verification, minimal fixes, focused validation, and re-review with at most one repair round. It excludes staging, commits, pushes, deployments, and unrelated cleanup, and waits for “start.” The command and file-change lists are empty, and src/lib.rs is unchanged."
+          }
+        ]
+      },
+      "artifactHash": "51f9545710c939e3255bac91459feb0f2d263a6dde25ceba7a2b2fda3ea4d7f2"
+    }
+  ]
+}

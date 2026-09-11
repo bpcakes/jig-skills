@@ -1,6 +1,6 @@
 ---
 name: audit-intake-and-evidence-map
-description: Scope privacy, zero-knowledge, and E2EE audits before deeper testing. Use to create an authorized audit scope, evidence checklist, limitations, audit-manifest.json, failure signals, and next privacy-audit skills.
+description: Scope privacy, zero-knowledge, or E2EE audits and map authorized targets, available evidence, and testing limits.
 ---
 
 # Audit Intake And Evidence Map

@@ -20,12 +20,17 @@ Use paths relative to the skill directory for bundled resources. For scanner exa
 
 For documentation changes, verify local links and heading anchors, check commands against the actual CLI or script, and keep installation and update instructions consistent with the installer. Do not describe a candidate scanner's output as validated findings.
 
+Preserve automatic skill discovery while keeping execution within the user's task. A loaded skill or a code change must not start unrelated edits or extra reviews. Review patterns and numeric thresholds are investigation signals; findings need consequences and counterevidence. Keep descriptions concise and route substantial conditional procedures to selectively read references.
+
+For behavioral instruction changes, use the [Codex evaluation harness](docs/skill-evaluations.md) to exercise positive and negative cases, discovery, outcomes, and traces. Live evaluations are opt-in and consume authenticated Codex usage; CI runs only the harness's local tests.
+
 ## Relevant Checks
 
 Run commands from the repository root. Select the checks for the helper you changed; documentation-only edits need link, command, and diff checks rather than the entire runtime suite.
 
 | Changed helper | Command |
 |---|---|
+| Skill evaluation harness | `node --test evals/*.test.mjs` |
 | Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
 | Privacy-audit scripts | `bash plugins/jig-privacy-audit/scripts/test_fixtures.sh` |
 | Rust abstraction-police collector | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-abstraction-police/tests -v` |

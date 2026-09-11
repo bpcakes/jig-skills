@@ -1,6 +1,6 @@
 ---
 name: cursor-implement-exec-plan
-description: Run Cursor Agent with the Composer 2.5 model to implement a checked-in ExecPlan. Use when the user asks Cursor, cursor-agent, Composer, or another implementation agent to execute an ExecPlan, continue an implementation plan, or delegate code changes from a plan file.
+description: Delegate a checked-in ExecPlan to Cursor Agent with Composer 2.5 when agent implementation from a plan is requested.
 ---
 
 # Cursor Implement ExecPlan

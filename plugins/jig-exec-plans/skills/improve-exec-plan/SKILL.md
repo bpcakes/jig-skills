@@ -1,6 +1,6 @@
 ---
 name: improve-exec-plan
-description: Improve an existing ExecPlan for clarity, completeness, correctness, and executability. Use when asked to review, revise, tighten, or update an implementation plan.
+description: Review and revise an existing ExecPlan for correctness, completeness, and executability against repository evidence.
 ---
 
 # Improve ExecPlan

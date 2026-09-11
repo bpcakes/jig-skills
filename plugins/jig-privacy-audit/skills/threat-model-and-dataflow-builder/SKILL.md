@@ -1,6 +1,6 @@
 ---
 name: threat-model-and-dataflow-builder
-description: Build evidence-focused privacy and security threat models. Use to extract assets, actors, components, trust boundaries, data flows, STRIDE-style security threats, LINDDUN-style privacy threats, assumptions, and controls.
+description: Build privacy and security threat models from assets, trust boundaries, data flows, threats, and controls.
 ---
 
 # Threat Model and Dataflow Builder

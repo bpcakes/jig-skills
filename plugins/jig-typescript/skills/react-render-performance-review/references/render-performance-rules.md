@@ -140,7 +140,7 @@ Do not overstate virtualization. Small lists do not need it. Use it when DOM cou
 
 ### 3. Context values recreated every render
 
-Flag provider values that create new objects or functions on every parent render:
+Investigate provider values that create new objects or functions on every parent render. Confirm material consumer work and update frequency before reporting; cheap or infrequently updated consumers may need no memoization:
 
 ```tsx
 <AuthContext value={{ currentUser, login }}>
@@ -434,8 +434,9 @@ Use these gates before recommending manual memoization.
 Use this rubric when reporting issues.
 
 - **High**: Measured user-visible lag; broad context invalidation of a large subtree; unstable keys causing remounts or state loss; heavy library pulled into the initial client bundle; unvirtualized large list with expensive rows.
-- **Medium**: Likely expensive repeated derivation; inline provider value in a frequently rendered provider; memoized child defeated by avoidable object/function props; unnecessary effect-derived state causing extra renders.
-- **Low**: Memoization noise; cheap inline objects with no identity-sensitive consumer; minor render calculations without evidence; premature `useCallback` or `useMemo` added for style.
+- **Medium**: A measured or source-demonstrated, bounded cost on a reachable update path: repeated expensive derivation, provider invalidation of costly consumers, defeated memoization of an expensive child, or redundant state updates. Name the affected consumers, update frequency or workload, and consequence; check existing isolation and cheap-work counterevidence.
+- **Low**: A demonstrated smaller performance or maintenance consequence, with evidence of the affected contract or cost. Do not infer a defect from syntax alone.
+- **Optional improvements, not findings**: cheap inline objects with no identity-sensitive consumer, minor calculations without demonstrated cost, or memoization preferences. A frequently rendered provider with cheap consumers may correctly need no memoization.
 
 ## Required review output
 
