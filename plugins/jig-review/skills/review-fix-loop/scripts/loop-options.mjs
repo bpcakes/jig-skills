@@ -14,6 +14,8 @@ const SEVERITIES = new Set(["critical", "high", "medium", "low"]);
 const FIX_MODES = new Set(["minimal", "comprehensive"]);
 
 function parseArgs(argv) {
+  let scope = null;
+  let base = null;
   let fixMode = "minimal";
   let minSeverity = "medium";
   let maxRounds = DEFAULT_MAX_ROUNDS;
@@ -24,14 +26,25 @@ function parseArgs(argv) {
     const flag = argv[index];
 
     if (flag === "--wait") continue;
+    if (flag === "--include-working-tree") {
+      throw new Error(
+        "review-fix-loop already includes working-tree changes in branch scope; "
+        + "use --base or --scope branch without --include-working-tree.",
+      );
+    }
     if (flag === "--base") {
-      throw new Error("review-fix-loop supports only working-tree scope; --base is not supported.");
+      if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
+      base = readOptionValue(argv, index, flag);
+      if (!base.trim()) throw new Error("--base must not be blank.");
+      provided.add(flag);
+      index += 1;
+      continue;
     }
     if (flag === "--scope") {
       if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
-      const value = readOptionValue(argv, index, flag);
-      if (value !== "working-tree") {
-        throw new Error("review-fix-loop supports only --scope working-tree.");
+      scope = readOptionValue(argv, index, flag);
+      if (!["working-tree", "branch", "auto"].includes(scope)) {
+        throw new Error("--scope must be working-tree, branch, or auto.");
       }
       provided.add(flag);
       index += 1;
@@ -79,8 +92,13 @@ function parseArgs(argv) {
     }
   }
 
+  if (base && scope === "working-tree") {
+    throw new Error("--base cannot be combined with --scope working-tree.");
+  }
+
   return {
-    scope: "working-tree",
+    scope: base ? "branch" : scope ?? "working-tree",
+    base,
     fixMode,
     minSeverity,
     maxRounds,

@@ -1,6 +1,6 @@
 {
   "name": "jig-review",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Configurable parallel reviews and bounded review-fix loops with Claude Code, Codex, and Cursor/Grok.",
   "author": {
     "name": "Jig"
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Jig Review",
     "shortDescription": "Multi-model reviews and bounded fix loops",
-    "longDescription": "Codex skills for selecting isolated Claude Code, native Codex, and Cursor Agent with Grok 4.6 review subagents, running them in parallel over the same scope, and deduplicating their findings. Includes a bounded working-tree workflow with minimal fixes or comprehensive diagnosis and durable repairs, validation, and fresh reviews until convergence or a round limit. Claude plus Codex remains the default reviewer pair.",
+    "longDescription": "Codex skills for selecting isolated Claude Code, native Codex, and Cursor Agent with Grok 4.6 review subagents, running them in parallel over the same scope, and deduplicating their findings. Includes bounded working-tree and branch workflows with minimal fixes or comprehensive diagnosis and durable repairs, validation, and fresh reviews until convergence or a round limit. Claude plus Codex remains the default reviewer pair.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [

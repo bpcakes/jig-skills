@@ -32,23 +32,23 @@ A value cannot begin with `--`. For a literal exclusion path beginning with `--`
 ## Workflow
 
 1. Resolve one concrete review scope.
-   - Accept `--wait`, `--base <ref>`, and `--scope working-tree|branch|auto` in addition to the reviewer controls.
+   - Accept `--wait`, `--base <ref>`, `--scope working-tree|branch|auto`, and `--include-working-tree` in addition to the reviewer controls. The inclusion flag requires branch scope. Reject `--scope auto` combined with `--include-working-tree` before inspecting the checkout, with guidance to use `--scope branch` or `--base`; validity must not depend on whether the checkout is dirty.
    - Treat `--wait` as a compatibility no-op.
    - `--base` implies branch scope. Reject `--base` combined with `--scope working-tree`; otherwise default to working-tree scope when neither is present.
    - Resolve `auto` or an implicit branch base before spawning reviewers. Resolve every branch base to a commit OID and fail on an invalid ref. Do not let reviewers resolve refs or implicit scopes independently.
-   - Branch scope requires a clean checkout, including no untracked files or dirty initialized submodules. This keeps reviewer file inspection aligned with the pinned `HEAD`; ask the user to clean the checkout or choose working-tree scope if this check fails.
+   - Branch scope defaults to a clean checkout, including no untracked files or dirty initialized submodules. With `--include-working-tree`, review committed branch changes and all local changes together; a dirty checkout is allowed and the final working files are the target. The review-fix loop always selects this inclusion mode for branches. Without that flag, keep the clean-check requirement so inspection matches pinned `HEAD`.
    - Treat staged, unstaged, and untracked files, including changes inside initialized tracked submodules, as reviewable working-tree changes.
    - Working-tree scope supports repositories with an unborn `HEAD`; branch scope still requires `HEAD` to resolve to a commit.
    - Read permanent exclusions from `.reviewignore` at the repository root. Each nonblank, non-comment line names one repository-relative exact path plus descendants; leading and trailing `/` are optional. Globs, negation, `..`, backslashes, and excluding `.reviewignore` itself are invalid.
    - For working-tree scope, trust `.reviewignore` from pinned `HEAD` only. For branch scope, trust it from the resolved base commit only. A staged, unstaged, or branch-local policy edit remains reviewable and does not take effect in that same review; use an explicit `--exclude-path` for an immediate one-off exclusion.
-   - Apply the union of trusted `.reviewignore` entries and normalized `--exclude-path` values to tracked and untracked review content. Exclusions never relax branch scope's full clean-check.
+   - Apply the union of trusted `.reviewignore` entries and normalized `--exclude-path` values to tracked and untracked review content. Exclusions never relax a committed-only branch review's full clean-check.
    - If the concrete scope has no reviewable diff, say so and stop.
 2. Capture a read-only scope fingerprint.
-   - Run `node scripts/scope-fingerprint.mjs --cwd <repository> --scope <working-tree|branch> [--base <ref>] [--exclude-path <path>]...` from this skill directory, forwarding every normalized explicit exclusion.
+   - Run `node scripts/scope-fingerprint.mjs --cwd <repository> --scope <working-tree|branch> [--base <ref>] [--include-working-tree] [--exclude-path <path>]...` from this skill directory, forwarding the inclusion mode and every normalized explicit exclusion.
    - Use its resolved scope, pinned base OID, and fingerprint. Do not hand-roll a weaker fingerprint.
-   - For branch scope, require `checkoutClean: true`. The fingerprint also includes checkout state so later mutations are detectable.
-   - Preserve `complete` and `issues`. If `complete` is false, reviewers may proceed only as a limited-coverage review: pass the issues to the native Codex child, retain the adapters' own coverage warnings, disclose the limitations in the final report, and use `not verified` rather than `verified` for fingerprint status.
-   - Pass the same concrete scope description to every selected reviewer. Never pass findings, hypotheses, or conclusions between reviewers.
+   - For branch scope without the inclusion flag, require `checkoutClean: true`. With the flag, require `includeWorkingTree: true`; its fingerprint covers the included local state as well as the pinned branch commits. The two branch modes have distinct fingerprints.
+   - Preserve `complete`, `issues`, `pathInventoryComplete`, `workingTreePathsDifferingFromIndex`, `workingTreePathsAbsentFromIndex`, `dirtySubmodulePaths`, and each inventory's corresponding `Count` and `Truncated` fields. If `complete` is false, reviewers may proceed only as a limited-coverage review: pass the issues to the native Codex child, retain the adapters' own coverage warnings, disclose the limitations in the final report, and use `not verified` rather than `verified` for fingerprint status. A capped inventory alone limits staging guidance without changing fingerprint verification; capture issues make both the fingerprint and path inventory incomplete. Disclose exact counts, truncation, and relevant issues.
+   - Pass the same concrete scope description and inclusion flag to every selected reviewer. In combined branch mode, require review of the cumulative effect of committed and local changes; findings must survive in the final working files. Never pass findings, hypotheses, or conclusions between reviewers.
    - Pass the same explicit exclusion arguments to every selected reviewer. Preserve `excludePaths`, `reviewIgnorePaths`, and `reviewIgnoreRevision` from the fingerprint for final disclosure.
    - Pass the initial fingerprint to every reviewer. External adapters must match it before context capture and again after the provider exits. The native Codex child must capture and compare the same fingerprint before inspection and after drafting its report. A mismatch is a failed same-scope review, not a completed report.
 3. Read [references/parallel-review-runtime.md](references/parallel-review-runtime.md), then attempt to start every selected reviewer as a context-free subagent before waiting for any result.
@@ -91,15 +91,19 @@ Test gaps:
 
 Review notes:
 - Reviewers requested: <comma-separated reviewer names>
+- Scope: working-tree|branch (committed only)|branch (including working tree)
 - <selected reviewer> review: completed|failed|timed out|not started
 - Claude file access: restricted|host
 - Claude config: default|custom
 - Scope fingerprint: verified|changed|not verified
+- Tracked paths differing from index: <exact count>; none|<comma-separated returned paths>; complete|capped
+- Untracked paths absent from index: <exact count>; none|<comma-separated returned paths>; complete|capped
+- Dirty submodules: <exact count>; none|<comma-separated returned paths>; complete|capped
 - Excluded paths: none|<comma-separated normalized paths>
 - .reviewignore source: none|<commit-oid>:.reviewignore
 ```
 
-Always include the exclusion and policy-source lines, even when neither is active. Include the Claude file-access and config lines when Claude was selected; report whether a custom config was used without exposing its filesystem path. If `host` was selected, explicitly disclose that Claude's read-only file tools were not confined to the reviewed repository. Include one status line for each selected reviewer. For a failure, append one sanitized key message. If there are no actionable findings, say `No actionable findings from the completed reviewer pass(es).` and identify the completed reviewers in `Review notes`. Still mention residual test gaps and review limitations.
+Include all three index-state lines for branch scope with `--include-working-tree`, using the corresponding fields from the final matching fingerprint capture. Show each exact `Count`; if a `Truncated` field is true, label the displayed paths as a capped subset. If `pathInventoryComplete` is false, label the staging guidance incomplete and state whether truncation, fingerprint issues, or both caused it. The lists include nested paths; perform each add or re-stage in the repository that owns the path, working from the innermost submodule outward. Ordinary UTF-8 paths appear literally. `raw-path:<hex>` identifies non-UTF-8 bytes, while `utf8-path:<hex>` disambiguates a valid UTF-8 path containing a segment beginning with either reserved tag; tagged values are display identifiers, not literal shell paths. Tell the user to re-stage tracked paths, add intended untracked paths, and commit changes inside each dirty submodule before staging its parent gitlink. When any count is nonzero, state that committing the current index can record code different from the reviewed final working files, and that committed or staged defects superseded by later working changes may therefore remain. Always include the exclusion and policy-source lines, even when neither is active. Include the Claude file-access and config lines when Claude was selected; report whether a custom config was used without exposing its filesystem path. If `host` was selected, explicitly disclose that Claude's read-only file tools were not confined to the reviewed repository. Include one status line for each selected reviewer. For a failure, append one sanitized key message. If there are no actionable findings, say `No actionable findings from the completed reviewer pass(es).` and identify the completed reviewers in `Review notes`. Still mention residual test gaps and review limitations.
 
 ## Merging Rules
 

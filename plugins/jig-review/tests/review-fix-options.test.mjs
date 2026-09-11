@@ -85,19 +85,37 @@ test("loop rejects invalid, missing, and duplicate fix modes", () => {
   );
 });
 
-test("loop rejects branch scope, bases, invalid bounds, and duplicate controls", () => {
-  assert.throws(
-    () => parseArgs(["--scope", "branch"]),
-    /only --scope working-tree/,
-  );
-  assert.throws(
-    () => parseArgs(["--scope", "auto"]),
-    /only --scope working-tree/,
-  );
-  assert.throws(
-    () => parseArgs(["--base", "main"]),
-    /--base is not supported/,
-  );
+test("loop accepts branch and auto scope and a base implies branch", () => {
+  assert.equal(parseArgs(["--scope", "branch"]).scope, "branch");
+  assert.equal(parseArgs(["--scope", "auto"]).scope, "auto");
+  for (const args of [["--base", "main"], ["--scope", "auto", "--base", "main"], ["--base", "main", "--scope", "branch"]]) {
+    const options = parseArgs(args);
+    assert.equal(options.scope, "branch");
+    assert.equal(options.base, "main");
+  }
+  assert.equal(parseArgs([]).base, null);
+  for (const args of [["--base", "main", "--scope", "working-tree"], ["--scope", "working-tree", "--base", "main"]]) {
+    assert.throws(() => parseArgs(args), /cannot be combined/);
+  }
+  assert.throws(() => parseArgs(["--base", "main", "--base", "other"]), /Duplicate argument/);
+  assert.throws(() => parseArgs(["--scope", "branch", "--scope", "auto"]), /Duplicate argument/);
+  assert.throws(() => parseArgs(["--scope", "unknown"]), /--scope must be/);
+  assert.throws(() => parseArgs(["--base", " "]), /must not be blank/);
+});
+
+test("loop explains that branch scope already includes working-tree changes", () => {
+  const message = "review-fix-loop already includes working-tree changes in branch scope; "
+    + "use --base or --scope branch without --include-working-tree.";
+  for (const args of [
+    ["--include-working-tree"],
+    ["--base", "main", "--include-working-tree"],
+    ["--include-working-tree", "--scope", "branch"],
+  ]) {
+    assert.throws(() => parseArgs(args), { message });
+  }
+});
+
+test("loop rejects invalid bounds and duplicate controls", () => {
   assert.throws(
     () => parseArgs(["--max-rounds", "0"]),
     /integer from 1 to 3/,
@@ -132,7 +150,7 @@ test("loop delegates reviewer validation and treats wait as a no-op", () => {
 });
 
 test("a following control cannot be consumed as a loop or reviewer value", () => {
-  for (const flag of ["--exclude-path", "--claude-model", "--fix-mode", "--min-severity", "--max-rounds", "--scope"]) {
+  for (const flag of ["--exclude-path", "--claude-model", "--fix-mode", "--min-severity", "--max-rounds", "--scope", "--base"]) {
     for (const next of ["--fix-mode", "--base", "--max-rounds", "--all-reviewers", "--wait", "--unknown"]) {
       assert.throws(
         () => parseArgs([flag, next]),

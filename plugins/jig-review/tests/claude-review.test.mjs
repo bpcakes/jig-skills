@@ -68,6 +68,7 @@ test("argument parsing keeps Claude configuration separate from scope", () => {
       cwd: "/tmp/repo",
       scope: "branch",
       base: "abc123",
+      includeWorkingTree: false,
       model: "sonnet",
       effort: "xhigh",
       fileAccess: "restricted",

@@ -22,6 +22,7 @@ Enter these prompts in Codex from the repository being reviewed:
 | Add Cursor | `$jig-review:comprehensive-review --reviewers claude,codex,cursor` |
 | Use Codex and Cursor | `$jig-review:comprehensive-review --reviewers codex,cursor` |
 | Review a branch against a named base | `$jig-review:comprehensive-review --base main` |
+| Review a branch together with local changes | `$jig-review:comprehensive-review --base main --include-working-tree` |
 | Choose Cursor effort | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh` |
 | Enable Cursor fast mode | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
 | Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-effort high` |
@@ -41,9 +42,9 @@ $jig-review:comprehensive-review --all-reviewers --cursor-effort xhigh --cursor-
 
 The default is working-tree scope: staged, unstaged, and untracked changes, including changes in initialized tracked submodules. An empty diff ends the review without starting reviewers.
 
-`--base <ref>` selects branch scope. It requires a clean checkout, including untracked files and initialized submodules, so reviewers inspect files corresponding to the pinned commit. Do not combine `--base` with `--scope working-tree`.
+`--base <ref>` selects branch scope. By default it requires a clean checkout, including untracked files and initialized submodules, so reviewers inspect files corresponding to the pinned commit. Add `--include-working-tree` to review committed branch changes plus staged, unstaged, untracked, and initialized submodule changes together. In that mode, findings concern their cumulative effect in final working files and a dirty checkout is allowed. The inclusion flag requires branch scope. Do not combine `--base` with `--scope working-tree`.
 
-`--scope branch` detects the default branch when no base is supplied. `--scope auto` chooses working-tree scope when changes exist and branch scope otherwise. Use explicit scope when the distinction matters.
+`--scope branch` detects the default branch when no base is supplied. `--scope auto` chooses working-tree scope when changes exist and branch scope otherwise. Do not combine `--scope auto` with `--include-working-tree`: that combination is rejected before checkout inspection so the command does not change validity as the checkout becomes dirty. Use `--scope branch --include-working-tree` or `--base <ref> --include-working-tree` instead.
 
 Use repeatable `--exclude-path <path>` arguments for one review. Each value is a literal repository-relative path and excludes that path plus everything below it, whether tracked or untracked. Globs and negation are intentionally unsupported.
 
@@ -61,7 +62,7 @@ This skill reviews diffs. For unchanged code, select a focused skill that suppor
 
 ## Reading the Result
 
-The report leads with findings and identifies which reviewers independently reported each issue. Review notes disclose reviewer failures, intentional path exclusions and their policy source, coverage limitations, Claude file access, and whether the scope fingerprint was verified unchanged. With only one completed review, the result is labeled as a single-reviewer report.
+The report leads with findings and identifies which reviewers independently reported each issue. Review notes disclose reviewer failures, intentional path exclusions and their policy source, coverage limitations, Claude file access, and whether the scope fingerprint was verified unchanged. A branch review that includes the working tree also reports exact counts and bounded lists of tracked paths differing from the index, untracked paths absent from it, and submodules with inner working changes. Truncation and capture-issue markers make capped or incomplete staging guidance explicit. Before committing, re-stage intended tracked paths, add intended untracked paths, and commit dirty submodule changes inside each submodule before staging its parent gitlink. Otherwise a commit can record code different from the reviewed files, including defects the reviewers correctly treated as superseded by later working changes. With only one completed review, the result is labeled as a single-reviewer report.
 
 For large external reviews, the adapters supply numbered pages of patch evidence. The `Evidence coverage` summary distinguishes:
 
@@ -106,7 +107,7 @@ $jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh 
 |---|---|
 | A selected CLI is missing or unauthenticated | Install and authenticate that CLI through its normal setup, or explicitly select available reviewers with `--reviewers`. |
 | Claude uses the wrong account or profile | Pass `--claude-config-dir ~/.claude-profile-name`; verify that directory already contains the intended Claude Code configuration. |
-| Branch review refuses a dirty checkout | Commit or otherwise resolve the changes yourself, use a clean checkout, or choose `--scope working-tree` to review the pending changes. |
+| Branch review refuses a dirty checkout | Add `--include-working-tree` to review branch and local changes together, use a clean checkout, or choose `--scope working-tree` to review only pending changes. |
 | A large tracked directory overwhelms review evidence | Add a literal `--exclude-path <directory>` for one run, or commit it to the root `.reviewignore` for permanent policy. |
 | Review stops because there is no diff | Select the intended branch/base, or use a repository-capable focused skill for unchanged code. |
 | Evidence coverage is limited | Read the reported omissions or missing pages. Narrow the change set and rerun if fuller coverage is needed. |

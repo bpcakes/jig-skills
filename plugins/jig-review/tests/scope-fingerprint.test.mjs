@@ -4,6 +4,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -55,6 +56,67 @@ test("working-tree fingerprint honors committed .reviewignore and explicit exclu
   assert.deepEqual(explicitResult.excludePaths, [".agent", "generated.log"]);
   assert.deepEqual(explicitResult.explicitExcludePaths, [".agent", "generated.log"]);
   assert.notEqual(explicitResult.fingerprint, policyResult.fingerprint);
+});
+
+test("path inventories distinguish reserved UTF-8 names from raw-byte names", {
+  skip: process.platform === "win32",
+}, (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const reservedName = "raw-path:ff";
+  const rawName = Buffer.from([0xff]);
+  writeFileSync(path.join(repo, reservedName), "valid UTF-8 name\n");
+  try {
+    writeFileSync(
+      Buffer.concat([Buffer.from(`${repo}${path.sep}`), rawName]),
+      "non-UTF-8 name\n",
+    );
+  } catch (error) {
+    if (["EILSEQ", "EINVAL", "ENOTSUP"].includes(error?.code)) {
+      t.skip(`filesystem does not support raw-byte filenames: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+  if (!readdirSync(repo, { encoding: "buffer" }).some((entry) => entry.equals(rawName))) {
+    t.skip("filesystem did not preserve the raw-byte filename");
+    return;
+  }
+
+  const result = fingerprint(repo, "working-tree");
+
+  assert.equal(result.complete, true);
+  assert.equal(result.pathInventoryComplete, true);
+  assert.equal(result.workingTreePathsAbsentFromIndexCount, 2);
+  assert.equal(result.workingTreePathsAbsentFromIndexTruncated, false);
+  assert.deepEqual(result.workingTreePathsAbsentFromIndex, [
+    "raw-path:ff",
+    `utf8-path:${Buffer.from(reservedName).toString("hex")}`,
+  ]);
+});
+
+test("path inventories cap serialized output and retain exact counts", (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  for (let index = 0; index < 300; index += 1) {
+    const suffix = `${String(index).padStart(3, "0")}-${"x".repeat(200)}.txt`;
+    writeFileSync(path.join(repo, `inventory-${suffix}`), "bounded\n");
+  }
+
+  const result = fingerprint(repo, "working-tree");
+  const serialized = JSON.stringify(result, null, 2);
+
+  assert.equal(result.complete, true);
+  assert.equal(result.pathInventoryComplete, false);
+  assert.deepEqual(result.pathInventoryLimits, {
+    maxEntriesPerList: 256,
+    maxJsonBytesPerList: 32 * 1024,
+  });
+  assert.equal(result.workingTreePathsAbsentFromIndexCount, 300);
+  assert.equal(result.workingTreePathsAbsentFromIndexTruncated, true);
+  assert.ok(result.workingTreePathsAbsentFromIndex.length < 300);
+  assert.ok(Buffer.byteLength(serialized) < 40 * 1024, serialized.length);
+  assert.ok(serialized.indexOf('"fingerprint"') < serialized.indexOf('"workingTreePathsAbsentFromIndex"'));
 });
 
 test("branch fingerprint uses base .reviewignore but still requires a fully clean checkout", (t) => {
@@ -160,6 +222,8 @@ test("unavailable initialized submodules are recorded instead of aborting", (t) 
   const result = fingerprint(repo, "working-tree");
   assert.equal(result.hasChanges, true);
   assert.equal(result.complete, false);
+  assert.equal(result.pathInventoryComplete, false);
+  assert.equal(result.dirtySubmodulePathsCount, 0);
   assert.deepEqual(result.issues, [
     { path: "vendor/broken", reason: "submodule-unavailable" },
   ]);
@@ -177,6 +241,8 @@ test("non-directory gitlink paths make fingerprint coverage incomplete", async (
 
       assert.equal(result.hasChanges, true);
       assert.equal(result.complete, false);
+      assert.equal(result.pathInventoryComplete, false);
+      assert.equal(result.dirtySubmodulePathsCount, 0);
       assert.deepEqual(result.issues, [
         { path: "vendor/example", reason: "submodule-path-not-directory" },
       ]);
@@ -192,6 +258,8 @@ test("missing registered submodule worktrees make fingerprint coverage incomplet
 
   assert.equal(result.hasChanges, true);
   assert.equal(result.complete, false);
+  assert.equal(result.pathInventoryComplete, false);
+  assert.equal(result.dirtySubmodulePathsCount, 0);
   assert.deepEqual(result.issues, [
     { path: "vendor/example", reason: "registered-submodule-worktree-missing" },
   ]);

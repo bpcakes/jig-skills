@@ -805,7 +805,7 @@ async function collectSubmoduleContexts(
           "status",
           "--porcelain=v1",
           "--untracked-files=all",
-          "--ignore-submodules=all",
+          "--ignore-submodules=dirty",
           ...gitPathspec(subtree.excludePaths),
         ],
         submoduleOptions,
@@ -835,6 +835,9 @@ async function collectSubmoduleContexts(
 }
 
 async function resolveScope(options, runtime = {}) {
+  if (options.includeWorkingTree && options.scope !== "branch") {
+    throw new Error("--include-working-tree requires branch scope.");
+  }
   const gitOptions = { deadlineAt: runtime.deadlineAt, signal: runtime.signal };
   const repoRoot = await gitText(
     options.cwd,
@@ -882,23 +885,25 @@ async function resolveScope(options, runtime = {}) {
     );
   }
 
-  let status;
-  try {
-    status = await gitText(
-      repoRoot,
-      ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-      gitOptions,
-    );
-  } catch (error) {
-    if (error.outputLimit) {
-      throw new Error("Branch scope requires a clean checkout, but status exceeded the verification limit.");
+  if (!options.includeWorkingTree) {
+    let status;
+    try {
+      status = await gitText(
+        repoRoot,
+        ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        gitOptions,
+      );
+    } catch (error) {
+      if (error.outputLimit) {
+        throw new Error("Branch scope requires a clean checkout, but status exceeded the verification limit.");
+      }
+      throw error;
     }
-    throw error;
-  }
-  if (status) {
-    throw new Error(
-      "Branch scope requires a clean checkout so repository tools match the pinned HEAD. Clean the checkout or use working-tree scope.",
-    );
+    if (status) {
+      throw new Error(
+        "Branch scope requires a clean checkout so repository tools match the pinned HEAD. Clean the checkout or use --include-working-tree to review branch and local changes together.",
+      );
+    }
   }
 
   const baseOid = await gitText(repoRoot, [
@@ -928,8 +933,9 @@ async function resolveScope(options, runtime = {}) {
     headOid,
     baseOid,
     mergeBaseOid,
+    includeWorkingTree: options.includeWorkingTree ?? false,
     ...exclusions,
-    label: `branch changes ${mergeBaseOid}..${headOid} (base ${baseOid})`,
+    label: `branch changes ${mergeBaseOid}..${headOid} (base ${baseOid})${options.includeWorkingTree ? " plus staged, unstaged, untracked, and initialized submodule changes" : ""}`,
   };
 }
 
@@ -979,7 +985,8 @@ async function collectReviewContext(scope, options = {}) {
     ], { ...options, evidenceTitle: `Branch diff ${range}` });
     context.addEvidence("Branch diff", diff.text, Boolean(options.evidence));
     if (diff.truncated) context.markIncomplete("branch diff omitted");
-  } else {
+  }
+  if (scope.scope === "working-tree" || scope.includeWorkingTree) {
     await collectWorkingTreeRepository(context, scope.repoRoot, "Working tree", options);
     await collectSubmoduleContexts(
       context,
@@ -1029,6 +1036,10 @@ function buildReviewPrompt(scope, reviewContext, options = {}) {
     "Do not modify, create, or delete files.",
     "",
     `Target: ${scope.label}`,
+    ...(scope.includeWorkingTree ? [
+      "Review the cumulative effect of the committed branch diff followed by staged and unstaged changes, including untracked files and submodule changes.",
+      "The final working files are the review target. Verify that each finding survives all supplied changes; committed or staged code superseded by later working changes is historical evidence.",
+    ] : []),
     ...exclusionNotice,
     coverage,
     ...(reviewContext.evidence ? [

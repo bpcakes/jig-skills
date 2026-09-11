@@ -337,6 +337,67 @@ test("staged submodule moves include the underlying commit diff", async (t) => {
   assert.match(context.text, /\+submodule revision/);
 });
 
+test("staged nested gitlink moves cannot disappear from review context", async (t) => {
+  const parent = makeRepository();
+  const vendorSource = makeRepository();
+  const nestedSource = makeRepository();
+  t.after(() => {
+    rmSync(parent, { recursive: true, force: true });
+    rmSync(vendorSource, { recursive: true, force: true });
+    rmSync(nestedSource, { recursive: true, force: true });
+  });
+  git(vendorSource, [
+    "-c",
+    "protocol.file.allow=always",
+    "submodule",
+    "add",
+    "-q",
+    nestedSource,
+    "nested",
+  ]);
+  git(vendorSource, ["commit", "-qam", "add nested submodule"]);
+  git(parent, [
+    "-c",
+    "protocol.file.allow=always",
+    "submodule",
+    "add",
+    "-q",
+    vendorSource,
+    "vendor",
+  ]);
+  git(parent, ["commit", "-qam", "add vendor submodule"]);
+  git(parent, [
+    "-c",
+    "protocol.file.allow=always",
+    "submodule",
+    "update",
+    "--init",
+    "--recursive",
+    "-q",
+  ]);
+
+  const vendor = path.join(parent, "vendor");
+  const nested = path.join(vendor, "nested");
+  git(nested, ["config", "user.name", "Adapter Test"]);
+  git(nested, ["config", "user.email", "adapter@example.invalid"]);
+  writeFileSync(path.join(nested, "tracked.txt"), "nested staged revision\n");
+  git(nested, ["commit", "-qam", "change nested submodule"]);
+  git(vendor, ["add", "nested"]);
+
+  assert.equal(git(vendor, [
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=all",
+    "--ignore-submodules=all",
+  ]), "");
+  const scope = await resolveScope({ cwd: parent, scope: "working-tree", base: null });
+  const context = await collectReviewContext(scope);
+
+  assert.equal(context.incomplete, false);
+  assert.match(context.text, /## Submodule vendor staged diff/);
+  assert.match(context.text, /\+nested staged revision/);
+});
+
 test("untracked file bodies cannot close their own wrapper", async (t) => {
   const repo = makeRepository();
   t.after(() => rmSync(repo, { recursive: true, force: true }));

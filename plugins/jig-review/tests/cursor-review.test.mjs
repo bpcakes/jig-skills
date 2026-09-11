@@ -109,6 +109,7 @@ test("Cursor adapter accepts only its supported effort and speed values", () => 
       cwd: "/tmp/repo",
       scope: "branch",
       base: "abc",
+      includeWorkingTree: false,
       effort: "low",
       speed: "standard",
       expectedFingerprint: "a".repeat(64),

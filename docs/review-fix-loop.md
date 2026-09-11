@@ -2,7 +2,7 @@
 
 [Back to the skill catalog](../README.md#jig-review)
 
-`jig-review:review-fix-loop` runs independent comprehensive reviews, validates actionable findings, applies minimal or comprehensive fixes, runs tests, and starts fresh reviews until the working changes converge or a bounded repair limit is reached.
+`jig-review:review-fix-loop` runs independent comprehensive reviews, validates actionable findings, applies minimal or comprehensive fixes, runs tests, and starts fresh reviews until the selected working-tree or branch changes converge or a bounded repair limit is reached.
 
 Unlike `comprehensive-review`, this skill changes files. It never commits, pushes, releases, or deploys unless those actions are requested separately.
 
@@ -12,6 +12,12 @@ Run the skill from a repository with working-tree changes:
 
 ```text
 $jig-review:review-fix-loop
+```
+
+To review and fix a branch against `main`, including any existing local changes:
+
+```text
+$jig-review:review-fix-loop --base main
 ```
 
 The defaults use Claude and Codex, apply minimal fixes to verified findings of medium severity or higher, and allow at most three repair rounds. Select all providers and Cursor fast mode with:
@@ -27,7 +33,10 @@ Available loop controls:
 | `--fix-mode minimal\|comprehensive` | `minimal` | Selects minimal corrections or diagnosis and durable causal repairs. |
 | `--min-severity critical\|high\|medium\|low` | `medium` | Lowest finding severity eligible for repair. |
 | `--max-rounds 1\|2\|3` | `3` | Maximum repair rounds started, including aborted rounds. |
-| `--scope working-tree` | working tree | Explicitly selects the only supported scope. |
+| `--scope working-tree\|branch\|auto` | `working-tree` | Selects local changes, branch plus local changes, or automatic selection once at startup. |
+| `--base <ref>` | detected for branch scope | Selects branch scope against a base; conflicts with explicit working-tree scope. |
+
+Do not add comprehensive review's `--include-working-tree` flag. Branch loops already enable that mode on every pass; use `--base` or `--scope branch` alone. The loop reports a targeted error if the redundant flag is supplied.
 
 All reviewer, model, effort, profile, speed, and exclusion controls from [comprehensive review](comprehensive-review.md) are supported. `--wait` remains a compatibility no-op. A following `--flag` is never accepted as a missing value. To exclude a literal path beginning with `--`, use a repository-root prefix, for example `--exclude-path /--fix-mode`.
 
@@ -57,23 +66,31 @@ This separation follows Google's distinction between incident triggers and syste
 
 ## Round Semantics
 
-The initial review is not counted as a repair round. A round is consumed when edits begin, including adding a regression test for a verified finding. Successful rounds normally finish with validation and a fresh comprehensive review of the entire updated working tree, including after the last allowed repair. Aborted rounds still count, but stop without requiring another review. Consequently, three successful repair rounds normally perform four review passes; a validation failure can end the loop earlier.
+The initial review is not counted as a repair round. A round is consumed when edits begin, including adding a regression test for a verified finding. Successful rounds normally finish with validation and a fresh comprehensive review of the entire selected scope, including all repairs and the last allowed repair round. Aborted rounds still count, but stop without requiring another review. Consequently, three successful repair rounds normally perform four review passes; a validation failure can end the loop earlier.
 
-If a validated repair removes every included change, there is no diff left to review. The loop may converge with the final review explicitly skipped only after complete, matching captures establish an empty scope, the preceding review had full coverage, all edits are accounted for, and no finding remains outstanding. A net diff against `HEAD` is insufficient: staged and unstaged changes can cancel each other. The runtime defines the full [empty-scope conditions](../plugins/jig-review/skills/review-fix-loop/references/loop-runtime.md#repair-produces-an-empty-scope).
+Each round counts once toward every causal group it targets for repair or mitigation. Incidentally breaking another group does not count as an attempt to repair that group. Merging groups combines their targeted round histories, counting any shared round once. A mechanism still outstanding after two attempts stops under the repeated-failure limit.
+
+That limit also applies during validation. If a later repair reopens a mechanism already targeted in two earlier rounds, the loop stops before using its focused correction as a third attempt.
+
+If a validated repair removes every included change, there is no diff left to review. The loop may converge with the final review explicitly skipped only after complete, matching captures establish an empty scope, the preceding review had full coverage, all edits are accounted for, and no finding remains outstanding. A net diff against `HEAD` or the merge base is insufficient: committed, staged, and unstaged changes can cancel each other. The runtime defines the full [empty-scope conditions](../plugins/jig-review/skills/review-fix-loop/references/loop-runtime.md#repair-produces-an-empty-scope).
 
 Reviewers receive fresh contexts and never see earlier findings or desired outcomes. Within each review pass, scope fingerprints must remain unchanged. Changes between passes are accepted only when they are attributable to recorded loop edits.
 
 Except for that verified empty scope, convergence requires no eligible defect or material question outstanding, all requested reviewers completed for the current state, complete evidence coverage, and a verified fingerprint. Unresolved findings stay in the ledger even if later reviewers omit them. In comprehensive mode, a temporary mitigation remains outstanding until the selected causal repair and its validation are complete. See the runtime's [ordered stop decisions](../plugins/jig-review/skills/review-fix-loop/references/loop-runtime.md#ordered-stop-decisions) for precedence and partial-review handling.
 
-## Scope Limitation
+If fixing A introduces B and fixing B reintroduces A, the loop reopens A with its original identity and attempt history and records the interaction. Before another repair, it must explain how the correction will preserve both required behaviors. The repaired state must pass validation for both findings and affected earlier fixes. Recurrence alone does not force a stop or grant extra attempts: the existing repeated-failure, round-cap, and validation rules still apply. See [repair recurrence](../plugins/jig-review/skills/review-fix-loop/references/loop-runtime.md#repair-recurrence).
 
-The initial release supports working-tree changes only. It rejects `--base`, `--scope branch`, and `--scope auto`.
+The same interaction analysis applies when a later repair weakens a mitigation's validated benefit. The finding is already outstanding: total loss of benefit makes it `pending`, while partial protection remains `mitigated` with updated residual risk, subject to existing blocking rules. An unresolved underlying defect alone is not a new regression, and a validated repair may replace the workaround. Checks establish the required behavior and protection, allowing the temporary mechanism to change. This policy draws on [Google SRE's distinction between mitigation and prevention](https://www.usenix.org/system/files/login/articles/login_spring17_09_lunney.pdf) and [Google's guidance on testing behavior](https://testing.googleblog.com/2013/08/testing-on-toilet-test-behavior-not.html).
 
-This is deliberate: after fixing a branch review, the checkout becomes dirty, while the existing branch reviewer requires a clean checkout and cannot represent committed branch changes plus uncommitted repairs as one verified scope. Reviewing only the repair delta would create a false convergence signal.
+## Review Scopes
 
-If the working tree is clean, first place the intended changes in the working tree or use `comprehensive-review` for a review-only branch comparison.
+Working-tree scope includes staged, unstaged, untracked, and initialized submodule changes. Branch scope includes the committed diff from the merge base through `HEAD` and all those local changes together, including repairs from every round. It works with clean or dirty checkouts. Every reviewer checks the cumulative effect in final working files, so a later round still sees branch defects in files untouched by the latest repair.
 
-The loop preserves the index unless staging was separately authorized. Convergence describes repaired working files. The final report lists repaired paths whose staged versions still differ and need re-staging; the staged commit may still contain the original defect.
+`--base <ref>` selects branch scope. `--scope branch` without a base detects the default branch using comprehensive review's rules. `--scope auto` chooses working-tree scope when local changes exist and branch scope otherwise. Selection happens once; the loop does not change scopes after a repair. An invalid base stops the loop. Branch mode requires an existing `HEAD` commit.
+
+The base, `HEAD`, and merge-base commits remain pinned throughout the loop. Branch exclusions come from `.reviewignore` at that base, plus explicit exclusions. Moving the original base ref does not change the review; changing a pinned commit ends the loop as `scope changed`. Branch passes always include local changes, using the adapters' combined branch mode. The committed diff and its local reversal remain reviewable even if their net effect matches the merge base.
+
+The loop preserves the index unless staging was separately authorized. Convergence describes repaired working files. The final report lists repaired paths whose staged versions still differ and need staging or re-staging. For branch scope it additionally reports exact counts and bounded lists of tracked paths differing from the index, untracked paths absent from it, and dirty submodules from the final matching fingerprint, including pre-existing local changes. If a list is capped or capture issues prevent enumeration, the report identifies the staging guidance as incomplete. Nested paths must be added or re-staged in their owning repository, working from innermost submodules outward. Repairs and other local changes remain uncommitted, so the staged version or committed branch may still contain defects reviewers treated as superseded in the final working files.
 
 ## Triage and Validation
 

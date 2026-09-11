@@ -29,7 +29,7 @@ Choose the smallest coherent repair that fully addresses the demonstrated cause.
 
 Implement the supported durable repair and necessary callers now. A recommendation to refactor later is not completion, and a smaller symptom patch is not a reason to defer a demonstrated structural correction. Keep intermediate structural edits reviewable and validate preserved behavior where useful. Do not expand into unrelated cleanup or speculative future requirements.
 
-Temporary mitigation is appropriate only when it has a concrete benefit. Record `verification: verified`, `repair: mitigated`, the residual cause, validation, and required remaining work. Never silently downgrade the requested mode or treat a mitigation as a durable repair. Follow the runtime's input and stop rules if completing the repair requires a decision or action outside the authorized scope.
+Temporary mitigation is appropriate only when it has a concrete benefit. Record `verification: verified`, `repair: mitigated`, the benefit, residual cause, validation, and required remaining work. If a later repair weakens that benefit, follow the runtime's [recurrence rules](loop-runtime.md#repair-recurrence). Never silently downgrade the requested mode or treat a mitigation as a durable repair. Follow the runtime's input and stop rules if completing the repair requires a decision or action outside the authorized scope.
 
 ## Demonstrate Prevention
 

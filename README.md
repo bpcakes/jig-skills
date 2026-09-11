@@ -113,7 +113,7 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 | Skill | Use it for | Default result |
 |---|---|---|
 | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
-| [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs bounded working-tree cycles of comprehensive review, triage, minimal or comprehensive fixes, tests, and fresh re-review. | Code changes and convergence report |
+| [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs bounded working-tree or branch cycles of comprehensive review, triage, minimal or comprehensive fixes, tests, and fresh re-review. Branch rounds include uncommitted repairs. | Code changes and convergence report |
 
 Both skills run in Codex and require its subagent facility. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 

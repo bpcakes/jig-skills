@@ -32,12 +32,21 @@ const KILL_GRACE_MS = 500;
 const STDIO_DRAIN_MS = 500;
 const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024;
 const MAX_ERROR_BYTES = 4 * 1024;
+const MAX_PATH_INVENTORY_ENTRIES = 256;
+const MAX_PATH_INVENTORY_JSON_BYTES = 32 * 1024;
+const RAW_PATH_PREFIX = "raw-path:";
+const UTF8_PATH_PREFIX = "utf8-path:";
+const PATH_INVENTORY_LIMITS = Object.freeze({
+  maxEntriesPerList: MAX_PATH_INVENTORY_ENTRIES,
+  maxJsonBytesPerList: MAX_PATH_INVENTORY_JSON_BYTES,
+});
 
 function parseArgs(argv) {
   const options = {
     cwd: process.cwd(),
     scope: null,
     base: null,
+    includeWorkingTree: false,
     timeoutMs: DEFAULT_FINGERPRINT_TIMEOUT_MS,
     excludePaths: [],
   };
@@ -45,13 +54,17 @@ function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (!["--cwd", "--scope", "--base", "--timeout-ms", "--exclude-path"].includes(argument)) {
+    if (!["--cwd", "--scope", "--base", "--include-working-tree", "--timeout-ms", "--exclude-path"].includes(argument)) {
       throw new Error(`Unsupported argument: ${argument}`);
     }
     if (seen.has(argument) && argument !== "--exclude-path") {
       throw new Error(`Duplicate argument: ${argument}`);
     }
     seen.add(argument);
+    if (argument === "--include-working-tree") {
+      options.includeWorkingTree = true;
+      continue;
+    }
     const value = argv[index + 1];
     if (!value) throw new Error(`Missing value for ${argument}`);
     if (argument === "--exclude-path") {
@@ -76,6 +89,9 @@ function parseArgs(argv) {
   }
   if (options.scope === "working-tree" && options.base) {
     throw new Error("Working-tree scope does not accept --base.");
+  }
+  if (options.includeWorkingTree && options.scope !== "branch") {
+    throw new Error("--include-working-tree requires branch scope.");
   }
   options.excludePaths = normalizeExcludePaths(options.excludePaths);
 
@@ -514,11 +530,58 @@ function gitlinkEntries(indexEntries) {
   ));
 }
 
-function displayRawPath(rawPath) {
+function decodeUtf8Path(rawPath) {
   const decoded = rawPath.toString("utf8");
-  return Buffer.from(decoded, "utf8").equals(rawPath)
-    ? decoded
-    : `raw-path:${rawPath.toString("hex")}`;
+  return Buffer.from(decoded, "utf8").equals(rawPath) ? decoded : null;
+}
+
+function displayRawPath(rawPath) {
+  const decoded = decodeUtf8Path(rawPath);
+  if (decoded === null) return `${RAW_PATH_PREFIX}${rawPath.toString("hex")}`;
+  const hasReservedSegment = decoded.split("/").some((segment) => (
+    segment.startsWith(RAW_PATH_PREFIX) || segment.startsWith(UTF8_PATH_PREFIX)
+  ));
+  return hasReservedSegment
+    ? `${UTF8_PATH_PREFIX}${rawPath.toString("hex")}`
+    : decoded;
+}
+
+function createPathInventory() {
+  return { paths: [], count: 0, jsonBytes: 4, truncated: false };
+}
+
+function retainPath(inventory, displayPath) {
+  // Conservatively include indentation, a separator, and a newline.
+  const jsonBytes = Buffer.byteLength(JSON.stringify(displayPath), "utf8") + 6;
+  if (inventory.paths.length >= MAX_PATH_INVENTORY_ENTRIES
+    || inventory.jsonBytes + jsonBytes > MAX_PATH_INVENTORY_JSON_BYTES) {
+    inventory.truncated = true;
+    return;
+  }
+  inventory.paths.push(displayPath);
+  inventory.jsonBytes += jsonBytes;
+}
+
+function addPath(inventory, displayPath) {
+  inventory.count += 1;
+  retainPath(inventory, displayPath);
+}
+
+function mergePathInventory(inventory, child, prefix = "") {
+  inventory.count += child.count;
+  inventory.truncated ||= child.truncated;
+  for (const childPath of child.paths) {
+    retainPath(inventory, prefix ? `${prefix}/${childPath}` : childPath);
+  }
+}
+
+function finishPathInventory(inventory) {
+  inventory.paths.sort();
+  return {
+    paths: inventory.paths,
+    count: inventory.count,
+    truncated: inventory.truncated || inventory.paths.length !== inventory.count,
+  };
 }
 
 function parseNullConfigEntries(output) {
@@ -588,11 +651,17 @@ async function hashTrackedSubmodules(
   let hasChanges = false;
   let submoduleCount = 0;
   const issues = [];
+  const pathsDifferingFromIndex = createPathInventory();
+  const pathsAbsentFromIndex = createPathInventory();
+  const dirtySubmodulePaths = createPathInventory();
 
   for (const { oid: expectedOid, relativePath } of entries) {
     assertWithinDeadline(deadlineAt);
     const displayPath = displayRawPath(relativePath);
-    const subtree = exclusionsForSubtree(excludePaths, displayPath);
+    const decodedPath = decodeUtf8Path(relativePath);
+    const subtree = decodedPath === null
+      ? { excluded: false, excludePaths: [] }
+      : exclusionsForSubtree(excludePaths, decodedPath);
     if (subtree.excluded) continue;
     hashField(hash, "submodule-path", relativePath);
     hashField(hash, "submodule-index-oid", Buffer.from(expectedOid));
@@ -660,6 +729,7 @@ async function hashTrackedSubmodules(
         "HEAD^{commit}",
       ], deadlineAt, signal);
       hashField(hash, "submodule-head", Buffer.from(submoduleHead));
+      if (submoduleHead !== expectedOid) addPath(pathsDifferingFromIndex, displayPath);
       const result = await workingTreeFingerprint(
         submodulePath,
         submoduleHead,
@@ -669,6 +739,22 @@ async function hashTrackedSubmodules(
         subtree.excludePaths,
       );
       hashField(hash, "submodule-fingerprint", Buffer.from(result.fingerprint));
+      if (result.hasChanges) addPath(dirtySubmodulePaths, displayPath);
+      mergePathInventory(pathsDifferingFromIndex, {
+        paths: result.workingTreePathsDifferingFromIndex,
+        count: result.workingTreePathsDifferingFromIndexCount,
+        truncated: result.workingTreePathsDifferingFromIndexTruncated,
+      }, displayPath);
+      mergePathInventory(pathsAbsentFromIndex, {
+        paths: result.workingTreePathsAbsentFromIndex,
+        count: result.workingTreePathsAbsentFromIndexCount,
+        truncated: result.workingTreePathsAbsentFromIndexTruncated,
+      }, displayPath);
+      mergePathInventory(dirtySubmodulePaths, {
+        paths: result.dirtySubmodulePaths,
+        count: result.dirtySubmodulePathsCount,
+        truncated: result.dirtySubmodulePathsTruncated,
+      }, displayPath);
       hasChanges ||= submoduleHead !== expectedOid || result.hasChanges;
       submoduleCount += 1 + result.submoduleCount;
       issues.push(...result.issues.map((issue) => ({
@@ -683,7 +769,23 @@ async function hashTrackedSubmodules(
     }
   }
 
-  return { hasChanges, submoduleCount, issues };
+  const differing = finishPathInventory(pathsDifferingFromIndex);
+  const absent = finishPathInventory(pathsAbsentFromIndex);
+  const dirty = finishPathInventory(dirtySubmodulePaths);
+  return {
+    hasChanges,
+    submoduleCount,
+    issues,
+    pathsDifferingFromIndex: differing.paths,
+    pathsDifferingFromIndexCount: differing.count,
+    pathsDifferingFromIndexTruncated: differing.truncated,
+    pathsAbsentFromIndex: absent.paths,
+    pathsAbsentFromIndexCount: absent.count,
+    pathsAbsentFromIndexTruncated: absent.truncated,
+    dirtySubmodulePaths: dirty.paths,
+    dirtySubmodulePathsCount: dirty.count,
+    dirtySubmodulePathsTruncated: dirty.truncated,
+  };
 }
 
 async function workingTreeFingerprint(
@@ -778,6 +880,31 @@ async function workingTreeFingerprint(
     excludePaths,
   );
   const issues = [...pathIssues, ...submodules.issues];
+  const pathsDifferingFromIndex = createPathInventory();
+  for (const rawPath of unstaged) addPath(pathsDifferingFromIndex, displayRawPath(rawPath));
+  mergePathInventory(pathsDifferingFromIndex, {
+    paths: submodules.pathsDifferingFromIndex,
+    count: submodules.pathsDifferingFromIndexCount,
+    truncated: submodules.pathsDifferingFromIndexTruncated,
+  });
+  const pathsAbsentFromIndex = createPathInventory();
+  for (const rawPath of untracked) addPath(pathsAbsentFromIndex, displayRawPath(rawPath));
+  mergePathInventory(pathsAbsentFromIndex, {
+    paths: submodules.pathsAbsentFromIndex,
+    count: submodules.pathsAbsentFromIndexCount,
+    truncated: submodules.pathsAbsentFromIndexTruncated,
+  });
+  const dirtySubmoduleInventory = createPathInventory();
+  mergePathInventory(dirtySubmoduleInventory, {
+    paths: submodules.dirtySubmodulePaths,
+    count: submodules.dirtySubmodulePathsCount,
+    truncated: submodules.dirtySubmodulePathsTruncated,
+  });
+  const differing = finishPathInventory(pathsDifferingFromIndex);
+  const absent = finishPathInventory(pathsAbsentFromIndex);
+  const dirty = finishPathInventory(dirtySubmoduleInventory);
+  const fingerprint = hash.digest("hex");
+  const complete = issues.length === 0;
 
   return {
     scope: "working-tree",
@@ -787,10 +914,24 @@ async function workingTreeFingerprint(
     mergeBaseOid: null,
     hasChanges: status.length > 0 || staged.length > 0 || submodules.hasChanges,
     submoduleCount: submodules.submoduleCount,
-    complete: issues.length === 0,
+    complete,
     issues,
     excludePaths,
-    fingerprint: hash.digest("hex"),
+    fingerprint,
+    pathInventoryComplete: complete
+      && !differing.truncated
+      && !absent.truncated
+      && !dirty.truncated,
+    pathInventoryLimits: PATH_INVENTORY_LIMITS,
+    workingTreePathsDifferingFromIndexCount: differing.count,
+    workingTreePathsDifferingFromIndexTruncated: differing.truncated,
+    workingTreePathsAbsentFromIndexCount: absent.count,
+    workingTreePathsAbsentFromIndexTruncated: absent.truncated,
+    dirtySubmodulePathsCount: dirty.count,
+    dirtySubmodulePathsTruncated: dirty.truncated,
+    workingTreePathsDifferingFromIndex: differing.paths,
+    workingTreePathsAbsentFromIndex: absent.paths,
+    dirtySubmodulePaths: dirty.paths,
   };
 }
 
@@ -801,6 +942,7 @@ async function branchFingerprint(
   deadlineAt,
   signal = null,
   excludePaths = [],
+  includeWorkingTree = false,
 ) {
   if (!headOid) {
     throw new Error("Branch scope requires HEAD to resolve to a commit; use working-tree scope for an unborn repository.");
@@ -824,9 +966,11 @@ async function branchFingerprint(
     new Set(),
     deadlineAt,
     signal,
+    includeWorkingTree ? excludePaths : [],
   );
   const hash = createHash("sha256");
   hashField(hash, "scope", Buffer.from("branch"));
+  if (includeWorkingTree) hashField(hash, "include-working-tree", Buffer.from("true"));
   hashField(hash, "head", Buffer.from(headOid));
   hashField(hash, "base", Buffer.from(baseOid));
   hashField(hash, "merge-base", Buffer.from(mergeBaseOid));
@@ -841,17 +985,32 @@ async function branchFingerprint(
     headOid,
     baseOid,
     mergeBaseOid,
-    hasChanges: changedPaths.length > 0,
-    checkoutClean: !checkout.hasChanges,
+    hasChanges: changedPaths.length > 0 || (includeWorkingTree && checkout.hasChanges),
+    includeWorkingTree,
+    ...(!includeWorkingTree ? { checkoutClean: !checkout.hasChanges } : {}),
     submoduleCount: checkout.submoduleCount,
     complete: checkout.complete,
     issues: checkout.issues,
     excludePaths,
     fingerprint: hash.digest("hex"),
+    pathInventoryComplete: checkout.pathInventoryComplete,
+    pathInventoryLimits: checkout.pathInventoryLimits,
+    workingTreePathsDifferingFromIndexCount: checkout.workingTreePathsDifferingFromIndexCount,
+    workingTreePathsDifferingFromIndexTruncated: checkout.workingTreePathsDifferingFromIndexTruncated,
+    workingTreePathsAbsentFromIndexCount: checkout.workingTreePathsAbsentFromIndexCount,
+    workingTreePathsAbsentFromIndexTruncated: checkout.workingTreePathsAbsentFromIndexTruncated,
+    dirtySubmodulePathsCount: checkout.dirtySubmodulePathsCount,
+    dirtySubmodulePathsTruncated: checkout.dirtySubmodulePathsTruncated,
+    workingTreePathsDifferingFromIndex: checkout.workingTreePathsDifferingFromIndex,
+    workingTreePathsAbsentFromIndex: checkout.workingTreePathsAbsentFromIndex,
+    dirtySubmodulePaths: checkout.dirtySubmodulePaths,
   };
 }
 
 async function captureFingerprint(options) {
+  if (options.includeWorkingTree && options.scope !== "branch") {
+    throw new Error("--include-working-tree requires branch scope.");
+  }
   const deadlineAt = Date.now() + (options.timeoutMs ?? DEFAULT_FINGERPRINT_TIMEOUT_MS);
   const repoRoot = await gitText(
     options.cwd,
@@ -900,6 +1059,7 @@ async function captureFingerprint(options) {
       deadlineAt,
       options.signal,
       exclusions.excludePaths,
+      options.includeWorkingTree,
     );
   return { ...result, ...exclusions };
 }

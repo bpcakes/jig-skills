@@ -35,6 +35,7 @@ function parseArgs(argv) {
     cwd: process.cwd(),
     scope: null,
     base: null,
+    includeWorkingTree: false,
     effort: "high",
     speed: "standard",
     expectedFingerprint: null,
@@ -45,6 +46,7 @@ function parseArgs(argv) {
     "--cwd",
     "--scope",
     "--base",
+    "--include-working-tree",
     "--effort",
     "--speed",
     "--expected-fingerprint",
@@ -60,6 +62,10 @@ function parseArgs(argv) {
       throw new Error(`Duplicate argument: ${argument}`);
     }
     seen.add(argument);
+    if (argument === "--include-working-tree") {
+      options.includeWorkingTree = true;
+      continue;
+    }
     const value = argv[index + 1];
     if (value == null || value === "") throw new Error(`Missing value for ${argument}`);
     index += 1;
@@ -86,6 +92,9 @@ function parseArgs(argv) {
   }
   if (options.scope === "working-tree" && options.base) {
     throw new Error("Working-tree scope does not accept --base.");
+  }
+  if (options.includeWorkingTree && options.scope !== "branch") {
+    throw new Error("--include-working-tree requires branch scope.");
   }
   if (!options.expectedFingerprint) {
     throw new Error("Missing required --expected-fingerprint.");
