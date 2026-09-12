@@ -20,7 +20,7 @@ To review and fix a branch against `main`, including any existing local changes:
 $jig-review:review-fix-loop --base main
 ```
 
-The defaults use Claude and Codex, apply minimal fixes to verified findings of medium severity or higher, and allow at most three repair rounds. Select all providers and Cursor fast mode with:
+The defaults use Claude and Codex, apply minimal fixes to verified findings of medium severity or higher, and allow at most four repair rounds. Select all providers and Cursor fast mode with:
 
 ```text
 $jig-review:review-fix-loop --all-reviewers --cursor-effort xhigh --cursor-speed fast --exclude-path .agents/
@@ -32,7 +32,7 @@ Available loop controls:
 |---|---|---|
 | `--fix-mode minimal\|comprehensive` | `minimal` | Selects minimal corrections or diagnosis and durable causal repairs. |
 | `--min-severity critical\|high\|medium\|low` | `medium` | Lowest finding severity eligible for repair. |
-| `--max-rounds 1\|2\|3` | `3` | Maximum repair rounds started, including aborted rounds. |
+| `--max-rounds 1\|2\|3\|4\|5` | `4` | Maximum repair rounds started, including aborted rounds. |
 | `--scope working-tree\|branch\|auto` | `working-tree` | Selects local changes, branch plus local changes, or automatic selection once at startup. |
 | `--base <ref>` | detected for branch scope | Selects branch scope against a base; conflicts with explicit working-tree scope. |
 
@@ -66,7 +66,7 @@ This separation follows Google's distinction between incident triggers and syste
 
 ## Round Semantics
 
-The initial review is not counted as a repair round. A round is consumed when edits begin, including adding a regression test for a verified finding. Successful rounds normally finish with validation and a fresh comprehensive review of the entire selected scope, including all repairs and the last allowed repair round. Aborted rounds still count, but stop without requiring another review. Consequently, three successful repair rounds normally perform four review passes; a validation failure can end the loop earlier.
+The initial review is not counted as a repair round. A round is consumed when edits begin, including adding a regression test for a verified finding. Successful rounds normally finish with validation and a fresh comprehensive review of the entire selected scope, including all repairs and the last allowed repair round. Aborted rounds still count, but stop without requiring another review. Consequently, the default four successful repair rounds normally perform five review passes; a validation failure can end the loop earlier.
 
 Each round counts once toward every causal group it targets for repair or mitigation. Incidentally breaking another group does not count as an attempt to repair that group. Merging groups combines their targeted round histories, counting any shared round once. A mechanism still outstanding after two attempts stops under the repeated-failure limit.
 

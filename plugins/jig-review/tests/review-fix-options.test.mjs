@@ -12,15 +12,15 @@ import {
   parseArgs,
 } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 
-test("loop defaults to minimal fixes, medium severity, and three working-tree repair rounds", () => {
+test("loop defaults to minimal fixes, medium severity, and four working-tree repair rounds", () => {
   const options = parseArgs([]);
   assert.equal(options.scope, "working-tree");
   assert.equal(options.fixMode, "minimal");
   assert.equal(options.minSeverity, "medium");
-  assert.equal(options.maxRounds, 3);
+  assert.equal(options.maxRounds, 4);
   assert.deepEqual(options.review.reviewers, ["claude", "codex"]);
-  assert.equal(DEFAULT_MAX_ROUNDS, 3);
-  assert.equal(MAX_ROUNDS, 3);
+  assert.equal(DEFAULT_MAX_ROUNDS, 4);
+  assert.equal(MAX_ROUNDS, 5);
 });
 
 test("loop controls compose with normalized comprehensive-review controls", () => {
@@ -116,13 +116,15 @@ test("loop explains that branch scope already includes working-tree changes", ()
 });
 
 test("loop rejects invalid bounds and duplicate controls", () => {
+  assert.equal(parseArgs(["--max-rounds", "1"]).maxRounds, 1);
+  assert.equal(parseArgs(["--max-rounds", "5"]).maxRounds, 5);
   assert.throws(
     () => parseArgs(["--max-rounds", "0"]),
-    /integer from 1 to 3/,
+    /integer from 1 to 5/,
   );
   assert.throws(
-    () => parseArgs(["--max-rounds", "4"]),
-    /integer from 1 to 3/,
+    () => parseArgs(["--max-rounds", "6"]),
+    /integer from 1 to 5/,
   );
   assert.throws(
     () => parseArgs(["--min-severity", "important"]),

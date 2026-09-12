@@ -8,8 +8,8 @@ import {
   reviewOptionTakesValue,
 } from "../../comprehensive-review/scripts/review-options.mjs";
 
-const DEFAULT_MAX_ROUNDS = 3;
-const MAX_ROUNDS = 3;
+const DEFAULT_MAX_ROUNDS = 4;
+const MAX_ROUNDS = 5;
 const SEVERITIES = new Set(["critical", "high", "medium", "low"]);
 const FIX_MODES = new Set(["minimal", "comprehensive"]);
 

@@ -251,7 +251,7 @@ $jig-review:comprehensive-review --reviewers claude,codex
 Review, fix, test, and freshly re-review working changes:
 
 ```text
-$jig-review:review-fix-loop --all-reviewers --min-severity medium --max-rounds 3
+$jig-review:review-fix-loop --all-reviewers --min-severity medium --max-rounds 4
 ```
 
 The review example returns merged findings plus reviewer and coverage notes. The loop example changes files but does not commit them. See [comprehensive-review usage](docs/comprehensive-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.

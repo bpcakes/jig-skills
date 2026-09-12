@@ -15,7 +15,7 @@ Accept these loop controls:
 
 - `--fix-mode <minimal|comprehensive>` selects repair depth. Default: `minimal`.
 - `--min-severity <critical|high|medium|low>` sets the lowest severity eligible for fixes. Default: `medium`.
-- `--max-rounds <1|2|3>` caps repair rounds started. Default: `3`. See the runtime for successful and aborted rounds.
+- `--max-rounds <1|2|3|4|5>` caps repair rounds started. Default: `4`. See the runtime for successful and aborted rounds.
 - `--scope <working-tree|branch|auto>` selects the review scope. Default: `working-tree`. Resolve `auto` once before the initial review.
 - `--base <ref>` selects branch scope against that base. It cannot be combined with `--scope working-tree`. Without a base, branch scope uses the detected default branch.
 - `--wait` is a compatibility no-op.
