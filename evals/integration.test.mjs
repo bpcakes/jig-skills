@@ -25,6 +25,7 @@ function exercise(t, scenario, configure = () => ({}), caseId = 'rust-implicit-s
   const env = { ...process.env, PATH: bin + path.delimiter + process.env.PATH, TMPDIR: scratch,
     EVAL_STUB_SCENARIO: scenario, EVAL_STUB_FOREIGN_SKILL: foreign, ...configure(dir) };
   const child = spawnSync(process.execPath, [runner, '--live', '--case', caseId, '--output', out,
+    ...(scenario === 'configured' ? ['--model', 'gpt-6-astra', '--effort', 'medium', '--judge-model', 'fixed-judge', '--judge-effort', 'high'] : []),
     ...(scenario.startsWith('tamper-') ? ['--repeat', '2'] : []),
     ...(scenario === 'grade-timeout' ? ['--timeout', '15', '--grade-timeout', '1'] : [])],
     { env, encoding: 'utf8', timeout: 60_000 });
@@ -55,6 +56,55 @@ test('assembled runner accepts an in-scope implementation', t => {
   assert.equal(child.status, 0, child.stdout + child.stderr);
   assert.equal(result.passed, true);
   assert.deepEqual(result.changed, ['src/lib.rs']);
+});
+
+test('runner preserves a pre-existing staged repair and exposes it to the grader', t => {
+  const { child, result, artifacts } = exercise(t, 'preserve-staged', () => ({}), 'review-prior-authorized-stale-finding');
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  assert.equal(result.passed, true);
+  assert.deepEqual(result.beforeGit, result.afterGit);
+  assert.deepEqual(result.changed, []);
+  const prompt = readFileSync(path.join(artifacts, 'grade.prompt.txt'), 'utf8');
+  const data = JSON.parse(prompt.slice(prompt.indexOf('\n') + 1));
+  assert.match(data.initialDiff, /^-export function formatLabel.*toLowerCase/m);
+  assert.match(data.initialDiff, /^\+export function formatLabel.*toUpperCase/m);
+});
+
+test('agent and judge configuration reaches separate CLI processes and verified exports', t => {
+  const { child, summary, artifacts, result } = exercise(t, 'configured');
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  assert.deepEqual(summary.configuration, { agent: { model: 'gpt-6-astra', effort: 'medium' },
+    judge: { model: 'fixed-judge', effort: 'high' } });
+  for (const [label, model, effort] of [['agent', 'gpt-6-astra', 'medium'], ['grade', 'fixed-judge', 'high']]) {
+    const args = JSON.parse(readFileSync(path.join(artifacts, `${label}.command.json`)));
+    assert.equal(args[args.indexOf('--model') + 1], model);
+    assert.ok(args.includes(`model_reasoning_effort="${effort}"`));
+  }
+  assert.deepEqual(result.agentMetrics.usage, { input_tokens: 120, cached_input_tokens: 40, output_tokens: 15 });
+  assert.equal(result.agentExecution.reported, null);
+  assert.ok(result.agentExecution.elapsedMs >= 0);
+  const report = createReport(path.dirname(artifacts), sourceRoot, { allowPartial: true });
+  assert.deepEqual(report.configuration, summary.configuration);
+  assert.deepEqual(report.results[0].agentMetrics, result.agentMetrics);
+  const summaryFile = path.join(path.dirname(artifacts), 'summary.json');
+  summary.results[0].agentMetrics.usage.input_tokens = 0;
+  writeFileSync(summaryFile, JSON.stringify(summary));
+  assert.throws(() => createReport(path.dirname(artifacts), sourceRoot, { allowPartial: true }), /agent metrics/);
+  summary.results[0].agentMetrics.usage.input_tokens = 120;
+  summary.configuration.agent.model = 'invented-effective-model';
+  summary.model = 'invented-effective-model';
+  writeFileSync(summaryFile, JSON.stringify(summary));
+  assert.throws(() => createReport(path.dirname(artifacts), sourceRoot, { allowPartial: true }), /requested configuration/);
+  summary.configuration.agent.model = 'gpt-6-astra';
+  summary.model = 'gpt-6-astra';
+  delete summary.configuration;
+  writeFileSync(summaryFile, JSON.stringify(summary));
+  assert.throws(() => createReport(path.dirname(artifacts), sourceRoot, { allowPartial: true }), /requested configuration/);
+  summary.configuration = { agent: { model: 'gpt-6-astra', effort: 'medium' },
+    judge: { model: 'fixed-judge', effort: 'high' } };
+  summary.model = 'invented-summary-model';
+  writeFileSync(summaryFile, JSON.stringify(summary));
+  assert.throws(() => createReport(path.dirname(artifacts), sourceRoot, { allowPartial: true }), /task model summary/);
 });
 
 for (const scenario of ['multi-skill-read', 'catalog-glob-read']) {
@@ -200,8 +250,13 @@ test('XDG Git ignore and attributes cannot alter setup or agent Git commands', t
 for (const scenario of ['allowed', 'grade-failure', 'grade-timeout']) test(`grader workspace is removed after ${scenario}`, t => {
   const { child, artifacts, result, summary } = exercise(t, scenario);
   assert.equal(child.status, scenario === 'allowed' ? 0 : 1);
+  assert.deepEqual(result.phases, { agent: 'completed', judge: scenario === 'allowed' ? 'completed' : 'attempted' });
   const args = JSON.parse(readFileSync(path.join(artifacts, 'grade.command.json'), 'utf8'));
   assert.equal(existsSync(args[args.indexOf('--cd') + 1]), false);
+  const report = createReport(path.dirname(artifacts), sourceRoot, { allowPartial: true });
+  assert.equal(report.results[0].phases.judge.state, scenario === 'allowed' ? 'completed' : 'attempted');
+  assert.equal(report.results[0].phases.judge.execution.stopReason, scenario === 'grade-timeout' ? 'timeout' : null);
+  assert.equal(report.results[0].phases.judge.execution.timedOut, scenario === 'grade-timeout');
   if (scenario === 'grade-timeout') {
     assert.equal(result.scope, true, 'agent completed before grading');
     assert.match(result.error, /^grade: timeout/);
@@ -209,10 +264,18 @@ for (const scenario of ['allowed', 'grade-failure', 'grade-timeout']) test(`grad
   }
 });
 
+test('failed grader configuration is checked against its attempted command', t => {
+  const { artifacts, summary } = exercise(t, 'grade-failure');
+  const run = path.dirname(artifacts);
+  summary.configuration.judge.model = 'forged-model';
+  writeFileSync(path.join(run, 'summary.json'), JSON.stringify(summary));
+  assert.throws(() => createReport(run, sourceRoot, { allowPartial: true }), /judge requested configuration/);
+});
+
 test('runner invokes both schemas from its frozen artifact bundle', t => {
   const { child, summary, artifacts } = exercise(t, 'allowed');
   assert.equal(child.status, 0);
-  assert.equal(summary.formatVersion, 3);
+  assert.equal(summary.formatVersion, 4);
   assert.equal(summary.state, 'completed');
   assert.deepEqual(summary.plannedTrials, [{ id: 'rust-implicit-simplify', iteration: 1 }]);
   for (const [label, name] of [['agent', 'response.schema.json'], ['grade', 'grade.schema.json']]) {

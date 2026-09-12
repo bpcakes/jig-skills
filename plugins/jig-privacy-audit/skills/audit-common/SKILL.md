@@ -33,8 +33,8 @@ Treat checklist markers and missing documentation as leads. Confirm a reachable 
 - `critical`: server/operator/attacker can recover user plaintext or key material at scale, malicious updates can silently exfiltrate keys, or recovery defeats a central zero-knowledge claim.
 - `high`: plaintext sensitive content, encryption keys, recovery secrets, or claimed encrypted fields leak to network, server storage, telemetry, logs, queues, or third parties.
 - `medium`: sensitive metadata leakage, missing binding/integrity, weak key lifecycle, limited plaintext exposure, or claim conflict with meaningful privacy impact.
-- `low`: hardening issue, documentation gap, weak evidence retention, ambiguous claim, or lower-impact privacy leakage.
-- `informational`: scope note, limitation, positive evidence, or recommended follow-up without a concrete failure.
+- `low`: demonstrated privacy or claim violation with limited impact or exposure. Missing documentation, tests, and evidence are limitations unless they establish a concrete failure against the scoped contract.
+- `informational`: scope note, limitation, expected control observation, positive evidence, or recommended follow-up without a concrete failure. Keep these separate from defect findings, even when a structured artifact uses this severity value.
 
 ## Finding Schema
 

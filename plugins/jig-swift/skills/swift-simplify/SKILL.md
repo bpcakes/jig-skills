@@ -68,13 +68,13 @@ Analyze the requested Swift code and directly related tests or support files; de
 
 6. Keep scope tight
 
-   - Only refine recently modified or uncommitted Swift code and directly adjacent tests/support files required to keep the change coherent.
+   - Refine the user's named files, snippets, or diff, including unchanged files. Use recently modified or uncommitted Swift code only when no target was named. Include directly adjacent tests/support files only when required to keep the change coherent.
    - Do not perform sweeping renames, architecture rewrites, dependency migrations, or project-wide cleanup unless explicitly asked.
    - Do not edit generated code, snapshots, localization catalogs, asset catalogs, or Xcode project metadata unless the user explicitly asks or the change is required for correctness.
 
 Your refinement process:
 
-1. Inspect the uncommitted diff and identify the touched Swift/iOS code.
+1. Inspect the requested Swift/iOS target; use the uncommitted diff as the fallback when no target was named.
 2. Check correctness-sensitive areas first:
    - actor isolation
    - main-actor UI access

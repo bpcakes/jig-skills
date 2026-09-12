@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 3,
+  "sourceRun": "/tmp/jig-skill-evals-dzUVE6",
+  "sourceSummaryHash": "4821d9818889a3c62ac5124ba1927f2ac838647aad594c815ab6699cb613ac08",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-test-only-weakened",
+      "rust-test-only-valid-consolidation",
+      "rust-loaded-explain",
+      "rust-implicit-simplify",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-test-valid-testid",
+      "react-test-missed-confirmation",
+      "react-test-minor-display-gap",
+      "sqlx-minor-display-defect",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation",
+      "astra-swift-named-clean",
+      "astra-ruby-assessment-no-tests",
+      "astra-component-independent-options",
+      "astra-component-callback-defect",
+      "astra-state-benign-draft",
+      "astra-state-stale-response",
+      "astra-dup-independent-options",
+      "astra-transaction-single-statement",
+      "astra-privacy-expected-control",
+      "astra-privacy-protected-leak",
+      "astra-plan-noop-no-standard"
+    ],
+    "missingTrials": [],
+    "plannedTrials": [
+      {
+        "id": "astra-plan-repair-no-standard",
+        "iteration": 1
+      },
+      {
+        "id": "astra-review-prior-authorized-fix",
+        "iteration": 1
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-09-12T09:17:35.025Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "gpt-6-astra",
+  "configuration": {
+    "agent": {
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    },
+    "judge": {
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "sourceCommit": "9c47b5e36bb641721abeb7343bed82d72350cdb2",
+  "harnessHash": "b82ddb8eca64fa52a2ced3d12e91e0845a368ec769237c916768f3dabae4c3ee",
+  "suiteHash": "897213b4a4f6c91cfa2cb3db6c71d27541bc935c12c2b9d9642c956128c6304d",
+  "exporterHash": "733b2260263555ab48202584b6b031f15d1635f1544bf65bec128453ea734fa0",
+  "skillHashes": {
+    "audit-common": "4376885960e73afa2fca0e968884f9d9f2ed2be5ecefe48c71345198b0525776",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "6799cd58e9e3e374d99dcff575fd2cc20b87d84b552134f54ff1c3aaf2cb2f52",
+    "comprehensive-review": "36aa0177f1c45fa142785d75cc941fd2a67310b6d65b278e16a47626032e5565",
+    "crypto-architecture-review": "9c7beb6e8bdb50e97450d5d5a556d64fe92c978134969bf1001ac6acb0baf62e",
+    "crypto-implementation-static-review": "ba5e53ce4c39f353740137c935008f91384782863a9b0e3c7a2f0a4ac185803c",
+    "cursor-implement-exec-plan": "3c617e1fa0ddb159ecc8483b81d456a6810c46fc32fe6bd76e657c9b6ec64c8a",
+    "fowler-ruby-rails-refactoring": "2a8e70b679cba55dfc879f48168a13686d5010a5da51389224ba681d1da176d9",
+    "fowler-rust-refactoring": "7fdc2f013ee151424387b550f18dc9c60be70466583998cf16f12a9b7ac765d2",
+    "improve-exec-plan": "9cc56368de766918e592e7bc7e17e07038d821bcf84ea888bfafa48d18d3d7fd",
+    "metadata-leakage-inventory": "1805a7c7daf8cd1dcc4a75d73d97a77a48dcea2fcc57e14f03583b0aee5d324c",
+    "network-payload-zero-knowledge-test": "29b33fdcadd1c3bfa442a31f1581d6da493b3ac1396a44f18aed69ba7e0f3286",
+    "privacy-claims-field-classifier": "01bbdd6454f8ca2dbfd5787693daa21d4e04db8b58466987e6dcae9ea1561df1",
+    "react-hooks-component-api-review": "887dab1d2892f7c65556dfc391a83fa3af05248171f02dbfe660809744ae8b53",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "c602d657e93ab60753dcff08039be9e2c0699f5277ab75923fb141c08e9d45f4",
+    "react-test-quality-review": "b8f8185a36c704500f41946e55749efc138c7cf344b125516ecf53da9ddd2ed5",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "55cbb2dc650150a780b057fac63c446316ba5322e29c8ea127237834c21f2981",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "1ca0c9af1cd292aa0cb914df86b2be87e7d33a5e9abf767d7fca65dc02bc9f11",
+    "rust-dup-unifier": "548cd04652a3713ecee5834e3590630b2cc8a797e0acbfae848fb496fff77e8e",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "7f3b4e08d6651fd27ffa7105e356e718a715c25764ded77df90625ed9caaecdb",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "4657e823eee568a7815d87a6f0c0d1e01a5fc7ecba0fa47d59a57a125b595b76",
+    "rust-test-quality-review": "45b4096320f491ebe88d4ccb6dc6e3788cc2105c1bc08e9987673ef7595ec6c2",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "a336fa862d76ff6fcf248ab0e8bb4ed63cc2dd51f4a30e5633f07ee11ec09851",
+    "sqlx-query-safety-review": "af846ba60ecfcb87f104d889061e3a60c29eebd5a84b443ccc1cca05b2c44b06",
+    "swift-simplify": "d8a70e1eb302b6efd501c4da5190ac1ee4e9812b61ea53e4e1c5245785b94562",
+    "telemetry-crash-logs-support-leakage-audit": "45b85292731937cdf4b6b6f061fa31583d9d4f6cdc48fc57cd8cec4b8f698852",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "2fa3551af0720846e5c976b21ec9cfbe6b2538d43bb30041a0ccc17fd978607a",
+    "typescript-react-dup-unifier": "ee14d688d40180ee71a4167cbce249fbb003375ea9499c6608f6e2441d9833ce",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "f821508afcb6ab98e5f37e03a5850c99921e835472d2a6e51e2def9b42788912",
+    "write-exec-plan": "c448d7764309db2a8a3af700712f579ccecbf62c07253d7363b53fee8f3adf30"
+  },
+  "passed": 2,
+  "total": 2,
+  "skillsEvaluated": 2,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Requested model/effort are verified against recorded CLI arguments; a null reported configuration means effective provider selection was not independently exposed. Resource-read and repeated-command metrics are proxies, not judgments of waste.",
+    "Current source verification covers every discovery entrypoint and all files of recorded target skills and skills read or possibly read in completed trials; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "astra-plan-repair-no-standard",
+      "iteration": 1,
+      "skill": "improve-exec-plan",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "plan.md"
+      ],
+      "reads": [
+        "improve-exec-plan"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g '*PLANS.md' -g 'plan.md' -g 'SKILL.md' -g 'Cargo.toml' -g 'package.json' -g 'Makefile' -g 'README*' -g '.github/**' -g '\"'!node_modules'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/improve-exec-plan/SKILL.md; cat plan.md; git status --short'",
+        "/usr/bin/bash -lc \"rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"'; cat AGENTS.md; cat label.js; cat package.json; cat README.md; rg -n --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' 'formatLabel|label.js|PLANS' .\"",
+        "/usr/bin/bash -lc \"cat labels.js; node --version; node --input-type=module -e \\\"import {formatLabel} from './labels.js'; if (formatLabel('Ada') \"'!== '\"'ADA' || formatLabel('') \"'!== '\"'') process.exit(1)\\\"\"",
+        "/usr/bin/bash -lc 'git diff --check; git diff --stat; git status --short'"
+      ],
+      "answer": {
+        "answer": "Updated plan.md in place. Fixed the source and import paths; strengthened validation with explicit expected exit statuses. No plan standard exists, so the structure and history were preserved. Only plan.md changed; git diff --check passed. Validation fails as expected before implementation. No feature code was changed.",
+        "findings": [
+          {
+            "location": "plan.md:5,14,22",
+            "issue": "The plan referenced nonexistent label.js; formatLabel is exported by labels.js.",
+            "consequence": "Implementation targeted the wrong file, and validation would fail at import. Corrected all references.",
+            "counterevidence": "The function signature, string-only input contract, and proposed toUpperCase() operation match the repository."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "repair",
+            "passed": true,
+            "evidence": "plan.md now targets labels.js and imports './labels.js' in validation. The uppercase operation and empty-string contract remain intact; implementation files and existing progress/history are unchanged. The plan proceeds despite absent plan standards. The reported finding accurately identifies and explains the corrected nonexistent-file references."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 41046,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 77392,
+          "cached_input_tokens": 56064,
+          "output_tokens": 924
+        },
+        "completedCommands": 5,
+        "repeatedCommands": [],
+        "resourceReadCommands": 2,
+        "resourceReadOutputBytes": 13758
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 6516,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13377,
+          "cached_input_tokens": 0,
+          "output_tokens": 82
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "f2feb14d3758387e8d90d5515cc8bc16bd091500451edf04b6c6ca5fe15b2ff6"
+    },
+    {
+      "id": "astra-review-prior-authorized-fix",
+      "iteration": 1,
+      "skill": "comprehensive-review",
+      "mode": "loaded",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "labels.js"
+      ],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'review.txt' -g 'package.json' -g 'Cargo.toml' -g '*lock*' -g 'README*'; git status --short\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md review.txt package.json; rg --files -g '\"'!'\"\\\\.agents/**' -g '\"'!'\"\\\\.git/**'\"",
+        "/usr/bin/bash -lc 'cat labels.js README.md'",
+        "/usr/bin/bash -lc \"node --input-type=module -e 'import assert from \\\"node:assert/strict\\\"; import { formatLabel } from \\\"./labels.js\\\"; assert.equal(formatLabel(\\\"Mixed case\\\"), \\\"MIXED CASE\\\"); assert.equal(formatLabel(\\\"UPPER\\\"), \\\"UPPER\\\"); assert.equal(formatLabel(\\\"\\\"), \\\"\\\"); console.log(\\\"Label checks passed\\\");'\ngit diff --check\ngit diff -- labels.js\""
+      ],
+      "answer": {
+        "answer": "Fixed labels.js to uppercase labels. Mixed-case, uppercase, and empty-string checks passed; git diff --check passed. No new reviews started.",
+        "findings": [
+          {
+            "location": "labels.js:1",
+            "issue": "Claude and Codex confirmed formatLabel returned lowercase instead of uppercase. Fixed with toUpperCase().",
+            "consequence": "Labels violated the documented uppercase contract.",
+            "counterevidence": "Post-fix checks confirm uppercase output and preservation of empty strings."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "repair",
+            "passed": true,
+            "evidence": "The workspace diff changes only labels.js, replacing toLowerCase() with toUpperCase(), which uppercases strings and preserves empty strings. Commands include assertions for mixed-case, uppercase, and empty-string inputs, with no new review launched or follow-up permission requested. The reported finding accurately describes the corrected defect from the frozen reports."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 32035,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 86508,
+          "cached_input_tokens": 68096,
+          "output_tokens": 476
+        },
+        "completedCommands": 4,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 6788,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12606,
+          "cached_input_tokens": 0,
+          "output_tokens": 92
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "0851f53e23cf68c3d90decf0e991bcb59a14f3e1c5604a751129a58909995669"
+    }
+  ]
+}

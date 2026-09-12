@@ -12,14 +12,14 @@ Review Rust code for structural improvements without confusing style preferences
 ## Core rules
 
 1. Preserve observable behavior. Treat public API, errors, panic contracts, ordering, allocation, blocking, serialization, ABI/FFI, feature behavior, and unsafe invariants as behavior when relevant.
-2. Move in tiny steps. Every planned step should compile and have a named verification check.
+2. Move in small behavior-preserving steps with meaningful verification. A proposed step is not an executed or compiled change; label validation evidence accurately.
 3. Keep the two hats separate. Do not mix refactoring with feature or bug behavior changes in the same step.
 4. Treat smells as hypotheses. A metric or scanner signal is not a finding until code context shows a real maintenance cost.
 5. Adapt Fowler to Rust rather than translating object-oriented mechanics literally.
 6. Respect the repository's edition, MSRV, features, `no_std` status, targets, CI policy, and semver obligations.
 7. Prioritize refactoring that makes an expected change safer or easier. Put speculative cleanup last.
 
-Read [references/principles.md](references/principles.md) before evaluating candidates.
+Consult [references/principles.md](references/principles.md) when behavior-preservation or assessment boundaries need deeper treatment. Load supporting catalogs only for the candidates under consideration.
 
 ## Workflow
 
@@ -46,9 +46,9 @@ For a public library, assume signature, visibility, error, trait, field, and ser
 
 ### 2. Establish a trustworthy baseline
 
-Use documented project or CI commands first. Do not invent a stricter policy and report its failures as project defects.
+In assessment mode, inspect existing checks and run them only when their result is needed to support a conclusion. In implementation mode, establish a relevant baseline, reusing unchanged verified results. Use documented project or CI commands; do not invent a stricter policy and report its failures as project defects.
 
-Typical read-only baseline commands are:
+For a workspace-wide change, relevant checks may include the following; this is not a mandatory four-command baseline for a targeted review:
 
 ```bash
 cargo fmt --all -- --check
@@ -82,7 +82,7 @@ The scanner is read-only and heuristic. Verify every candidate manually. Never c
 
 ### 4. Search in four layers
 
-Read [references/smell-catalog.md](references/smell-catalog.md) while reviewing.
+Consult [references/smell-catalog.md](references/smell-catalog.md) for the smell categories found in the scoped code; skip unrelated categories.
 
 #### A. Local mechanical signals
 
@@ -159,7 +159,7 @@ Do not collapse these into a pseudo-precise score.
 
 ### 6. Select the Rust form of the Fowler move
 
-Read [references/refactoring-catalog.md](references/refactoring-catalog.md) before writing the approach.
+Consult [references/refactoring-catalog.md](references/refactoring-catalog.md) for nontrivial transformations or Rust-specific compatibility risks in the proposed approach.
 
 Apply these decision rules:
 
@@ -191,12 +191,12 @@ Do not propose a rewrite when a sequence of small transformations can reach the 
 
 ### 8. Produce the report
 
-Use [references/report-template.md](references/report-template.md).
+Use [references/report-template.md](references/report-template.md) for a substantial assessment or when a full plan artifact is requested. For a small scope, report only relevant fields below; a clean assessment does not need empty sections.
 
-The report must contain:
+For a substantial assessment, include these fields where relevant:
 
 - scope, constraints, and exclusions;
-- baseline commands and results;
+- validation evidence, including baseline commands and results when executed;
 - prioritized findings with exact evidence;
 - Rust-specific false-positive analysis;
 - Fowler move and precise Rust target shape;
@@ -230,4 +230,4 @@ When the user explicitly asks to perform the refactor, keep the same protocol:
 - avoid opportunistic unrelated edits;
 - show any behavior or compatibility change separately;
 - stop at the last green state if a step cannot be proven safe;
-- finish with the full project-defined verification suite and a concise change summary.
+- finish with the narrowest meaningful verification and required project checks; broaden or repeat only for affected shared contracts, new changes, failures, or unresolved risks. Summarize actual results concisely.

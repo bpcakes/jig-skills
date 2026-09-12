@@ -132,7 +132,7 @@ Use `../audit-common/SKILL.md` as authoritative. Typical mappings:
 - `critical`: service/operator or attacker can recover plaintext content or key material at scale despite a central zero-knowledge/E2EE claim.
 - `high`: sensitive content, secrets, keys, tokens, or recovery material leak in plaintext to storage, network, logs, traces, telemetry, queues, or third parties.
 - `medium`: sensitive metadata, content-derived summaries, relationship data, precise location, durable identifiers, or claim-conflicting indexes leak in plaintext.
-- `low`: ambiguous naming, missing tests, weak documentation, retention uncertainty, or lower-impact metadata overcollection.
+- `low`: demonstrated lower-impact metadata overcollection or another bounded violation of the scoped claim. Ambiguous naming, missing tests/documentation, and retention uncertainty belong in limitations or follow-up questions unless a concrete violation is established.
 - `informational`: matrix-only classification, limitation, positive evidence, or recommended follow-up without a concrete failure.
 
 ## Limitations To State

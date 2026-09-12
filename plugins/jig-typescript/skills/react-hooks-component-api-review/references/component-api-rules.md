@@ -210,15 +210,7 @@ Be careful with "only allow `<Tab />` children" advice. TypeScript cannot reliab
 
 Callbacks are part of the public contract. They should describe exactly what the consumer receives and whether the component uses the return value.
 
-Flag:
-
-- `Function`
-- `any`
-- `(...args: any[]) => void`
-- `onChange?: (value: any) => void`
-- `onClick?: (event: unknown) => void`
-- Callbacks named generically while receiving domain data: `onAction`, `onEvent`, `onChange`.
-- Callback return values typed as meaningful but ignored by implementation.
+Investigate broad callbacks such as `Function`, `any`, or `(...args: any[]) => void` by tracing accepted callers to the payload and return-value handling. Report a mismatch only when an accepted call can fail or violate the promised contract. A checked interoperability adapter, intentional `unknown` boundary, or generic callback name is not itself a defect. If a return value is promised to control behavior but ignored, show the affected caller and consequence.
 
 Prefer precise React event handlers for DOM events:
 
@@ -365,7 +357,7 @@ type TextboxProps = {
 
 Public props should describe what the consumer wants, not how the component is implemented.
 
-Flag props such as:
+Investigate these props for an exposed implementation dependency or concrete consumer cost; their spelling alone is not a finding:
 
 - `data`, `item`, `config`, `options` when the domain noun is known.
 - `isCustom`, `customRenderer`, `overrideComponent`, `internalState`, `usePortal`, `portalRoot`, `containerRef`, `menuRef`.

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const { skillReadEvidence } = await import(process.env.EVAL_TEST_LIBRARY || './run.mjs');
 const root = process.env.EVAL_TEST_SOURCE || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const read = file => readFileSync(path.join(root, file), 'utf8');
+const sha = value => createHash('sha256').update(value).digest('hex');
 
 test('read evidence has permutation-invariant, unique, disjoint set encoding', () => {
   const event = (command, output) => ({ type: 'item.completed', item: {
@@ -46,4 +48,21 @@ test('SQLx severity distinguishes minor defects from optional preferences', () =
   assert.match(entry, /First establish a defect/);
   assert.match(entry, /Only then choose severity/);
   assert.match(entry, /Optional improvements:.*Do not report these as defects/);
+});
+
+test('Astra provenance sidecar identifies reports without claiming durable raw artifacts', () => {
+  const provenance = JSON.parse(read('evals/results/2026-09-12-astra-provenance.json'));
+  assert.equal(provenance.artifactPolicy.rawArtifactsCommitted, false);
+  assert.equal(provenance.artifactPolicy.durability, 'machine-local-temporary');
+  assert.equal(provenance.reports.length, 4);
+  for (const entry of provenance.reports) {
+    const bytes = read(`evals/results/${entry.file}`);
+    const report = JSON.parse(bytes);
+    assert.equal(entry.reportSha256, sha(bytes), entry.file);
+    for (const key of ['sourceCommit', 'sourceRun', 'harnessHash', 'suiteHash']) {
+      assert.equal(entry[key], report[key], `${entry.file} ${key}`);
+    }
+    assert.equal(entry.repositoryReverifiable, false);
+    assert.match(entry.sourceRun, /^\/tmp\/jig-skill-evals-/);
+  }
 });

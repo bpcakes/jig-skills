@@ -33,8 +33,9 @@ The launcher defaults to:
 Supported launcher options:
 
 - `--model <model>`: override `composer-2.5`.
+- `--milestone <name>`: complete only the milestone requested by the user. Omit for a whole-plan request; plan size does not narrow the requested scope.
 - `--force`: pass `--force` to `cursor-agent`, allowing commands unless Cursor explicitly denies them. Use only when the user asked for unattended, force, yolo, or similar execution.
-- `--worktree <name>`: pass `--worktree <name>` so Cursor works in an isolated Cursor worktree. Use only when the ExecPlan file is committed or otherwise available from the selected worktree base.
+- `--worktree <name>`: create a new isolated Cursor worktree. Use only when the ExecPlan file is committed or otherwise available from the selected worktree base. On success, the launcher verifies Git's registered checkout and emits a final JSON line containing `cursorWorktree`.
 - `--workspace <path>`: set the repository workspace path if running from outside the repo root.
 - `--extra-instruction <text>`: append user-specific implementation constraints to Cursor's prompt.
 - `--skip-model-check`: skip `cursor-agent --list-models` validation.
@@ -44,19 +45,20 @@ Supported launcher options:
 1. Inspect the repository state before delegating:
    - `git status --short --untracked-files=all`
    - confirm the ExecPlan path exists and is inside the intended workspace.
-2. Launch Cursor Agent through the bundled script.
-3. Wait for the command to finish. Do not leave a `cursor-agent` session running when ending the turn.
+2. Pass the requested completion scope and constraints through the bundled script. Whole-plan implementation is the default; use `--milestone` only for a milestone-limited request.
+3. Wait for the command to finish, retaining its live session handle. A wait timeout is not a terminal failure: poll that same session, and do not launch a duplicate while it is running. Keep the user informed during long work.
 4. Inspect the result:
    - `git status --short --untracked-files=all`
-   - read the ExecPlan `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` sections if Cursor changed the plan.
-   - run or review the validation commands Cursor reports when feasible.
-5. Summarize what Cursor changed, what validation ran, and any remaining work or blockers.
+   - read the ExecPlan's progress and acceptance criteria even if Cursor did not change the plan; inspect the resulting code and reported validation evidence.
+   - reuse valid validation results; run missing meaningful checks when feasible. Do not infer completion from an exit code or checked box alone.
+5. If requested implementation remains and no material blocker exists, continue the same authorized Cursor workflow from the actual workspace, passing the remaining work and verified progress. After an initial `--worktree` run, read the launcher's final `cursorWorktree` JSON value, verify that directory still exists, and invoke the launcher there with that path as `--workspace`; omit `--worktree`, because that option creates a new checkout. The launcher fails a nominally successful worktree run when it cannot uniquely verify the registered checkout; do not guess the path. If only validation or progress records remain, perform those checks and reconcile the records directly; do not launch another implementation run for bookkeeping. If a continuation makes no progress, inspect the cause before retrying rather than repeating the same launch unchanged. Do not switch implementation providers silently.
+6. Finish only when the requested scope and validation are complete, the user stops or changes the task, or a concrete blocker requires user input or an unavailable capability. Report completion separately from command status, with exact remaining items when blocked. Do not leave a live Cursor session unowned when handing back a terminal result.
 
 ## Guardrails
 
 - Do not pass `--force` unless the user explicitly asked for unattended execution or accepted that Cursor may run commands without interactive approval.
 - Do not delegate from a vague chat plan. If the plan is only in chat, first create or ask for a checked-in ExecPlan using `write-exec-plan`.
-- Do not rewrite the ExecPlan yourself after Cursor finishes unless the user asks you to fix the plan. Report stale or missing plan updates as a finding.
+- Correct stale or missing progress records directly from verified code and validation evidence as part of the authorized implementation. Do not rewrite the user's objectives or mark acceptance complete without evidence.
 - Preserve user work. If the current workspace has unrelated dirty files, include that context in the Cursor prompt through `--extra-instruction` or stop and ask if the dirty state makes delegation risky. If using `--worktree`, first confirm the ExecPlan exists in the selected worktree base; untracked or unstaged plan edits in the original checkout will not automatically exist there.
 - If `cursor-agent` is missing, not authenticated, or the requested model is unavailable, surface the failure. Do not silently fall back to a different implementation agent.
 
@@ -68,3 +70,4 @@ When reporting back, keep it concise:
 - Files changed.
 - Validation commands and pass/fail status.
 - Remaining unchecked ExecPlan items or blocker evidence.
+- For a `--worktree` launch, the verified `cursorWorktree` path emitted by the launcher.

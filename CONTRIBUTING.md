@@ -31,6 +31,7 @@ Run commands from the repository root. Select the checks for the helper you chan
 | Changed helper | Command |
 |---|---|
 | Skill evaluation harness | `node --test evals/*.test.mjs` |
+| Cursor ExecPlan launcher | `python3 plugins/jig-exec-plans/skills/cursor-implement-exec-plan/scripts/test_run_cursor_execplan.py` |
 | Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
 | Privacy-audit scripts | `bash plugins/jig-privacy-audit/scripts/test_fixtures.sh` |
 | Rust abstraction-police collector | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-abstraction-police/tests -v` |

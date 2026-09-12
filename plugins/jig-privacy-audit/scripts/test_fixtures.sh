@@ -30,6 +30,22 @@ assert len(data["sentinels"]) == 6, data["sentinels"]
 assert all(item["value"].startswith("ZKNET::zknet-fixture::") for item in data["sentinels"]), data["sentinels"]
 PY
 
+# The documented supplied-capture workflow must work in a fresh shell without
+# inheriting the generation example's JIG_ZKNET_RUN_DIR variable.
+mkdir "$tmp_dir/supplied-capture"
+cp "$network_fixtures/sentinels.json" "$tmp_dir/supplied-capture/sentinels.json"
+printf '%s\n' '{"log":{"entries":[]}}' >"$tmp_dir/supplied-capture/capture.har"
+(
+  unset JIG_ZKNET_RUN_DIR
+  cd "$tmp_dir/supplied-capture"
+  JIG_ZKNET_SKILL_DIR="$plugin_root/skills/network-payload-zero-knowledge-test"
+  JIG_ZKNET_OUTPUT_DIR=$(mktemp -d)
+  PYTHONDONTWRITEBYTECODE=1 python3 "$JIG_ZKNET_SKILL_DIR/scripts/zknet_scan.py" \
+    scan-har --sentinels ./sentinels.json --first-party example.com \
+    --output "$JIG_ZKNET_OUTPUT_DIR/scan.json" ./capture.har
+  test -f "$JIG_ZKNET_OUTPUT_DIR/scan.json"
+)
+
 set +e
 PYTHONDONTWRITEBYTECODE=1 python3 "$network_script" scan-har \
   "$network_fixtures/third-party-http-leak.har" \

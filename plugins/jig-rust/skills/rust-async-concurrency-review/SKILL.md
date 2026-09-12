@@ -35,10 +35,10 @@ Prefer concrete findings over broad warnings. A finding must identify the exact 
 
 ## Optional scanner
 
-Before deep review, you may run the bundled scanner. It accepts the Rust repo or file to scan as an optional argument, defaulting to the current directory, so from the repository root use:
+Before deep review, you may run the bundled scanner. Resolve its location from this installed skill directory, independently of the target repository. It accepts the Rust repo or file to scan as an optional argument, defaulting to the current directory, so from the target repository root use:
 
 ```bash
-python3 plugins/jig-rust/skills/rust-async-concurrency-review/scripts/scan_async_rust.py .
+python3 /absolute/path/to/rust-async-concurrency-review/scripts/scan_async_rust.py .
 ```
 
 Use scanner hits only as leads. Never report a hit as a finding until you inspect the surrounding code and confirm the failure mode. For lock-heavy diffs or task-collection method spawns, add `--include-noisy` to include receiver-agnostic `.lock()` and `.spawn()` leads that are intentionally disabled by default.

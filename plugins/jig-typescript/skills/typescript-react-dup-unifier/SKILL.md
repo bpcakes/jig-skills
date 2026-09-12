@@ -48,7 +48,7 @@ Do not assume the most generic-looking location is the correct owner. Ownership 
 
 ### 2. Generate Structural Candidates
 
-Run the bundled scanner once at the default threshold:
+For repository-wide discovery, run the bundled scanner once at the default threshold when its existing tooling is available. For named definitions, compare them and their consumers directly; a scanner is optional. If Node.js or TypeScript is unavailable, continue with source-based comparison and state the discovery coverage limit rather than installing tools or blocking the assessment.
 
 ```bash
 node "<skill_dir>/scripts/typescript-react-dup-unifier.mjs" "<target>" \
@@ -118,7 +118,7 @@ Prefer these patterns in order when they fit:
 4. Declarative configuration when differences are data rather than behavior.
 5. Shared contract or type only, with separate implementations.
 
-Reject an abstraction that requires broad `options` bags, arbitrary lifecycle callbacks, conditional hooks, feature imports in shared code, or more than three independent boolean variants.
+Reject designs that introduce conditional hooks, invalid dependency direction, conflicting option combinations, incompatible lifecycles, or demonstrated caller burden. Options bags, callbacks, and boolean counts are prompts to inspect those consequences, not automatic rejection rules. Independent boolean capabilities may remain independent when their combinations are valid.
 
 ### 6. Apply Changes Only When Authorized
 

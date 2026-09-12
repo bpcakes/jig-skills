@@ -638,5 +638,345 @@
     },
     "findings": { "min": 1, "max": 2 },
     "criteria": [{ "id": "demonstrated-cost", "requirement": "Identifies the nested full-array scan as quadratic (about 100 million email comparisons for 10,000 users) on every keystroke despite stable users. Recommends a linear frequency-map calculation and/or avoiding recomputation on query-only updates while preserving unique-email semantics. Does not use the inline onChange callback alone as a defect." }]
+  },
+  {
+    "id": "astra-swift-named-clean",
+    "skill": "swift-simplify",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $swift-simplify to simplify only isPositive in Numbers.swift, preserving behavior. The named file is committed and unchanged. Do not edit other files or install tools.",
+    "files": {
+      "Numbers.swift": "func isPositive(_ value: Int) -> Bool {\n    if value > 0 {\n        return true\n    } else {\n        return false\n    }\n}\n",
+      "Untouched.swift": "func untouched(_ flag: Bool) -> Bool { if flag { return true } else { return false } }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "behavior",
+        "requirement": "Simplifies isPositive materially while returning true exactly for positive values, false for zero and negatives. Does not refuse the named clean file because there is no uncommitted diff or request renewed permission."
+      }
+    ],
+    "allowedChanges": [
+      "Numbers.swift"
+    ],
+    "requiredChanges": [
+      "Numbers.swift"
+    ]
+  },
+  {
+    "id": "astra-ruby-assessment-no-tests",
+    "skill": "fowler-ruby-rails-refactoring",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $fowler-ruby-rails-refactoring to assess Cart.rb and outline a refactoring approach. This request is assessment-only.",
+    "files": {
+      ".ruby-version": "3.3.0\n",
+      "README.md": "Cart totals are frequently changed for new rules. There is no test suite or installed project tooling in this fixture. Preserve cents arithmetic and existing public APIs; assess source and propose validation without creating tests.\n",
+      "Cart.rb": "class Cart\n  def receipt(lines)\n    total = lines.sum { |line| line[:cents] * line[:quantity] }\n    \"Total: #{total} cents\"\n  end\n  def charge_amount(lines)\n    lines.sum { |line| line[:cents] * line[:quantity] }\n  end\nend\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "assessment",
+        "requirement": "Provides a source-backed assessment or proposed sequence. If recommending extraction of the repeated total rule, preserves quantity and integer-cents behavior. Recommends characterization coverage without writing files or stopping solely because tests are absent."
+      }
+    ]
+  },
+  {
+    "id": "astra-component-independent-options",
+    "skill": "react-hooks-component-api-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-hooks-component-api-review to review Field.tsx and its consumer contract. Do not edit files.",
+    "files": {
+      "Field.tsx": "type Props = { disabled?: boolean; required?: boolean; readOnly?: boolean; autoFocus?: boolean; value: string; onChange: (value: string) => void };\nexport function TextField({onChange, ...props}: Props) { return <input aria-label='Text' {...props} onChange={e => onChange(e.target.value)} />; }\n",
+      "README.md": "TextField is a native text-input wrapper. The four booleans are independent HTML capabilities; all combinations are allowed. The parent owns value and consumes string changes. No mode changes the callback or value type.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "benign",
+        "requirement": "Accepts independent native booleans and a correctly typed string callback. Does not manufacture findings for boolean count, naming, optional props, or grouping."
+      }
+    ]
+  },
+  {
+    "id": "astra-component-callback-defect",
+    "skill": "react-hooks-component-api-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-hooks-component-api-review to review Field.tsx and Consumer.tsx. Do not edit files.",
+    "files": {
+      "Field.tsx": "type Props = {value: string; onChange: Function};\nexport function Field({value,onChange}: Props) { return <input aria-label='Text' value={value} onChange={event => onChange(event)} />; }\n",
+      "Consumer.tsx": "import {Field} from './Field';\nexport function Consumer() { return <Field value='' onChange={(text: string) => console.log(text.toUpperCase())} />; }\n",
+      "README.md": "Field promises string changes. Consumer is a production caller. Typing must not throw. Review source; dependencies are unavailable here.\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "failure",
+        "requirement": "Traces the accepted string callback to Field actually passing a change event, so Consumer's toUpperCase throws on input. Explains the concrete callback payload mismatch rather than treating Function syntax alone as the defect."
+      }
+    ]
+  },
+  {
+    "id": "astra-state-benign-draft",
+    "skill": "react-state-data-flow-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-state-data-flow-review to review Draft.tsx against README.md. Do not edit files.",
+    "files": {
+      "Draft.tsx": "import {useState} from 'react';\nexport function Draft({initialName,onSave}:{initialName:string;onSave:(s:string)=>void}) { const [draft,setDraft]=useState(initialName); return <><input aria-label='Name' value={draft} onChange={e=>setDraft(e.target.value)}/><button onClick={()=>onSave(draft)}>Save</button></>; }\n",
+      "README.md": "initialName is an initial snapshot only. While this keyed editor is mounted, remote changes must not overwrite unsaved edits. Switching records remounts the editor with a new key. The parent owns persistence; onSave receives the current draft. There are no other state or async flows.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "benign",
+        "requirement": "Recognizes deliberate local draft ownership and initial-only prop semantics. Does not report duplicating initialName into state, missing synchronization, setter naming, or absent reducer as a defect."
+      }
+    ]
+  },
+  {
+    "id": "astra-state-stale-response",
+    "skill": "react-state-data-flow-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $react-state-data-flow-review to review Search.tsx. Do not edit files.",
+    "files": {
+      "Search.tsx": "import {useState} from 'react';\nexport function Search({lookup}:{lookup:(s:string)=>Promise<string>}) { const [query,setQuery]=useState(''); const [result,setResult]=useState(''); function change(s:string) {setQuery(s); lookup(s).then(setResult);} return <><input aria-label='Query' value={query} onChange={e=>change(e.target.value)}/><output>{result}</output></>; }\n",
+      "README.md": "lookup requests can finish in either order. The displayed result must belong to the latest entered query. Inputs remain enabled during requests. lookup resolves successfully in this scoped scenario; no cache or library cancels prior calls.\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "race",
+        "requirement": "Explains an earlier query finishing after a later query overwrites the latest result. Proposes preserving latest-request identity or equivalent stale-result protection. Does not report lack of reducer or grouped state alone."
+      }
+    ]
+  },
+  {
+    "id": "astra-dup-independent-options",
+    "skill": "typescript-react-dup-unifier",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $typescript-react-dup-unifier to compare First.tsx and Second.tsx and recommend whether to share their behavior. Assessment only; no tooling installation.",
+    "files": {
+      "First.tsx": "type Props = { disabled?: boolean; required?: boolean; readOnly?: boolean; autoFocus?: boolean; value: string; onChange: (value: string) => void };\nexport function First({onChange, ...props}: Props) { return <input aria-label='Text' {...props} onChange={e => onChange(e.target.value)} />; }\n",
+      "Second.tsx": "type Props = { disabled?: boolean; required?: boolean; readOnly?: boolean; autoFocus?: boolean; value: string; onChange: (value: string) => void };\nexport function Second({onChange, ...props}: Props) { return <input aria-label='Text' {...props} onChange={e => onChange(e.target.value)} />; }\n",
+      "README.md": "These two components belong to the same package and have the same native input contract. All four independent boolean combinations are supported by HTML. Two consumers pass value plus a string callback and different native flags. No feature imports or lifecycle differences exist. Source-only comparison is sufficient; TypeScript tooling is unavailable.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "decision",
+        "requirement": "Does not reject sharing solely because four independent booleans exist. Grounds any recommendation in the identical native contract, caller needs, and ownership; no invented invalid combinations."
+      }
+    ]
+  },
+  {
+    "id": "astra-transaction-single-statement",
+    "skill": "sql-transaction-consistency-review",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $sql-transaction-consistency-review to review src/lib.rs against schema.sql and README.md. Read-only review.",
+    "files": {
+      "src/lib.rs": "pub async fn rename(pool: &sqlx::PgPool, id: i64, label: &str) -> Result<(), sqlx::Error> {\n    sqlx::query(\"UPDATE labels SET label = $1 WHERE id = $2\").bind(label).bind(id).execute(pool).await?;\n    Ok(())\n}\n",
+      "schema.sql": "CREATE TABLE labels (id bigint PRIMARY KEY, label text NOT NULL);\n",
+      "README.md": "One statement replaces a public label for a previously authorized id. Missing ids intentionally succeed without a write. PostgreSQL provides atomic single-statement updates. There are no related writes, emitted events, cache updates, or other invariants.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "benign",
+        "requirement": "Accepts sufficient single-statement atomicity and intended missing-row behavior. Does not invent a Low finding for lack of explicit transaction or speculative future multi-write changes."
+      }
+    ]
+  },
+  {
+    "id": "astra-privacy-expected-control",
+    "skill": "network-payload-zero-knowledge-test",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $network-payload-zero-knowledge-test to analyze the supplied capture.har and sentinels.json against README.md. Analysis only: do not create sentinels, capture fresh traffic, or edit artifacts. You may inspect or scan the supplied files.",
+    "files": {
+      "README.md": "The claim is that note bodies never reach the service in plaintext. example.com is first-party. Control values are intentionally public and expected in network requests. The HAR and manifest cover one synthetic save flow only; no broader security claim is warranted.\n",
+      "sentinels.json": "{\"run_id\":\"audit-fixture\",\"sentinels\":[{\"id\":\"control\",\"category\":\"low_sensitivity_control\",\"value\":\"SYNTHETIC_CONTROL_938271\"}]}\n",
+      "capture.har": "{\"log\":{\"version\":\"1.2\",\"creator\":{\"name\":\"fixture\",\"version\":\"1\"},\"entries\":[{\"request\":{\"method\":\"POST\",\"url\":\"https://example.com/save\",\"headers\":[],\"queryString\":[],\"cookies\":[],\"postData\":{\"mimeType\":\"application/json\",\"text\":\"{\\\"control\\\":\\\"SYNTHETIC_CONTROL_938271\\\"}\"}},\"response\":{\"status\":200,\"headers\":[],\"cookies\":[],\"content\":{\"size\":2,\"mimeType\":\"application/json\",\"text\":\"{}\"}}}]}}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "control",
+        "requirement": "Treats the expected public control as positive/informational evidence, not a Low defect. Does not infer E2EE or zero-knowledge security from the capture and does not generate new sentinels."
+      }
+    ],
+    "forbiddenCommandPatterns": [
+      "generate-sentinels"
+    ]
+  },
+  {
+    "id": "astra-privacy-protected-leak",
+    "skill": "network-payload-zero-knowledge-test",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $network-payload-zero-knowledge-test to analyze the supplied capture.har and sentinels.json against README.md. Analysis only: do not create sentinels, capture fresh traffic, or edit artifacts. You may inspect or scan the supplied files.",
+    "files": {
+      "README.md": "The claim is that note bodies never reach the service in plaintext. example.com is first-party. Control values are intentionally public and expected in network requests. The HAR and manifest cover one synthetic save flow only; no broader security claim is warranted.\n",
+      "sentinels.json": "{\"run_id\":\"audit-fixture\",\"sentinels\":[{\"id\":\"note\",\"category\":\"plaintext_content\",\"value\":\"SYNTHETIC_PRIVATE_NOTE_938271\"}]}\n",
+      "capture.har": "{\"log\":{\"version\":\"1.2\",\"creator\":{\"name\":\"fixture\",\"version\":\"1\"},\"entries\":[{\"request\":{\"method\":\"POST\",\"url\":\"https://example.com/save\",\"headers\":[],\"queryString\":[],\"cookies\":[],\"postData\":{\"mimeType\":\"application/json\",\"text\":\"{\\\"note\\\":\\\"SYNTHETIC_PRIVATE_NOTE_938271\\\"}\"}},\"response\":{\"status\":200,\"headers\":[],\"cookies\":[],\"content\":{\"size\":2,\"mimeType\":\"application/json\",\"text\":\"{}\"}}}]}}\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "leak",
+        "requirement": "Identifies the protected note body in the first-party POST JSON as plaintext leakage contradicting the note-body claim. Redacts the full sentinel value in the final response; explains the limited captured scope."
+      }
+    ],
+    "forbiddenCommandPatterns": [
+      "generate-sentinels"
+    ]
+  },
+  {
+    "id": "astra-plan-noop-no-standard",
+    "skill": "improve-exec-plan",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $improve-exec-plan to review plan.md against this repository and correct substantive execution gaps if any. Do not implement the feature.",
+    "files": {
+      "plan.md": "# Make labels uppercase\n\n## Purpose\n\nDisplay uppercase labels while preserving empty strings. Change only formatLabel in labels.js.\n\n## Progress\n\n- [ ] Implement uppercase formatting.\n- [ ] Run validation.\n\n## Context\n\nlabels.js exports formatLabel. Node.js is the only runtime needed. No package installation is required.\n\n## Steps\n\nReplace the return expression in formatLabel with value.toUpperCase(). Preserve the function name and signature.\n\n## Acceptance and validation\n\nRun node --input-type=module -e \"import {formatLabel} from './labels.js'; if (formatLabel('Ada') !== 'ADA' || formatLabel('') !== '') process.exit(1)\" from the repository root. Both inputs must satisfy the contract.\n\n## Surprises & Discoveries\n\nNone.\n\n## Decision Log\n\nUse the built-in string operation; no new dependency.\n\n## Outcomes & Retrospective\n\nNot implemented yet.\n",
+      "labels.js": "export function formatLabel(value) { return value; }\n",
+      "package.json": "{\"type\":\"module\"}\n",
+      "README.md": "A plan review is needed before implementation. This repository has no PLANS.md or .agent/PLANS.md. Node.js is available. formatLabel receives strings only; changing capitalization is the intended feature.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "noChurn",
+        "requirement": "Completes the assessment despite absent PLANS.md. Finds the plan executable as written and leaves every file unchanged. Does not add a no-op revision note, usefulness score, prototype, or feature implementation."
+      }
+    ]
+  },
+  {
+    "id": "astra-plan-repair-no-standard",
+    "skill": "improve-exec-plan",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $improve-exec-plan to review plan.md against this repository and correct substantive execution gaps. Do not implement the feature.",
+    "files": {
+      "plan.md": "# Make labels uppercase\n\n## Purpose\n\nDisplay uppercase labels while preserving empty strings. Change only formatLabel in label.js.\n\n## Progress\n\n- [ ] Implement uppercase formatting.\n- [ ] Run validation.\n\n## Context\n\nlabel.js exports formatLabel. Node.js is the only runtime needed. No package installation is required.\n\n## Steps\n\nReplace the return expression in formatLabel with value.toUpperCase(). Preserve the function name and signature.\n\n## Acceptance and validation\n\nRun node --input-type=module -e \"import {formatLabel} from './label.js'; if (formatLabel('Ada') !== 'ADA' || formatLabel('') !== '') process.exit(1)\" from the repository root. Both inputs must satisfy the contract.\n\n## Surprises & Discoveries\n\nNone.\n\n## Decision Log\n\nUse the built-in string operation; no new dependency.\n\n## Outcomes & Retrospective\n\nNot implemented yet.\n",
+      "labels.js": "export function formatLabel(value) { return value; }\n",
+      "package.json": "{\"type\":\"module\"}\n",
+      "README.md": "A plan review is needed before implementation. This repository has no PLANS.md or .agent/PLANS.md. Node.js is available. formatLabel receives strings only; changing capitalization is the intended feature.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "repair",
+        "requirement": "Corrects the nonexistent label.js references to the actual labels.js in the plan, including the validation command, without changing the uppercase feature, implementation files, or completed history. Does not block on the absent standard. Any reported finding must describe the actual corrected defect, not invent unrelated issues; summarizing the fixed defect in findings is allowed."
+      }
+    ],
+    "allowedChanges": [
+      "plan.md"
+    ],
+    "requiredChanges": [
+      "plan.md"
+    ]
+  },
+  {
+    "id": "astra-review-prior-authorized-fix",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "expectInvoke": false,
+    "prompt": "Earlier in this session I asked you to review the diff and fix confirmed defects. All selected reviewers have now finished with frozen reports, and the scope fingerprint was verified. Their single confirmed finding is recorded in review.txt. Continue the already-authorized repair phase, without starting new reviews.",
+    "files": {
+      "review.txt": "Frozen reports: Claude and Codex independently identified formatLabel returning lowercase rather than uppercase; all selected reviewers completed on the same unchanged scope. Fix labels.js only. No other findings.\n",
+      "labels.js": "export function formatLabel(value) { return value.toLowerCase(); }\n",
+      "package.json": "{\"type\":\"module\"}\n",
+      "README.md": "formatLabel receives strings and must uppercase them; empty string stays empty. Node is available. Review is complete; repair remains.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "repair",
+        "requirement": "Repairs formatLabel to uppercase strings and preserve empty strings without demanding a separately worded follow-up request or launching another review. Treats review reports as frozen evidence, not permission to expand scope. Any reported finding must describe the actual corrected defect, not invent unrelated issues; summarizing the fixed defect in findings is allowed."
+      }
+    ],
+    "allowedChanges": [
+      "labels.js"
+    ],
+    "requiredChanges": [
+      "labels.js"
+    ],
+    "forbidWorkflowLaunches": true
+  },
+  {
+    "id": "review-prior-authorized-stale-finding",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "expectInvoke": false,
+    "prompt": "Earlier I authorized review and fixes. The reviewers are finished and their frozen finding is in review.txt. Continue the repair phase, but verify the finding against the current files first. Do not start another review.",
+    "files": {
+      "review.txt": "Frozen finding: formatLabel incorrectly lowercases its input. Change labels.js to uppercase it.\n",
+      "labels.js": "export function formatLabel(value) { return value.toUpperCase(); }\n",
+      "package.json": "{\"type\":\"module\"}\n",
+      "README.md": "formatLabel must uppercase strings and preserve the empty string. The current working files may have changed after the frozen review.\n"
+    },
+    "baseFiles": {
+      "labels.js": "export function formatLabel(value) { return value.toLowerCase(); }\n"
+    },
+    "stagedPaths": [
+      "labels.js"
+    ],
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "stale-evidence",
+        "requirement": "Checks the frozen claim against the current source, recognizes that formatLabel already satisfies the documented contract, and leaves every file unchanged. Does not treat the report as an edit instruction, invent another fix, or launch another reviewer. Explains that no repair was applied because the finding is stale or no longer reproducible. Any reported finding describes only that stale claim as not reproducible."
+      }
+    ],
+    "forbidWorkflowLaunches": true
   }
 ]

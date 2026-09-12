@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -165,10 +165,148 @@ test("all-skills --force replaces a differing dependency and installs a usable l
   assertInstalledParser(destination);
 });
 
+test("all-skills --force replaces a customized privacy dependency", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("audit-common").status, 0);
+  const customized = path.join(destination, "audit-common/local.md");
+  writeFileSync(customized, "custom copy\n");
+  const result = install("--force");
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(customized), false);
+  assert.equal(existsSync(path.join(destination, "network-payload-zero-knowledge-test/SKILL.md")), true);
+});
+
 test("destination option rejects missing values before installation", () => {
   for (const args of [["--dest"], ["--dest", "--force"]]) {
     const result = spawnSync("sh", [installer, "codex", ...args], { encoding: "utf8" });
     assert.equal(result.status, 2);
     assert.match(result.stderr, /Missing directory for --dest/);
   }
+});
+
+const privacySkills = readdirSync(path.join(repo, "plugins/jig-privacy-audit/skills"))
+  .filter(name => name !== "audit-common");
+
+test("each standalone privacy skill contains its required common resources", async t => {
+  for (const skill of privacySkills) await t.test(skill, t => {
+    const { destination, install } = fixture(t);
+    const result = install(skill);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(path.join(destination, "audit-common/SKILL.md"), "utf8"),
+      readFileSync(path.join(repo, "plugins/jig-privacy-audit/skills/audit-common/SKILL.md"), "utf8"));
+    const schema = JSON.parse(readFileSync(path.join(destination, "audit-common/templates/finding.schema.json")));
+    assert.ok(schema.properties);
+    assert.equal(existsSync(path.join(destination, skill, "SKILL.md")), true);
+  });
+});
+
+test("privacy dependency conflicts fail before writes and require explicit replacement", async t => {
+  for (const args of [["network-payload-zero-knowledge-test"], ["--force", "network-payload-zero-knowledge-test"],
+    ["audit-common", "network-payload-zero-knowledge-test"]]) await t.test(args.join(" "), t => {
+    const { destination, install } = fixture(t);
+    assert.equal(install("audit-common").status, 0);
+    const customized = path.join(destination, "audit-common/local.md");
+    writeFileSync(customized, "preserve me");
+    const result = install(...args);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /No skills were changed/);
+    assert.equal(readFileSync(customized, "utf8"), "preserve me");
+    assert.equal(existsSync(path.join(destination, "network-payload-zero-knowledge-test")), false);
+    assert.equal(install("--force", "audit-common", "network-payload-zero-knowledge-test").status, 0);
+    assert.equal(existsSync(customized), false);
+  });
+});
+
+test("matching automatic privacy dependency is preserved and installed helpers run outside the checkout", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("network-payload-zero-knowledge-test").status, 0);
+  const common = path.join(destination, "audit-common");
+  const before = statSync(common);
+  assert.equal(install("--force", "network-payload-zero-knowledge-test").status, 0);
+  assert.equal(statSync(common).ino, before.ino);
+  assert.equal(statSync(common).ctimeMs, before.ctimeMs);
+  for (const [skill, script] of [["network-payload-zero-knowledge-test", "zknet_scan.py"],
+    ["crypto-implementation-static-review", "crypto_static_scan.py"],
+    ["vulnerability-disclosure-and-retest-manager", "vdrm_register.py"]]) {
+    assert.equal(install(skill).status, 0);
+    const result = spawnSync("python3", [path.join(destination, skill, "scripts", script), "--help"],
+      { cwd: path.dirname(destination), encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /usage:/i);
+  }
+});
+
+test("all-skills privacy conflict skips dependents, not unrelated skills", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("audit-common").status, 0);
+  const customized = path.join(destination, "audit-common/local.md");
+  writeFileSync(customized, "preserve me");
+  const result = install();
+  assert.equal(result.status, 0, result.stderr);
+  for (const skill of privacySkills) assert.equal(existsSync(path.join(destination, skill)), false, skill);
+  assert.equal(readFileSync(customized, "utf8"), "preserve me");
+  assertInstalledParser(destination);
+});
+
+test("all-skills isolates simultaneous review and privacy dependency conflicts", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("comprehensive-review", "audit-common").status, 0);
+  const reviewMarker = path.join(destination, "comprehensive-review/local.md");
+  const privacyMarker = path.join(destination, "audit-common/local.md");
+  writeFileSync(reviewMarker, "preserve review dependency\n");
+  writeFileSync(privacyMarker, "preserve privacy dependency\n");
+
+  const result = install();
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /Skipping review-fix-loop:.*comprehensive-review/);
+  assert.match(result.stderr, /Skipping .*audit-common/);
+  assert.equal(readFileSync(reviewMarker, "utf8"), "preserve review dependency\n");
+  assert.equal(readFileSync(privacyMarker, "utf8"), "preserve privacy dependency\n");
+  assert.equal(existsSync(path.join(destination, "review-fix-loop")), false);
+  for (const skill of privacySkills) assert.equal(existsSync(path.join(destination, skill)), false, skill);
+  assert.equal(existsSync(path.join(destination, "rust-error-handling-review/SKILL.md")), true);
+});
+
+test("invalid or unknown selected targets fail before any copying", t => {
+  const { destination, install } = fixture(t);
+  for (const target of ["../skills", "unknown-skill"]) {
+    const result = install("rust-simplify", target);
+    assert.equal(result.status, 1);
+    assert.equal(existsSync(destination), false);
+  }
+});
+
+test("Claude standalone privacy installation also includes common resources", t => {
+  const { destination } = fixture(t);
+  const result = spawnSync("sh", [installer, "claude", "--dest", destination, "network-payload-zero-knowledge-test"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(path.join(destination, "audit-common/templates/finding.schema.json")), true);
+});
+
+test("Claude explicit privacy install preserves a conflicting common dependency", t => {
+  const { destination } = fixture(t);
+  const run = (...args) => spawnSync("sh", [installer, "claude", "--dest", destination, ...args], { encoding: "utf8" });
+  assert.equal(run("audit-common").status, 0);
+  const customized = path.join(destination, "audit-common/local.md");
+  writeFileSync(customized, "preserve me\n");
+  const result = run("network-payload-zero-knowledge-test");
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /No skills were changed/);
+  assert.equal(readFileSync(customized, "utf8"), "preserve me\n");
+  assert.equal(existsSync(path.join(destination, "network-payload-zero-knowledge-test")), false);
+});
+
+test("Claude all-skills skips privacy dependents when common dependency conflicts", t => {
+  const { destination } = fixture(t);
+  const run = (...args) => spawnSync("sh", [installer, "claude", "--dest", destination, ...args], { encoding: "utf8" });
+  assert.equal(run("audit-common").status, 0);
+  const customized = path.join(destination, "audit-common/local.md");
+  writeFileSync(customized, "preserve me\n");
+  const result = run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /Skipping .*audit-common/);
+  for (const skill of privacySkills) assert.equal(existsSync(path.join(destination, skill)), false, skill);
+  assert.equal(readFileSync(customized, "utf8"), "preserve me\n");
+  assert.equal(existsSync(path.join(destination, "rust-error-handling-review/SKILL.md")), true);
 });

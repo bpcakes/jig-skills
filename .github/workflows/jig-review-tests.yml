@@ -33,3 +33,4 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node --test plugins/jig-review/tests/*.test.mjs
       - run: node --test evals/*.test.mjs
+      - run: python3 plugins/jig-exec-plans/skills/cursor-implement-exec-plan/scripts/test_run_cursor_execplan.py

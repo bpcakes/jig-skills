@@ -7,11 +7,10 @@ Usage: scripts/install.sh codex|claude [--force] [--dest directory] [skill-name.
 
 Installs skills from this repository's plugins into the selected agent's skill directory.
 If no skill names are provided, all compatible skills are installed.
-In that mode, without --force, an incompatible review-fix-loop dependency skips
-only that loop.
+In that mode, without --force, an incompatible dependency skips only its dependents.
 --dest selects the skills directory directly, overriding the agent default.
 --force replaces selected skills. An automatic dependency is never overwritten;
-name comprehensive-review explicitly with --force to replace a differing copy.
+name the dependency explicitly with --force to replace a differing copy.
 EOF
 }
 
@@ -35,6 +34,18 @@ find_skill_source() {
     done
     printf 'Unknown skill: %s\n' "$1" >&2
     return 1
+}
+
+required_dependency() {
+    case "$1" in
+        review-fix-loop) printf '%s\n' comprehensive-review ;;
+        audit-common) ;;
+        *)
+            if [ -f "$plugins_dir/jig-privacy-audit/skills/$1/SKILL.md" ]; then
+                printf '%s\n' audit-common
+            fi
+            ;;
+    esac
 }
 
 if [ "$#" -lt 1 ]; then
@@ -115,62 +126,73 @@ if [ "$#" -eq 0 ]; then
     fi
 fi
 
-needs_comprehensive=0
-has_comprehensive=0
+# Validate all requested targets before copying or replacing anything.
 for skill in "$@"; do
     case "$skill" in
-        review-fix-loop)
-            needs_comprehensive=1
-            ;;
-        comprehensive-review)
-            has_comprehensive=1
+        ''|*[!a-z0-9-]*|-*)
+            printf 'Invalid skill name: %s\n' "$skill" >&2
+            exit 1
             ;;
     esac
-done
-automatic_comprehensive=0
-skip_review_fix_loop=0
-if [ "$target_agent" = "codex" ] && [ "$needs_comprehensive" -eq 1 ]; then
-    dependency_source=$(find_skill_source comprehensive-review)
-    dependency_target="$dest/comprehensive-review"
-    if [ -e "$dependency_target" ] || [ -L "$dependency_target" ]; then
-        if ! diff -qr "$dependency_source" "$dependency_target" >/dev/null 2>&1; then
-            if [ "$install_all" -eq 1 ] && [ "$force" -eq 0 ]; then
-                skip_review_fix_loop=1
-            elif [ "$has_comprehensive" -ne 1 ] || [ "$force" -ne 1 ]; then
-                printf '%s\n' \
-                    'Existing comprehensive-review differs from this checkout; review-fix-loop requires the matching copy.' \
-                    'No skills were changed. To replace both copies, select comprehensive-review and review-fix-loop explicitly with --force (and the same --dest, if used).' >&2
-                exit 1
-            fi
-        fi
-    fi
-    if [ "$has_comprehensive" -eq 0 ]; then
-        automatic_comprehensive=1
-        set -- comprehensive-review "$@"
-        printf 'Required dependency: comprehensive-review (matching existing copy is preserved)\n'
-    fi
-fi
-
-mkdir -p "$dest"
-
-for skill in "$@"; do
-    if [ "$skill" = "review-fix-loop" ] && [ "$skip_review_fix_loop" -eq 1 ]; then
-        printf 'Skipping review-fix-loop: existing comprehensive-review differs from this checkout; continuing with other skills.\n' >&2
-        continue
-    fi
+    find_skill_source "$skill" >/dev/null
     if [ "$target_agent" = "claude" ] && is_codex_only_skill "$skill"; then
         printf 'Unsupported for Claude direct install: %s\n' "$skill" >&2
         exit 1
     fi
+done
+
+automatic_dependencies=
+skipped_dependents=
+for dependency in comprehensive-review audit-common; do
+    dependents=
+    selected_dependency=0
+    for skill in "$@"; do
+        if [ "$skill" = "$dependency" ]; then selected_dependency=1; fi
+        if [ "$(required_dependency "$skill")" = "$dependency" ]; then
+            dependents="$dependents $skill"
+        fi
+    done
+    if [ -z "$dependents" ]; then continue; fi
+    dependency_source=$(find_skill_source "$dependency")
+    dependency_target="$dest/$dependency"
+    if [ -e "$dependency_target" ] || [ -L "$dependency_target" ]; then
+        if ! diff -qr "$dependency_source" "$dependency_target" >/dev/null 2>&1; then
+            if [ "$install_all" -eq 1 ] && [ "$force" -eq 0 ]; then
+                skipped_dependents="$skipped_dependents$dependents"
+            elif [ "$selected_dependency" -ne 1 ] || [ "$force" -ne 1 ]; then
+                printf 'Existing %s differs from this checkout; these skills require the matching copy:%s\n' "$dependency" "$dependents" >&2
+                printf 'No skills were changed. To replace these copies, select %s and the dependent skills explicitly with --force (and the same --dest, if used).\n' "$dependency" >&2
+                exit 1
+            fi
+        fi
+    fi
+    if [ "$selected_dependency" -eq 0 ]; then
+        automatic_dependencies="$automatic_dependencies $dependency"
+        set -- "$dependency" "$@"
+        printf 'Required dependency: %s (matching existing copy is preserved)\n' "$dependency"
+    fi
+done
+
+mkdir -p "$dest"
+
+for skill in "$@"; do
+    case " $skipped_dependents " in
+        *" $skill "*)
+            printf 'Skipping %s: existing %s differs from this checkout; continuing with other skills.\n' "$skill" "$(required_dependency "$skill")" >&2
+            continue
+            ;;
+    esac
 
     source=$(find_skill_source "$skill")
     target="$dest/$skill"
 
     if [ -e "$target" ] || [ -L "$target" ]; then
-        if [ "$skill" = "comprehensive-review" ] && [ "$automatic_comprehensive" -eq 1 ]; then
-            printf 'Keeping matching dependency: %s\n' "$skill"
-            continue
-        fi
+        case " $automatic_dependencies " in
+            *" $skill "*)
+                printf 'Keeping matching dependency: %s\n' "$skill"
+                continue
+                ;;
+        esac
         if [ "$force" -eq 1 ]; then
             rm -rf "$target"
         else

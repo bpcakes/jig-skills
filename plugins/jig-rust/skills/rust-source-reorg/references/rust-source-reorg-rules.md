@@ -100,7 +100,7 @@ Do not change visibility (`pub`, `pub(crate)`, etc.) or semantics. This is a str
 - Preserve all `#[cfg(...)]`-gated items in their original conditional context. A `#[cfg(test)] use ...` must remain gated.
 - Preserve `#[macro_use]` attributes on `extern crate` or `use` items - these are order-sensitive in older editions.
 - Preserve any `// rustfmt::skip` or `#[rustfmt::skip]` directives and do not reorganize the annotated item.
-- After reorganization, the file must compile identically (same warnings, same errors, same output) as before.
+- Preserve compilation behavior and runtime output. Removing a proven-unused import may remove its corresponding warning; do not require that warning to remain or introduce new diagnostics. Preserve order-sensitive macros and attributes when safe reordering is not established, and follow the project's formatter configuration.
 
 ## Process
 
@@ -111,6 +111,6 @@ For each file you reorganize:
 3. Reorder all top-level items per the canonical ordering.
 4. Sort and clean `derive` attributes.
 5. Verify no item was lost or duplicated.
-6. Output the complete reorganized file.
+6. Summarize changed files and relevant validation with file links. Return full source only when requested or when rewriting a supplied snippet.
 
-If you are uncertain whether an import is used (e.g., it may be used in a macro expansion or a `#[doc]` attribute), keep it and add a comment: `// TODO: verify if this import is still needed`.
+If you are uncertain whether an import is used (e.g., in a macro expansion or a `#[doc]` attribute), preserve it. Mention a material validation limitation in the response instead of adding a speculative TODO.

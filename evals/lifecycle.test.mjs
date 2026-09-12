@@ -54,6 +54,7 @@ test('terminal SIGINT during fixture Git setup starts no provider or subsequent 
   assert.equal(summary.state, 'interrupted');
   assert.equal(summary.results.length, 1, 'must not advance to another trial');
   assert.match(summary.results[0].error, /Interrupted by SIGINT/);
+  assert.deepEqual(summary.results[0].phases, { agent: 'not-started', judge: 'not-started' });
   assert.equal(existsSync(path.join(out, 'rust-implicit-simplify-1/agent.command.json')), false);
   assert.equal(existsSync(path.join(out, 'rust-implicit-simplify-2')), false);
 });
@@ -98,6 +99,11 @@ for (const [phase, signal] of [['agent', 'SIGINT'], ['grade', 'SIGTERM']]) {
     assert.equal(summary.results.length, 1);
     assert.equal(summary.results[0].passed, false);
     assert.match(summary.results[0].error, new RegExp(signal));
+    assert.deepEqual(summary.results[0].phases,
+      phase === 'agent' ? { agent: 'attempted', judge: 'not-started' } : { agent: 'completed', judge: 'attempted' });
+    const execution = JSON.parse(readFileSync(path.join(out, `rust-implicit-simplify-1/${phase}.execution.json`), 'utf8'));
+    assert.equal(execution.stopReason, 'cancelled');
+    assert.equal(execution.timedOut, false);
     assert.equal(existsSync(path.join(out, 'rust-implicit-simplify-2')), false);
     if (phase === 'grade') assert.equal(existsSync(ready.cwd), false);
   });

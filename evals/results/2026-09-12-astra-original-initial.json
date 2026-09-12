@@ -1,0 +1,1311 @@
+{
+  "schemaVersion": 3,
+  "sourceRun": "/tmp/jig-skill-evals-KJaThx",
+  "sourceSummaryHash": "bfdcf25ac82c349534c9db3dc0b458de515492536b28bcc25037dbb763843f08",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-test-only-weakened",
+      "rust-test-only-valid-consolidation",
+      "rust-loaded-explain",
+      "rust-implicit-simplify",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-test-valid-testid",
+      "react-test-missed-confirmation",
+      "react-test-minor-display-gap",
+      "sqlx-minor-display-defect",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation"
+    ],
+    "missingTrials": [],
+    "plannedTrials": [
+      {
+        "id": "astra-swift-named-clean",
+        "iteration": 1
+      },
+      {
+        "id": "astra-ruby-assessment-no-tests",
+        "iteration": 1
+      },
+      {
+        "id": "astra-component-independent-options",
+        "iteration": 1
+      },
+      {
+        "id": "astra-component-callback-defect",
+        "iteration": 1
+      },
+      {
+        "id": "astra-state-benign-draft",
+        "iteration": 1
+      },
+      {
+        "id": "astra-state-stale-response",
+        "iteration": 1
+      },
+      {
+        "id": "astra-dup-independent-options",
+        "iteration": 1
+      },
+      {
+        "id": "astra-transaction-single-statement",
+        "iteration": 1
+      },
+      {
+        "id": "astra-privacy-expected-control",
+        "iteration": 1
+      },
+      {
+        "id": "astra-privacy-protected-leak",
+        "iteration": 1
+      },
+      {
+        "id": "astra-plan-noop-no-standard",
+        "iteration": 1
+      },
+      {
+        "id": "astra-plan-repair-no-standard",
+        "iteration": 1
+      },
+      {
+        "id": "astra-review-prior-authorized-fix",
+        "iteration": 1
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-09-12T09:15:38.305Z",
+  "cli": "codex-cli 0.154.0",
+  "model": "gpt-6-astra",
+  "configuration": {
+    "agent": {
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    },
+    "judge": {
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "sourceCommit": "9c47b5e36bb641721abeb7343bed82d72350cdb2",
+  "harnessHash": "b82ddb8eca64fa52a2ced3d12e91e0845a368ec769237c916768f3dabae4c3ee",
+  "suiteHash": "183d9597d759aad9c1be932484610a80a0804bc5093f1c562641cea6912d944d",
+  "exporterHash": "733b2260263555ab48202584b6b031f15d1635f1544bf65bec128453ea734fa0",
+  "skillHashes": {
+    "audit-common": "4541cf948ba3b149b518980bb68878a5231911fe1206a14a9a2dac69a6141bb7",
+    "audit-intake-and-evidence-map": "7486aaeb3fd0657f88c8a75ff780deef9c7eefe2842a4f09fc94564f9c74703c",
+    "client-encryption-boundary-audit": "f339d51670eca15e50272b74491121bef28a55fbe5603fdebb6b015d2d0163ab",
+    "comprehensive-review": "b4ca4736d52689c460ad68159efe956ef88852eb643de7988cc707c685ee23e1",
+    "crypto-architecture-review": "aebe7e8f47d88f355e9e86d23b5a4ad722689814711bbfe22d125b691d17e11a",
+    "crypto-implementation-static-review": "4a5a23e0c783b971f8443197a30c8a3786fa235cb5ca354d6fb759b20cd0c411",
+    "cursor-implement-exec-plan": "67cfcb1a75abd7f1892167fe12a7e8068f17272bfc6d4e47164e8cb96e3b1fed",
+    "fowler-ruby-rails-refactoring": "fdbacac1bb4b44c2c04bb902d1d447fc72261559d16eb8b5412b6ccf0a235c9d",
+    "fowler-rust-refactoring": "a638dbcd96d794a5cacd5d034b2f19002aaa6be63fb708a37320a6286822081d",
+    "improve-exec-plan": "a543f2ec104c87216b2751bf3a9f31e1c7a8249d3825818613e11d1955c7960c",
+    "metadata-leakage-inventory": "b944ca38cf4df60622c7c6690849a81867bd8475ee3615033b78671374e1d063",
+    "network-payload-zero-knowledge-test": "7b4c66b11fa379a547066eeb810c3fb2cbdd9a0fd90c43dab74eb7ecff67e3aa",
+    "privacy-claims-field-classifier": "d4d74596291b9ecebc9ad65f8ee2b2531035123eb3f2e23660af9e8ad6025ad1",
+    "react-hooks-component-api-review": "a5331dd4595243c7c6732a284a2666c3c4db25694cacec73956a04b2511cc144",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "218cbeab12fb14c396dc5cc4467c035225b5dbdcc8e68fc96bdd23d8cc5790ba",
+    "react-test-quality-review": "b8f8185a36c704500f41946e55749efc138c7cf344b125516ecf53da9ddd2ed5",
+    "review-fix-loop": "2ff9a38fcf5bb1d5fd404c50b5764ed0c76ff2d66c4263690a16c04f6257dc1a",
+    "rust-abstraction-police": "059a233367b1f650387c01f5fa50b27039ce36cdc59f87d7fc1360998eee4b6f",
+    "rust-architecture-review": "99f2c76d141925202c295848377b11ffe9a87095d445fa7db317ad7125ca5b7e",
+    "rust-async-concurrency-review": "25f70d06bc8af873dde8446666ef7c84141a408fc71fcb1424312d27e3de6196",
+    "rust-dup-unifier": "68fe5150bd228a0aa74f2a77ccb247d7d992d85f26fb006af6fafa585f86569a",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "7f3b4e08d6651fd27ffa7105e356e718a715c25764ded77df90625ed9caaecdb",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "bff89abcc34bb24f721b9478fe45c0f036075a3898c77fdaba910fe439d7d0b5",
+    "rust-test-quality-review": "45b4096320f491ebe88d4ccb6dc6e3788cc2105c1bc08e9987673ef7595ec6c2",
+    "server-decryptability-and-plaintext-path-audit": "31b2e563445173269890ad17a8f3d0c3c90b30403984c7c30ea56d4bcdf608e3",
+    "sql-transaction-consistency-review": "c7e8b0dcc6f5729d5ffcd8675cc55a739f29f1d258f1c3caa9e978c9f81c19f2",
+    "sqlx-query-safety-review": "af846ba60ecfcb87f104d889061e3a60c29eebd5a84b443ccc1cca05b2c44b06",
+    "swift-simplify": "80b7c9d245726d933ebee9517a2f0db42f7958a9b06cd38b3d4a6594da20d388",
+    "telemetry-crash-logs-support-leakage-audit": "6fc8675f5c7208acbe52439198ce7786abb7480120754b57b36748b81637deea",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "3546b9ed459dd7b53b68d92e84ef62478ee441aefe3731713efee09797c209f4",
+    "typescript-react-dup-unifier": "ecffed9a77fa98756cb0838c3898be46b660d9aefc3491db5838ddedbbcfdeab",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "5caed888b99c97f8a6d5b002b31cd984b90b503c59375c5311710f3d4cfd1af8",
+    "write-exec-plan": "00dd36c664085d5b59854fd72fbf864790ae48859a93b9c313d5f14a0a0567e1"
+  },
+  "passed": 10,
+  "total": 13,
+  "skillsEvaluated": 9,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Requested model/effort are verified against recorded CLI arguments; a null reported configuration means effective provider selection was not independently exposed. Resource-read and repeated-command metrics are proxies, not judgments of waste.",
+    "Current source verification covers every discovery entrypoint and all files of recorded target skills and skills read or possibly read in completed trials; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "astra-swift-named-clean",
+      "iteration": 1,
+      "skill": "swift-simplify",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "Numbers.swift"
+      ],
+      "reads": [
+        "swift-simplify"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/swift-simplify/SKILL.md; pwd; rg --files -g Numbers.swift -g AGENTS.md; git status --short'",
+        "/usr/bin/bash -lc 'cat AGENTS.md Numbers.swift; git diff -- Numbers.swift; command -v swift'",
+        "/usr/bin/bash -lc 'git diff --check; git diff -- Numbers.swift; git status --short'"
+      ],
+      "answer": {
+        "answer": "Simplified only `isPositive` in `Numbers.swift` to `return value > 0`, preserving behavior. `git diff --check` passed. Swift is unavailable, so compilation was not run.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "Numbers.swift replaces the if/else in isPositive with `return value > 0`, returning true exactly for positive integers and false for zero and negatives. The committed, unchanged file was simplified without refusal or renewed permission; Untouched.swift remains identical."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 28526,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 65985,
+          "cached_input_tokens": 48256,
+          "output_tokens": 308
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "resourceReadCommands": 1,
+        "resourceReadOutputBytes": 6491
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 6783,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12521,
+          "cached_input_tokens": 0,
+          "output_tokens": 77
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "5be3da9e7c4d525bbfde37aa1424f4cf409e846a8d22a63cde92578147da4190"
+    },
+    {
+      "id": "astra-ruby-assessment-no-tests",
+      "iteration": 1,
+      "skill": "fowler-ruby-rails-refactoring",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "fowler-ruby-rails-refactoring"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!vendor'\"' -g '\"'!node_modules'\"' -g '\"'!*lock*'\"' -g 'AGENTS.md' -g '*Cart*' -g '*cart*' -g '*test*' -g '*spec*' -g 'Gemfile' -g '.ruby-version' -g '.tool-versions' -g '.rubocop*' -g 'README*'; git status --short; cat .agents/skills/fowler-ruby-rails-refactoring/SKILL.md\"",
+        "/usr/bin/bash -lc 'ls -la; cat AGENTS.md README.md .ruby-version; nl -ba Cart.rb; git log -5 --oneline -- Cart.rb; cat .agents/skills/fowler-ruby-rails-refactoring/references/fowler-principles.md .agents/skills/fowler-ruby-rails-refactoring/references/smell-to-refactoring-map.md .agents/skills/fowler-ruby-rails-refactoring/references/ruby-rails-playbook.md'",
+        "/usr/bin/bash -lc \"rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"'; rg -n 'Cart|receipt|charge_amount|load_defaults' --glob '\"'!.agents/**'\"' --glob '\"'!.git/**'\"' .; cat .agents/skills/fowler-ruby-rails-refactoring/references/smell-to-refactoring-map.md\"",
+        "/usr/bin/bash -lc 'ruby --version; ruby -c Cart.rb; ruby .agents/skills/fowler-ruby-rails-refactoring/scripts/scan_refactoring_opportunities.rb Cart.rb --format markdown'"
+      ],
+      "answer": {
+        "answer": "Cart.rb has one worthwhile opportunity: centralize its duplicated totals rule.\n\nContext: Ruby 3.3.0; no Rails configuration, project analysis tooling, tests, or callers were found. README.md states totals change frequently. History contains only the fixture commit. `ruby -c Cart.rb` passed; the bundled scanner reported no threshold candidates. No files were changed, and no behavioral test baseline is available.\n\nRefactoring approach:\n1. Before implementation, characterize both public methods: empty input returns 0 and \"Total: 0 cents\"; multiple lines sum correctly; zero, negative, and large integer values retain current behavior; malformed inputs retain existing exceptions. Verify inputs remain unchanged.\n2. Apply Extract Function to move receipt's exact sum expression into a private `total_cents(lines)` method. Keep receipt formatting unchanged and leave charge_amount untouched. Run characterization checks and syntax validation.\n3. Replace charge_amount's duplicated expression with the same helper. Repeat checks for both public methods, preserving their names, visibility, positional arguments, and return types.\n\nKeep the existing `sum`, symbol-key access, multiplication order, and cents arithmetic. Avoid caching or input normalization. A private calculation method is sufficient; a service, strategy, or Money class has no demonstrated benefit here. Check external subclasses or overrides before implementation because none are available in this fixture.\n\nValidation is proposed only, as requested by README.md. New pricing rules, rounding, coercion, and input validation would be separate behavior-changing work.",
+        "findings": [
+          {
+            "location": "Cart.rb:3 and Cart.rb:7",
+            "issue": "P2 — Duplicated business rule: both methods contain `lines.sum { |line| line[:cents] * line[:quantity] }`. Fowler move: Extract Function into a shared private calculation. Confidence: high that the duplication merits consolidation.",
+            "consequence": "Frequently changing totals rules require coordinated edits in two places; updating only one could make the receipt disagree with the charge amount.",
+            "counterevidence": "Both methods are short and currently agree; no defect is demonstrated. Change pressure is documented in README.md but not corroborated by substantial history or tests. External caller coverage would increase confidence in behavior preservation. If receipt and charge totals are intended to follow different policies, reassess which calculation they should share."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "assessment",
+            "passed": true,
+            "evidence": "Identifies the identical sum expressions in Cart.rb:3 and :7 and proposes staged extraction into private total_cents(lines), preserving quantity multiplication, integer-cents arithmetic, public APIs, and receipt formatting. Proposes characterization coverage for empty and multiple lines, integer edge cases, exceptions, and unchanged inputs despite absent tests. Before and after are identical, and fileChanges is empty."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 40246,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 101025,
+          "cached_input_tokens": 76544,
+          "output_tokens": 993
+        },
+        "completedCommands": 4,
+        "repeatedCommands": [],
+        "resourceReadCommands": 3,
+        "resourceReadOutputBytes": 79563
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 7853,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13167,
+          "cached_input_tokens": 0,
+          "output_tokens": 103
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "f37c782e1544494ba408663827336c9f7ec6c8a1429e2c9657573259dfa864a5"
+    },
+    {
+      "id": "astra-component-independent-options",
+      "iteration": 1,
+      "skill": "react-hooks-component-api-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-hooks-component-api-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g '*Field*' -g 'package.json' -g 'index.ts' -g 'index.tsx'; cat .agents/skills/react-hooks-component-api-review/SKILL.md\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md; rg --files -g '\"'!.agents/**'\"' -g '\"'!.git/**'\"'; nl -ba Field.tsx; cat .agents/skills/react-hooks-component-api-review/references/component-api-rules.md\"",
+        "/usr/bin/bash -lc \"cat README.md; rg -n 'TextField|Field|aria-label|label' --glob '\"'!.agents/**'\"' --glob '\"'!.git/**'\"'; git status --short\""
+      ],
+      "answer": {
+        "answer": "No actionable findings. Reviewed `Field.tsx` and the consumer contract in `README.md`.\n\nThe four booleans represent independent native HTML capabilities, so a mode union is unnecessary. Required `value` and `onChange` establish parent-owned controlled state, and the callback receives the documented string payload.\n\nNo consumer implementations, tests, or build configuration were available, so validation was limited to static review. No files were edited.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "benign",
+            "passed": true,
+            "evidence": "The review reports no findings, correctly identifies the four booleans as independent native HTML capabilities requiring no mode union, and accepts the string callback and parent-owned controlled value. It invents no issues with boolean count, naming, optional props, or grouping."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 21569,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 73918,
+          "cached_input_tokens": 51840,
+          "output_tokens": 401
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "resourceReadCommands": 2,
+        "resourceReadOutputBytes": 23610
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 7482,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12810,
+          "cached_input_tokens": 0,
+          "output_tokens": 79
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "a11125d72cf9800025fd44ff5ae117f228ae514fc0d37b63649be49fb08b747c"
+    },
+    {
+      "id": "astra-component-callback-defect",
+      "iteration": 1,
+      "skill": "react-hooks-component-api-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-hooks-component-api-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'Field.tsx' -g 'Consumer.tsx' -g 'AGENTS.md' -g 'package.json' -g '*test*' -g '*spec*'; cat .agents/skills/react-hooks-component-api-review/SKILL.md\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md; nl -ba Field.tsx; nl -ba Consumer.tsx; cat .agents/skills/react-hooks-component-api-review/references/component-api-rules.md; rg --files -g '\"'!**/.agents/**'\"' -g '\"'!**/.git/**'\"'\"",
+        "/usr/bin/bash -lc \"cat README.md; rg -n 'Field|Consumer' --glob '\"'!SKILL.md'\"' --glob '\"'!component-api-rules.md'\"' --glob '\"'!AGENTS.md'\"' .\""
+      ],
+      "answer": {
+        "answer": "Reviewed Field.tsx and Consumer.tsx against the documented string-change contract. Found one high-priority API defect. No files edited; validation was static because dependencies are unavailable.",
+        "findings": [
+          {
+            "location": "Field.tsx:1–2; Consumer.tsx:2",
+            "issue": "High: `onChange: Function` permits a string callback, but Field passes a React change event. This contradicts README.md's string-change promise and the production consumer's expectations.",
+            "consequence": "Typing calls `text.toUpperCase()` on an event object and throws. Define `onChange: (value: string) => void` and invoke it with `event.currentTarget.value`. Consumer's callback can remain unchanged; a regression test should verify typing delivers a string without throwing.",
+            "counterevidence": "Passing an event would be valid for an explicitly typed native-event API, but the README and existing consumer establish a string payload here. The required string `value` clearly establishes controlled ownership; it does not prevent this callback mismatch."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "failure",
+            "passed": true,
+            "evidence": "The finding traces Field passing a React change event to Consumer's string callback, where text.toUpperCase() throws on typing. It identifies the payload mismatch against the documented string contract and recommends passing event.currentTarget.value, rather than treating Function syntax alone as the defect."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 24801,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 74071,
+          "cached_input_tokens": 52096,
+          "output_tokens": 476
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "resourceReadCommands": 3,
+        "resourceReadOutputBytes": 24315
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 8091,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12694,
+          "cached_input_tokens": 0,
+          "output_tokens": 80
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "df7ca2d24cfa69c782d0780cefccfa4920d93199abb9fbad47a2353c36a47cde"
+    },
+    {
+      "id": "astra-state-benign-draft",
+      "iteration": 1,
+      "skill": "react-state-data-flow-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-state-data-flow-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'README.md' -g 'Draft.tsx' -g '*test*' -g 'package.json' -g 'SKILL.md'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/react-state-data-flow-review/SKILL.md'",
+        "/usr/bin/bash -lc 'nl -ba Draft.tsx'",
+        "/usr/bin/bash -lc 'cat AGENTS.md && cat README.md'"
+      ],
+      "answer": {
+        "answer": "Verdict: pass. No state/data-flow issues found in the scoped files.\n\nDraft.tsx matches README.md: initialName seeds the local editable draft once, remote prop changes preserve unsaved edits, and Save passes the current draft to parent-owned persistence. Record switching resets state through the documented keyed remount.\n\nState ownership and transitions pass; no derived state, context, store, or async flows are present. Static review only; the parent’s keyed remount is assumed from README.md. No files edited.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "benign",
+            "passed": true,
+            "evidence": "The review correctly states that initialName seeds the local draft once, prop changes preserve unsaved edits, Save passes the current draft to parent-owned persistence, and documented keyed remounts reset state. It reports no findings and does not flag synchronization, state duplication, setter naming, or reducer absence as defects."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 17475,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 54102,
+          "cached_input_tokens": 34560,
+          "output_tokens": 324
+        },
+        "completedCommands": 4,
+        "repeatedCommands": [],
+        "resourceReadCommands": 2,
+        "resourceReadOutputBytes": 11084
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 6343,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12563,
+          "cached_input_tokens": 0,
+          "output_tokens": 89
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "a14d41f34aab281d0b424b684c0e0fbe1700424331177c048ddb2a63f725d9ef"
+    },
+    {
+      "id": "astra-state-stale-response",
+      "iteration": 1,
+      "skill": "react-state-data-flow-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "react-state-data-flow-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/react-state-data-flow-review/SKILL.md'",
+        "/usr/bin/bash -lc \"rg --files -g 'Search.tsx' -g '*Search*' -g 'AGENTS.md' -g 'package.json'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md\nnl -ba Search.tsx'",
+        "/usr/bin/bash -lc \"rg --files -g '\"'! .git'\"' -g '\"'!node_modules'\"' -g '\"'!.agents/**'\"' -g '\"'!.git/**'\"'\"",
+        "/usr/bin/bash -lc 'cat README.md'"
+      ],
+      "answer": {
+        "answer": "Verdict: needs changes. Reviewed Search.tsx and README.md; no files edited.\n\nState map: Search owns query and result; the input updates query, and lookup promises update result. No cache or store participates.\n\nChecks: async response ordering fails; result is not associated with its query. No additional ownership, derived-state, or transition issues found. Static review only; no test setup is provided.",
+        "findings": [
+          {
+            "location": "Search.tsx:2",
+            "issue": "[High] Unconditional lookup completion can overwrite the latest query’s result.",
+            "consequence": "Typing A then B starts two requests. If B resolves first and A resolves afterward, the input shows B while the output shows A indefinitely, violating the documented requirement. Guard result updates with the latest request identity; also clear or hide the previous result while the current query is pending.",
+            "counterevidence": "README.md explicitly permits out-of-order completion and keeps input enabled. It confirms no cache or library cancels prior calls. Successful resolution is guaranteed, but response ordering is not; no caller or test supplies an alternative safeguard."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "race",
+            "passed": true,
+            "evidence": "The finding explains that typing A then B, with B resolving before A, leaves input B displaying result A. It recommends guarding updates with the latest request identity and does not flag missing reducers or grouped state."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 25539,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 73348,
+          "cached_input_tokens": 53504,
+          "output_tokens": 480
+        },
+        "completedCommands": 5,
+        "repeatedCommands": [],
+        "resourceReadCommands": 1,
+        "resourceReadOutputBytes": 11027
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 6857,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12710,
+          "cached_input_tokens": 9088,
+          "output_tokens": 68
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "2bb93780e906587f711c1a923eb7f72ca54e289b50ac1f1d803a40648aadbecb"
+    },
+    {
+      "id": "astra-dup-independent-options",
+      "iteration": 1,
+      "skill": "typescript-react-dup-unifier",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "typescript-react-dup-unifier"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!'\"\\\\.git' -g 'AGENTS.md' -g 'First.tsx' -g 'Second.tsx' -g 'package.json' -g 'tsconfig*.json'; cat .agents/skills/typescript-react-dup-unifier/SKILL.md\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md; rg --files --hidden -g '\"'!.git'\"' -g '\"'!.agents'\"'; cat .agents/skills/typescript-react-dup-unifier/references/report-contract.md .agents/skills/typescript-react-dup-unifier/references/unification-decision-rubric.md .agents/skills/typescript-react-dup-unifier/references/react-duplication-taxonomy.md; nl -ba First.tsx; nl -ba Second.tsx\"",
+        "/usr/bin/bash -lc \"cat README.md; rg -n --hidden -g '\"'!.git'\"' -g '\"'!.agents'\"' 'First|Second|TextInput'; node .agents/skills/typescript-react-dup-unifier/scripts/typescript-react-dup-unifier.mjs . --json .audit/typescript-react-dup-unifier.json --markdown .audit/typescript-react-dup-unifier.md\""
+      ],
+      "answer": {
+        "answer": "Recommend unify-now: one shared TextInput in the same package. Both components implement exactly the same controlled native-input contract. One cluster reviewed: unify-now 1; all other classifications 0. Assessment only; no source edits or installations. The scanner failed because TypeScript is unavailable; conclusions use source inspection. Tests, type checks, and builds were not run.",
+        "findings": [
+          {
+            "location": "First.tsx:1–2; Second.tsx:1–2; README.md:1",
+            "issue": "Identical component behavior and props create duplicate maintenance. Both render an input labeled “Text”, forward native flags and value, and convert change events into string callbacks. State ownership, accessibility, dependencies, and lifecycle match; neither contains hooks, effects, or an explicit client directive. README documents same-package ownership and two consumers, although their source is absent. Confidence: high for equivalence, limited for consumer compatibility.",
+            "consequence": "Use a package-local TextInput and shared TextInputProps, preserving the existing contract. Keep disabled, required, readOnly, and autoFocus independent: these are valid native HTML capabilities, not conflicting behavioral variants. Before extraction, characterize value rendering, string callbacks, labeling, and native flag forwarding. Then migrate First’s consumer followed by Second’s; retain temporary named exports if compatibility requires them and remove duplicates once consumers migrate. Validate with the package’s tests and type checks when available; no validation commands are defined here. Reverting the extraction and consumer imports provides a small rollback boundary.",
+            "counterevidence": "The duplication is only two tiny components, so immediate savings are modest. Consumer source and tests are unavailable, preventing independent verification of usage and change cadence. However, the implementations are identical and README explicitly confirms shared ownership and semantics; there is no demonstrated reason for separate behavior or a broader configurable abstraction."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "decision",
+            "passed": true,
+            "evidence": "Recommends a package-local shared TextInput based on identical controlled native-input behavior, same-package ownership, and two documented consumers. Explicitly preserves disabled, required, readOnly, and autoFocus as independent valid HTML capabilities, without inventing invalid combinations. Acknowledges that consumer source is unavailable, limiting compatibility verification."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 33115,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 77603,
+          "cached_input_tokens": 54784,
+          "output_tokens": 759
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "resourceReadCommands": 2,
+        "resourceReadOutputBytes": 26155
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 6885,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13245,
+          "cached_input_tokens": 0,
+          "output_tokens": 91
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "18eb3282207d5aa9d0f2894cfbd8bb632a31f965bf2e9b6223529680eb8d38d8"
+    },
+    {
+      "id": "astra-transaction-single-statement",
+      "iteration": 1,
+      "skill": "sql-transaction-consistency-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "sql-transaction-consistency-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'README.md' -g 'schema.sql' -g 'Cargo.toml' -g '*.rs' -g 'SKILL.md'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/sql-transaction-consistency-review/SKILL.md; nl -ba src/lib.rs; nl -ba schema.sql; nl -ba README.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md; rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"'\""
+      ],
+      "answer": {
+        "answer": "No transaction-consistency defects found. The single UPDATE is atomic, matches the schema and README contract, and propagates database errors. Missing IDs intentionally succeed; no dependent writes or external effects require a transaction. Read-only static review completed; no files changed or runtime tests run.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "benign",
+            "passed": true,
+            "evidence": "The response accepts the single UPDATE as atomic and missing-ID success as intentional, consistent with the README. It returns no findings and does not demand an explicit transaction or speculate about future multi-write changes."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 17453,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 58490,
+          "cached_input_tokens": 46464,
+          "output_tokens": 281
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "resourceReadCommands": 2,
+        "resourceReadOutputBytes": 15947
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 5808,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12540,
+          "cached_input_tokens": 9088,
+          "output_tokens": 67
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "b5b99548922a16fcb8476ee5a183a6d29fa64fd7a3669e24e28c65c5bf52d8f4"
+    },
+    {
+      "id": "astra-privacy-expected-control",
+      "iteration": 1,
+      "skill": "network-payload-zero-knowledge-test",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "audit-common",
+        "network-payload-zero-knowledge-test"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'README.md' -g 'capture.har' -g 'sentinels.json' -g 'AGENTS.md' -g '*zknet*' -g '*finding.schema.json'; cat .agents/skills/network-payload-zero-knowledge-test/SKILL.md .agents/skills/audit-common/SKILL.md\"",
+        "/usr/bin/bash -lc 'cat README.md .agents/skills/audit-common/templates/finding.schema.json; rg --files --hidden .agents/skills/network-payload-zero-knowledge-test; cat AGENTS.md'",
+        "/usr/bin/bash -lc \"python3 - <<'PY'\nimport json\nfrom urllib.parse import urlsplit\ns=json.load(open('sentinels.json')); h=json.load(open('capture.har'))\nprint('Manifest:',json.dumps([{k:v for k,v in x.items() if k\"'!='\"'value'} for x in s['sentinels']]))\nfor i,e in enumerate(h['log']['entries']):\n r=e['request']; c=e['response'].get('content',{})\n print(i,r['method'],urlsplit(r['url']).hostname,urlsplit(r['url']).path,'request fields',list(r),'response fields',list(e['response']),'content', {k:v for k,v in c.items() if k\"'!='\"'text'})\nprint('Log metadata:',{k:v for k,v in h['log'].items() if k\"'!='\"'entries'})\nPY\"",
+        "/usr/bin/bash -lc \"rg -n 'output|sentinels|def main|print\\\\(' .agents/skills/network-payload-zero-knowledge-test/scripts/zknet_scan.py; python3 - <<'PY'\nimport json\ns=json.load(open('sentinels.json')); h=json.load(open('capture.har'))\nt=json.dumps(h,indent=2)\nfor x in s['sentinels']: t=t.replace(x['value'],'[REDACTED_CONTROL]')\nprint(t)\nPY\"",
+        "/usr/bin/bash -lc 'python3 .agents/skills/network-payload-zero-knowledge-test/scripts/zknet_scan.py scan-har --sentinels sentinels.json --first-party example.com --output - capture.har'"
+      ],
+      "answer": {
+        "answer": "No confirmed privacy findings. capture.har entry 0 sends the configured low_sensitivity_control sentinel in plaintext JSON to POST https://example.com/save, as README.md explicitly permits. Manual inspection confirmed this expected match; the scanner skipped no fields.\n\nThe manifest contains no note-body sentinel, so this single synthetic save flow does not establish whether “note bodies never reach the service in plaintext.” Request and response bodies are present, but capture completeness and other flows remain unverified. No artifacts were changed or fresh traffic captured.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "control",
+            "passed": true,
+            "evidence": "The response identifies the plaintext low_sensitivity_control match in entry 0 as expected and permitted, reports no privacy findings, and assigns no Low defect. It explicitly says the absence of a note-body sentinel means this flow cannot establish the plaintext-protection claim. The commands only inspect or scan supplied files; before and after are identical and fileChanges is empty, supporting that no new sentinels were generated."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 32356,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 104812,
+          "cached_input_tokens": 89600,
+          "output_tokens": 723
+        },
+        "completedCommands": 5,
+        "repeatedCommands": [],
+        "resourceReadCommands": 1,
+        "resourceReadOutputBytes": 16113
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 7441,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13454,
+          "cached_input_tokens": 0,
+          "output_tokens": 108
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "9b436b27699d6cc074a44d900d286782e29c5882471145a7becce40b86ac759e"
+    },
+    {
+      "id": "astra-privacy-protected-leak",
+      "iteration": 1,
+      "skill": "network-payload-zero-knowledge-test",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "audit-common",
+        "network-payload-zero-knowledge-test"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'README.md' -g 'capture.har' -g 'sentinels.json' -g 'AGENTS.md'; cat .agents/skills/network-payload-zero-knowledge-test/SKILL.md .agents/skills/audit-common/SKILL.md\"",
+        "/usr/bin/bash -lc \"cat README.md sentinels.json .agents/skills/audit-common/templates/finding.schema.json; rg -n 'output|write|print|def |add_argument' .agents/skills/network-payload-zero-knowledge-test/scripts/zknet_scan.py\"",
+        "/usr/bin/bash -lc 'python3 -B .agents/skills/network-payload-zero-knowledge-test/scripts/zknet_scan.py scan-har --sentinels sentinels.json --first-party example.com capture.har; cat capture.har'"
+      ],
+      "answer": {
+        "answer": "Confirmed one high-severity claim violation in the supplied synthetic save flow. Scanned one HAR entry and one sentinel, with no fields skipped, and manually verified the match. No artifacts were changed or traffic captured. This evidence does not establish behavior beyond the supplied flow; capture settings and omitted traffic remain unverified.",
+        "findings": [
+          {
+            "location": "capture.har:1 — log.entries[0].request.postData.text; outbound POST https://example.com/save",
+            "issue": "ZK-NET-001 — High severity, high confidence; outbound_plaintext_to_service. The plaintext_content sentinel appears directly in the JSON note field: {\"note\":\"<SENTINEL:note>\"}. Transforms: raw and raw → json:$/note. This contradicts README.md’s claim that “note bodies never reach the service in plaintext.”",
+            "consequence": "The first-party service receives a readable note body. The likely cause is serialization before client-side encryption, though implementation code was not inspected. Encrypt protected content before upload. Reproduce locally by scanning the supplied HAR with sentinels.json and first-party domain example.com; after remediation, retest the save flow for raw and reversibly encoded content leakage.",
+            "counterevidence": "HTTPS protects transport but does not hide the note from the receiving service. The public-control exception does not apply: the manifest classifies this sentinel as plaintext_content. The response is empty JSON, providing no evidence of storage or onward disclosure. Only one synthetic save flow is represented."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "leak",
+            "passed": true,
+            "evidence": "The finding identifies the plaintext_content sentinel in log.entries[0].request.postData.text, the JSON note field sent by POST to first-party https://example.com/save, and explains that this contradicts README.md’s note-body claim. The supplied HAR confirms the match. The response redacts the value as <SENTINEL:note> and limits the conclusion to the single synthetic save flow, with omitted traffic and capture settings unverified."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 29276,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 82760,
+          "cached_input_tokens": 67712,
+          "output_tokens": 607
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "resourceReadCommands": 1,
+        "resourceReadOutputBytes": 16113
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 7004,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13072,
+          "cached_input_tokens": 0,
+          "output_tokens": 117
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "f2f14443678e26314f8533aa05d974e73886c40e7aada6e00445fc1d7f144dab"
+    },
+    {
+      "id": "astra-plan-noop-no-standard",
+      "iteration": 1,
+      "skill": "improve-exec-plan",
+      "mode": "explicit",
+      "passed": false,
+      "checks": {
+        "invocation": true,
+        "scope": false,
+        "findings": true,
+        "trace": true,
+        "outcome": false
+      },
+      "changed": [
+        "plan.md"
+      ],
+      "reads": [
+        "improve-exec-plan"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/improve-exec-plan/SKILL.md; cat .agent/PLANS.md; cat plan.md'",
+        "/usr/bin/bash -lc \"rg --files -g '\"'! .git'\"' -g '\"'!.agents/**'\"' -g '\"'!node_modules/**'\"'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md README.md package.json labels.js; rg --files --hidden -g '\"'!.git/**'\"' -g '*PLANS.md' -g '*test*'; rg -n 'formatLabel|labels.js|toUpperCase' --glob '\"'!.agents/**'\"' --glob '\"'!plan.md'\"' .; git status --short; git diff -- plan.md\"",
+        "/usr/bin/bash -lc \"node --input-type=module -e \\\"import {formatLabel} from './labels.js'; if (formatLabel('Ada') \"'!== '\"'ADA' || formatLabel('') \"'!== '\"'') process.exit(1)\\\"\"",
+        "/usr/bin/bash -lc 'git diff --check; git diff --stat'"
+      ],
+      "answer": {
+        "answer": "Reviewed plan.md; no substantive gaps found. Feature code unchanged.\n\n- Fixed: None needed.\n- Added: Required revision note only.\n- Strengthened: No changes needed; validation runs and fails as expected before implementation. Diff check passed.\n- Flagged: PLANS.md is absent, as README.md confirms.\n\nUsefulness score: 1/10 - The existing plan already matches the code, input contract, and runtime.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "noChurn",
+            "passed": false,
+            "evidence": "The assessment concluded that no substantive gaps existed despite absent PLANS.md, but after/plan.md adds a no-op 'Revision note' and the response includes a 'Usefulness score: 1/10'. Thus files were not left unchanged. Feature code remained unchanged."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 32543,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 77941,
+          "cached_input_tokens": 56576,
+          "output_tokens": 656
+        },
+        "completedCommands": 5,
+        "repeatedCommands": [],
+        "resourceReadCommands": 1,
+        "resourceReadOutputBytes": 14065
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 7861,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13489,
+          "cached_input_tokens": 0,
+          "output_tokens": 83
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "e6e9291236f72d0e4427a21a4284e49d186e2fce73a393f554746b9b3847c41c"
+    },
+    {
+      "id": "astra-plan-repair-no-standard",
+      "iteration": 1,
+      "skill": "improve-exec-plan",
+      "mode": "explicit",
+      "passed": false,
+      "checks": {
+        "invocation": false,
+        "scope": true,
+        "findings": false,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "plan.md"
+      ],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/improve-exec-plan/SKILL.md .agent/PLANS.md plan.md'",
+        "/usr/bin/bash -lc \"rg --files -g '\"'! .git'\"'\"",
+        "/usr/bin/bash -lc \"cat AGENTS.md README.md package.json labels.js; git status --short; rg --files --hidden -g '*PLANS.md' -g '\"'! .git'\"'; rg -n 'formatLabel|label\\\\.js|labels\\\\.js|test|validate' --glob '\"'!plan.md'\"' --glob '\"'!.agents/**'\"' --hidden -g '\"'!.git/**'\"'\"",
+        "/usr/bin/bash -lc \"node --input-type=module -e \\\"import {formatLabel} from './labels.js'; if (formatLabel('Ada') \"'!== '\"'ADA' || formatLabel('') \"'!== '\"'') process.exit(1)\\\"\"",
+        "/usr/bin/bash -lc 'git diff --check; git diff --stat; git diff -- plan.md'"
+      ],
+      "answer": {
+        "answer": "Updated plan.md only; feature not implemented.\n\n- Fixed: incorrect filename and validation import.\n- Added: evidence-backed revision note.\n- Strengthened: explicit validation success signal.\n- Flagged: PLANS.md is absent, as documented. Validation exits 1 as expected before implementation; diff checks pass.\n\nUsefulness score: 4/10 - Corrected a concrete path/import blocker; the implementation steps were otherwise sound.",
+        "findings": [
+          {
+            "location": "plan.md:5,13,22",
+            "issue": "The plan referenced nonexistent label.js instead of labels.js.",
+            "consequence": "The implementation target was incorrect, and validation would fail to import the module.",
+            "counterevidence": "labels.js exports the expected formatLabel function; the proposed uppercase operation matches the documented string-only contract. Corrected all references."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "repair",
+            "passed": true,
+            "evidence": "The plan's purpose, context, and validation import now reference the existing labels.js. The uppercase operation and empty-string acceptance remain unchanged; labels.js, package.json, and README.md are identical before and after. Progress remains unchecked and the outcome remains 'Not implemented yet.' The revision note acknowledges the absent planning standard and retains the plan structure without blocking."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 45357,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 78143,
+          "cached_input_tokens": 56192,
+          "output_tokens": 927
+        },
+        "completedCommands": 5,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 7296,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13542,
+          "cached_input_tokens": 0,
+          "output_tokens": 97
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "f4d3f9097b22137f2d2687bf44cb79db5630b195aeddd04cc15ced0fbc632c2b"
+    },
+    {
+      "id": "astra-review-prior-authorized-fix",
+      "iteration": 1,
+      "skill": "comprehensive-review",
+      "mode": "loaded",
+      "passed": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": false,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "labels.js"
+      ],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'review.txt' -g 'package.json' -g 'Cargo.toml' -g 'SKILL.md' -g '\"'!node_modules'\"'\"",
+        "/usr/bin/bash -lc 'git status --short; cat review.txt'",
+        "/usr/bin/bash -lc \"cat AGENTS.md labels.js package.json; rg --files -g '\"'!node_modules'\"' -g '\"'!.agents/**'\"' -g '\"'!.git/**'\"'\"",
+        "/usr/bin/bash -lc 'cat README.md'",
+        "/usr/bin/bash -lc \"node --input-type=module -e 'import assert from \\\"node:assert/strict\\\"; import { formatLabel } from \\\"./labels.js\\\"; assert.equal(formatLabel(\\\"Hello World\\\"), \\\"HELLO WORLD\\\"); assert.equal(formatLabel(\\\"\\\"), \\\"\\\"); assert.equal(formatLabel(\\\"ALREADY UPPER 123\"'!\"), \"ALREADY UPPER 123!\"); console.log(\"All label checks passed\");'\"'; git diff --check; git diff -- labels.js; git status --short\""
+      ],
+      "answer": {
+        "answer": "Fixed labels.js so formatLabel returns uppercase. Only labels.js changed. Local checks passed for mixed-case input, empty strings, and already-uppercase input; git diff --check passed. No new reviews started.",
+        "findings": [
+          {
+            "location": "labels.js:1",
+            "issue": "Confirmed by Claude and Codex: formatLabel returned lowercase instead of uppercase. Fixed.",
+            "consequence": "Labels violated the documented uppercase contract.",
+            "counterevidence": "Post-fix checks confirm uppercase output and preservation of empty strings."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "repair",
+            "passed": true,
+            "evidence": "The workspace diff changes only labels.js, replacing value.toLowerCase() with value.toUpperCase(), which uppercases strings and preserves empty strings. review.txt remains unchanged. The recorded commands inspect existing evidence and run local assertions; no new review or separate authorization request appears."
+          }
+        ]
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 29321,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 86520,
+          "cached_input_tokens": 67968,
+          "output_tokens": 524
+        },
+        "completedCommands": 5,
+        "repeatedCommands": [],
+        "resourceReadCommands": 1,
+        "resourceReadOutputBytes": 61
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 7835,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12626,
+          "cached_input_tokens": 9088,
+          "output_tokens": 81
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "resourceReadCommands": 0,
+        "resourceReadOutputBytes": 0
+      },
+      "artifactHash": "264f03a20136cc87e29ed55efca57366ca4b7f031724db64b72540f3f2327060"
+    }
+  ]
+}

@@ -15,10 +15,10 @@ Do not certify that cryptography is sound from static review alone. Report confi
 
 ## Fast Start
 
-Set `JIG_PRIVACY_AUDIT_PLUGIN` to this checkout's `plugins/jig-privacy-audit` directory. From the target repository root:
+Set `JIG_CRYPTO_SKILL_DIR` to the directory containing this installed `SKILL.md`, independently of the target repository. From the target repository root:
 
 ```bash
-python3 "$JIG_PRIVACY_AUDIT_PLUGIN/skills/crypto-implementation-static-review/scripts/crypto_static_scan.py" --root . --format markdown > crypto-static-scan.md
+python3 "$JIG_CRYPTO_SKILL_DIR/scripts/crypto_static_scan.py" --root . --format markdown
 ```
 
 Use the scan as a triage index, not as findings by itself. Confirm each issue by reading the call site, wrapper, tests, and reachable callers. The helper caps output with `--max-results` by default; use a narrower `--root` or raise the limit when investigating large repositories. JSON output includes `test_path: true` when a candidate appears under common test or fixture paths so reviewers can triage without hiding shipped-test risks.
@@ -94,7 +94,7 @@ Use IDs like `CRYPTO-IMPL-001`. Severity depends on the reachable impact:
 - `critical`: recoverable plaintext or key material at scale, nonce/key reuse that compromises many messages, unauthenticated encryption on attacker-controlled ciphertext with practical plaintext recovery, or server-side key access contradicting a central zero-knowledge claim.
 - `high`: plaintext sensitive values or keys flow to logs/network/storage/telemetry; static or predictable keys/nonces in production; ECB or custom encryption protects sensitive user content.
 - `medium`: CBC/CTR without evident MAC, weak KDF parameters, missing AAD binding, fragile serialization that can drop tags or versioning, poor key rotation/wrapping, or unproven nonce uniqueness.
-- `low`: hardening issues, incomplete documentation, ambiguous test fixtures, legacy compatibility paths gated away from sensitive data.
+- `low`: demonstrated low-impact violation of a cryptographic implementation contract. Hardening proposals, incomplete documentation, and ambiguous fixtures are limitations; legacy paths proven gated away from sensitive data are counterevidence.
 
 Each finding should include:
 

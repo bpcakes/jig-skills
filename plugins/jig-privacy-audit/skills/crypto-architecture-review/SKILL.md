@@ -78,7 +78,7 @@ Use `../audit-common/SKILL.md` severity rules. Use `CRYPTO-ARCH-###` finding IDs
 - `critical`: server/operator/support or a malicious server-controlled flow can recover plaintext or user keys at scale despite an E2EE/zero-knowledge claim.
 - `high`: plaintext, private keys, wrapping keys, recovery secrets, or reusable password-derived keys leak to server, logs, telemetry, backups, or unauthenticated recipients.
 - `medium`: nonce/IV collision risk, missing AAD binding, weak separation, stale device revocation, undocumented recovery escrow, or server key-substitution risk with meaningful privacy impact.
-- `low`: unclear documentation, missing cryptoperiod rationale, hardening gap, incomplete tests, or bounded metadata leakage.
+- `low`: demonstrated bounded metadata leakage or another low-impact violation of the stated architecture contract. Unclear documentation, missing rationale, hardening proposals, and incomplete tests are limitations or follow-up unless a concrete failure is established.
 
 ## Human Cryptographer Review Required
 

@@ -25,22 +25,24 @@ It cannot prove a system is zero knowledge, cryptographically sound, or free of 
 
 ## Workflow
 
+Choose the requested mode first. For supplied captures plus their sentinel manifest, analyze those artifacts directly: skip generation and capture, preserve the original sentinel mapping, and report missing flows as limitations. For an authorized new capture, generate sentinels once and exercise only the scoped flows. Neither mode authorizes live account activity, extra testing, or disclosure beyond the user's task.
+
 1. Define the privacy claim and network scope.
    - Identify first-party domains, third-party domains, browser/app clients, APIs, telemetry SDKs, sync endpoints, upload endpoints, search/indexing endpoints, and recovery flows.
    - Record the exact user-visible claim being tested, such as "notes are end-to-end encrypted" or "we cannot read vault item bodies."
 
-2. Generate synthetic sentinels.
+2. For a new capture, generate synthetic sentinels.
    - Use high-entropy, unique, easy-to-search values.
    - Use different sentinel classes for content, metadata, key-like material, recovery data, and credentials so a match can be classified accurately.
    - Keep a private sentinel manifest and do not commit it.
 
-3. Exercise representative flows while capturing network traffic.
+3. For a new capture, exercise representative scoped flows while capturing network traffic.
    - Capture login, onboarding, item create/update/delete, sync, search, share/export/import, attachment upload/download, recovery setup, recovery use, settings changes, telemetry submission, logout, and background refresh.
    - Prefer HAR with response bodies when browser testing. Preserve logs before navigation where needed.
    - For APIs, also save raw request/response payloads from approved proxies, integration tests, or app logs when available.
 
 4. Scan the captured artifacts.
-   - Use `scripts/zknet_scan.py generate-sentinels` to create a manifest.
+   - Use the supplied manifest or the one generated for this capture; do not replace it at analysis time.
    - Use `scripts/zknet_scan.py scan-har` for HAR files.
    - Manually inspect any match, especially decoded matches and response echoes.
 
@@ -118,8 +120,8 @@ Use this mapping as a starting point, then adjust with `../audit-common/SKILL.md
 - `critical`: network traffic exposes key material, recovery secrets, or plaintext at scale in a way that defeats a central zero-knowledge claim.
 - `high`: plaintext sensitive content, credentials, key material, recovery secrets, or claimed encrypted fields appear in request/response bodies, URLs, headers, cookies, telemetry, or third-party payloads.
 - `medium`: sensitive metadata appears where the product claims metadata privacy, or sentinels appear in first-party telemetry without user-visible need.
-- `low`: low-sensitivity control values appear as expected, or evidence indicates a hardening/documentation issue without concrete sensitive leakage.
-- `informational`: no observed sentinel match in the tested flows, with limitations clearly stated.
+- `low`: demonstrated low-impact leakage or collection that violates the scoped claim or intended recipient boundary.
+- `informational`: expected low-sensitivity control matches, positive evidence, missing evidence, or no observed protected-sentinel match in the tested flows, with limitations clearly stated. Expected controls are not defects.
 
 Common finding labels:
 
@@ -133,22 +135,26 @@ Common finding labels:
 
 ## Helper Script
 
-Set `JIG_PRIVACY_AUDIT_PLUGIN` to this checkout's `plugins/jig-privacy-audit` directory. Run the helper from the target repository root or audit workspace.
+Set `JIG_ZKNET_SKILL_DIR` to the directory containing this installed `SKILL.md`, not the target repository. Run the helper from the target repository root or audit workspace. Use a fresh private run directory for new captures; for supplied captures, reuse their original sentinel manifest rather than generating replacement values.
 
 Generate a sentinel manifest:
 
 ```bash
-python3 "$JIG_PRIVACY_AUDIT_PLUGIN/skills/network-payload-zero-knowledge-test/scripts/zknet_scan.py" \
-  generate-sentinels --run-id zknet-local-001 --output /tmp/zknet-sentinels.json
+JIG_ZKNET_RUN_DIR=$(mktemp -d)
+python3 "$JIG_ZKNET_SKILL_DIR/scripts/zknet_scan.py" \
+  generate-sentinels --run-id zknet-local-001 --output "$JIG_ZKNET_RUN_DIR/sentinels.json"
 ```
 
-Scan one or more HAR files:
+Scan a supplied HAR and its matching sentinel manifest in a fresh shell. This example does not depend on the generation variable above:
 
 ```bash
-python3 "$JIG_PRIVACY_AUDIT_PLUGIN/skills/network-payload-zero-knowledge-test/scripts/zknet_scan.py" \
-  scan-har --sentinels /tmp/zknet-sentinels.json --first-party example.com \
-  --output /tmp/zknet-scan.json capture.har
+JIG_ZKNET_OUTPUT_DIR=$(mktemp -d)
+python3 "$JIG_ZKNET_SKILL_DIR/scripts/zknet_scan.py" \
+  scan-har --sentinels ./sentinels.json --first-party example.com \
+  --output "$JIG_ZKNET_OUTPUT_DIR/scan.json" ./capture.har
 ```
+
+Keep the output directory private and record its path in the audit notes. For a newly generated manifest, either run capture and scan in the same shell as generation or supply the manifest's explicit path; do not generate replacement sentinels for an existing capture.
 
 Pass at least one `--first-party` domain for first-party versus third-party classification. If omitted, the output includes a configuration warning and third-party classification is disabled. Literal or manifest sentinel values must be at least 16 characters to avoid broad false positives. The decoder recursively tries common reversible encodings up to `--max-decode-depth`; deeply nested or very large encoded fields can be expensive, so keep `--max-field-bytes` and `--max-decoded-values` bounded for untrusted captures.
 

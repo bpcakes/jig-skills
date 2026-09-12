@@ -18,7 +18,7 @@ Apply these rules throughout the assessment:
 1. **Preserve observable behavior.** Refactoring changes internal structure, not product behavior. Treat HTTP contracts, return values, raised exceptions, database writes, transaction boundaries, locks, callbacks, jobs, emitted events, logs relied on operationally, files, emails, and external calls as potentially observable.
 2. **Use tiny, reversible steps.** Each step should leave the code loadable and the relevant tests passing. Prefer a chain of obvious transformations over one clever rewrite.
 3. **Keep the two hats separate.** Do not mix refactoring with feature work, bug fixes, optimization, dependency upgrades, migrations, or policy changes. Put non-refactoring work in a separate section and, during implementation, separate commits.
-4. **Start from green.** Run the narrowest relevant tests before proposing or applying a change. When coverage is weak, first add characterization tests around current behavior.
+4. **Establish behavior before changing it.** During assessment, inspect existing coverage and recommend characterization tests where needed; do not add tests or require execution before proposing a refactoring. During authorized implementation, establish a relevant baseline and add characterization coverage when existing tests cannot prove preservation. Reuse an unchanged verified baseline; run the narrowest meaningful checks and the project's required checks.
 5. **Treat smells as clues, not verdicts.** Confirm call sites, change history, runtime behavior, coupling, and team conventions. A long method that is linear and stable may be lower value than a short method that hides cross-system side effects.
 6. **Refactor where change pressure exists.** Prioritize code that is currently being changed, repeatedly causes defects, blocks a requested feature, or creates broad blast radius. Do not polish stable code merely because a metric crossed a threshold.
 7. **Prefer clarity over novelty.** Use ordinary Ruby messages, small objects, cohesive modules, and Rails-native APIs. Do not replace straightforward code with metaprogramming, generic frameworks, or Java-shaped class hierarchies.
@@ -63,7 +63,7 @@ Never recommend a language feature or Rails API unsupported by the project. For 
 
 ### 2. Establish the Behavioral Baseline
 
-Run the narrowest relevant test command first. Examples, chosen only when the project supports them:
+Inspect existing tests first. Run a relevant test when its result is needed for the assessment or implementation, and distinguish executed results from proposed validation. Examples, chosen only when the project supports them:
 
 ```bash
 bin/rails test test/models/order_test.rb
@@ -258,7 +258,7 @@ If no worthwhile opportunities are found, say so and explain the evidence. Do no
 
 When explicitly asked to apply a finding:
 
-1. Re-run the relevant baseline tests.
+1. Establish the relevant baseline, reusing earlier results if the code, environment, and test inputs are unchanged.
 2. Add characterization coverage if the behavior is not protected.
 3. Apply one named transformation.
 4. Run the narrowest relevant test or syntax/load check.

@@ -13,7 +13,7 @@ Use this skill to determine whether protected user content becomes ciphertext be
 2. Identify the exact privacy claim under test: client-side encryption, E2EE, zero knowledge, encrypted sync, encrypted sharing, encrypted backup, encrypted import/export, or encrypted metadata.
 3. Use `references/client-encryption-boundary-baselines.md` when you need source-backed review anchors.
 4. Use `templates/client-encryption-boundary-report.md` for audit deliverables and `templates/client-encryption-boundary-finding.schema.json` for machine-readable findings.
-5. Coordinate with sibling skills when useful:
+5. When the relevant sibling skill is installed and useful, coordinate with it. Siblings are optional collaborators, not standalone-install dependencies; if one is unavailable, continue this audit and record the resulting evidence limitation:
    - `../crypto-implementation-static-review/SKILL.md` for primitive/API misuse.
    - `../crypto-architecture-review/SKILL.md` for key hierarchy, recovery, sharing, and server-influence design.
    - `../network-payload-zero-knowledge-test/SKILL.md` for sentinel-based HAR/payload capture.
@@ -120,7 +120,7 @@ Look for tests that prove boundary order:
 - import/export tests separating intentional plaintext export from sync/upload paths;
 - regression tests for newly found plaintext sinks.
 
-Missing tests are usually a limitation or low/medium finding unless the code evidence shows a reachable leak.
+Missing tests are a coverage limitation, not evidence of leakage. Report a defect only when source or runtime evidence establishes a reachable boundary failure; grade that failure by impact.
 
 ### 7. Classify Failure Signals
 
@@ -153,7 +153,7 @@ Use `../audit-common/SKILL.md` as authoritative. Boundary-specific defaults:
 - `critical`: server/operator/third party can recover protected user plaintext or keys at scale despite a central zero-knowledge/E2EE claim.
 - `high`: protected content, claimed encrypted fields, key material, recovery secrets, or sensitive metadata reaches API, storage, telemetry, logs, queues, or third parties in plaintext.
 - `medium`: meaningful metadata/plaintext exposure in a limited flow, missing boundary enforcement for high-risk paths, or background/offline paths likely storing plaintext.
-- `low`: missing tests, ambiguous type boundaries, debug-only plaintext with production gating evidence, or documentation gaps.
+- `low`: demonstrated low-impact plaintext exposure across an intended boundary. Missing tests/documentation and debug paths proven gated away from protected data are limitations or counterevidence, not defects by themselves.
 - `informational`: positive evidence or no observed sentinel match within stated limitations.
 
 Use finding IDs like `CLIENT-ENC-001`.

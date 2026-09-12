@@ -12,9 +12,9 @@ This skill requires a target to improve. The target can be:
 - a specific ExecPlan file path named by the user
 - a recent ExecPlan included in the chat
 
-If no target is provided or inferable from recent chat context, ask for the target before proceeding.
+Use the named or contextually established target. Otherwise inspect likely plan locations; use a sole plausible active ExecPlan, and ask only when none or multiple plausible targets remain. Do not select a clearly completed or archived plan unless recent user context identifies it.
 
-Use this prompt together with `.agent/PLANS.md`.
+Use this prompt together with `.agent/PLANS.md` when present.
 
 - `.agent/PLANS.md` defines the required plan format and sections.
 - This prompt defines the review depth, evidence standard, lifecycle tracing, and rewrite rules.
@@ -33,7 +33,7 @@ Use this prompt together with `.agent/PLANS.md`.
 
 ### 1) Load the standards and target
 
-Read `.agent/PLANS.md` first, then read the target plan.
+Read applicable `.agent/PLANS.md` or `PLANS.md` when present, then the target plan. If neither standards file exists, preserve the existing plan's structure and use its objectives, milestones, acceptance criteria, and validation as the review contract. State the absent standard without blocking or inventing one. Reuse unchanged source already read. Apply the detailed lifecycle analysis below when the plan changes shared or durable state; a local stateless correction does not require unrelated lifecycle tracing.
 
 - If the target is a file, rewrite the plan in place at the same file path.
 - If the target is a recent ExecPlan in chat, produce the improved full plan in the response unless the user provides a file path to write it.
@@ -41,7 +41,7 @@ Read `.agent/PLANS.md` first, then read the target plan.
 Capture:
 
 - the plan's stated goal
-- required sections and formatting constraints from `.agent/PLANS.md`
+- required sections and formatting constraints from the applicable standard or existing plan
 - all paths, symbols, commands, tests, tables, payloads, job names, stage names, error codes, and invariants named in the plan
 
 ### 2) Build an evidence checklist before editing
@@ -211,7 +211,7 @@ Do **not**:
 - remove completed milestones
 - broaden the plan beyond its original purpose
 
-If you find no substantive code-grounded improvements, leave the plan body alone aside from the required revision note at the bottom.
+If you find no substantive code-grounded improvements, leave the entire plan unchanged and report that result.
 
 ## Evidence Standard For Changes
 
@@ -225,28 +225,13 @@ For each non-trivial correction or addition, you should be able to answer:
 
 If you cannot answer those questions from code you actually read, do not make the edit.
 
-## Usefulness Score
-
-Score the usefulness of **this review pass**, not the absolute quality of the finished plan.
-
-| Score | Meaning |
-|---|---|
-| 9-10/10 | The pass fixed multiple concrete execution blockers or major missing lifecycle/invariant coverage; implementation likely would have shipped a stale-state, retry, or reconciliation bug without these changes. |
-| 7-8/10 | The pass added several substantive, code-grounded corrections that materially improve executability or cross-path correctness. |
-| 4-6/10 | The pass made real but moderate improvements; the plan is clearer, safer, or more complete, but not fundamentally different. |
-| 1-3/10 | The pass found little to improve beyond minor wording, sequencing, or already-obvious clarifications. |
-
-A low score is the correct outcome when the plan was already strong or the repository did not reveal meaningful new gaps.
-
 ## Revision Note In The Plan
 
-Append a revision note at the bottom of the plan describing:
+When substantive changes were made, append a brief revision note describing:
 
 - what changed
 - why it changed
 - which kinds of code-grounded issues were corrected
-
-Do **not** record the usefulness score inside the plan.
 
 ## Report Back To The User
 
@@ -256,9 +241,7 @@ Report in this format:
 - **Added:** missing files, tests, milestones, commands, lifecycle paths, compatibility notes, or invariant propagation steps
 - **Strengthened:** vague sections made concrete, especially acceptance criteria, rollback/deploy notes, and alternate-path verification
 - **Flagged:** risks, open questions, or repository realities that still deserve attention
-- **Final line:** `Usefulness score: X/10 - <specific reason>`
-
-The justification must be specific. Name what was missing or what would have broken.
+Omit empty categories. For a clean assessment, give the result and relevant validation or limitations without a self-assigned score. For changes, name what was missing or what would have broken.
 
 ## Anti-Patterns
 

@@ -135,7 +135,7 @@ Use `../audit-common/SKILL.md` as authoritative. Typical mappings:
 - `critical`: telemetry/support systems expose key material, recovery secrets, or plaintext content at scale in a way that defeats a central zero-knowledge/E2EE claim.
 - `high`: sensitive content, credentials, tokens, cookies, authorization headers, keys, or recovery material leak to logs, traces, crash reports, analytics, support exports, or third parties.
 - `medium`: sensitive metadata, durable identifiers, content-derived event properties, support impersonation gaps, or claim-conflicting diagnostic collection leak with meaningful privacy impact.
-- `low`: incomplete disclosure, unclear retention, weak redaction tests, broad log access, low-sensitivity overcollection, or hardening gaps without confirmed sensitive exposure.
+- `low`: demonstrated low-impact overcollection, retention, disclosure, or log-access violation. Unclear retention, weak tests, and hardening gaps without an established consequence are limitations or follow-up, not defects.
 - `informational`: scoped no-match result, positive control evidence, limitation, or recommended follow-up without a concrete failure.
 
 ## Limitations To State

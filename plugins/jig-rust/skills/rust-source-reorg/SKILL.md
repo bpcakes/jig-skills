@@ -27,11 +27,11 @@ Default to `current working changes`.
 3. Reorder all top-level items in canonical section order.
 4. Normalize attribute ordering and sort derive lists.
 5. Verify no items were dropped, duplicated, or moved across cfg boundaries; keep rustfmt::skip and macro_use constraints.
-6. Output the full reorganized file.
+6. Summarize changed files and relevant validation with file links. Return full source only when requested or when rewriting a supplied snippet.
 
 ## Notes
 
-- If uncertain about an import's usage (e.g., macro/doc/cfg), keep it and add `// TODO: verify if this import is still needed`.
+- If uncertain about an import's usage (e.g., macro/doc/cfg), preserve it; report a material limitation without adding speculative TODO comments.
 - Do not change runtime behavior, names, signatures, or visibility.
 
 ## Resources

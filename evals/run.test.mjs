@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { changedPaths, checkGrade, checkScope, disabledSkillPaths, observedSkillReads, skillReadEvidence, checkInvocation, parseTrace, snapshot } from './run.mjs';
 
-test('incomplete and failed traces cannot pass as successful evaluations', () => {
-  for (const raw of ['', '{broken', '{"type":"turn.started"}', '{"type":"turn.completed"}\n{"type":"error"}']) {
+test('incomplete, ambiguous, and failed traces cannot pass as successful evaluations', () => {
+  for (const raw of ['', '{broken', '{"type":"turn.started"}', '{"type":"turn.completed"}\n{"type":"turn.completed"}',
+    '{"type":"turn.completed"}\n{"type":"error"}']) {
     assert.throws(() => parseTrace(raw));
   }
   assert.equal(parseTrace('{"type":"turn.completed"}').length, 1);

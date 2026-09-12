@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,10 @@ def parse_args() -> argparse.Namespace:
         description="Run cursor-agent with a stable ExecPlan implementation prompt."
     )
     parser.add_argument("plan", help="Path to the ExecPlan Markdown file.")
+    parser.add_argument(
+        "--milestone",
+        help="Implement only this named milestone. Omit to complete the whole plan.",
+    )
     parser.add_argument(
         "--model",
         default="composer-2.5",
@@ -46,7 +51,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip cursor-agent --list-models validation.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.milestone is not None and not args.milestone.strip():
+        parser.error("--milestone must name a nonblank milestone")
+    if args.worktree is not None and (
+        not args.worktree.strip()
+        or args.worktree in {".", ".."}
+        or Path(args.worktree).name != args.worktree
+        or "\\" in args.worktree
+    ):
+        parser.error("--worktree must be a nonblank name, not a path")
+    return args
 
 
 def resolve_paths(plan_arg: str, workspace_arg: str) -> tuple[Path, Path]:
@@ -110,6 +125,7 @@ def build_prompt(
     plan: Path,
     extra_instructions: list[str],
     worktree: str | None,
+    milestone: str | None = None,
 ) -> str:
     rel_plan = plan.relative_to(workspace)
     utc_now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%MZ")
@@ -127,6 +143,14 @@ def build_prompt(
         rendered = "\n".join(f"- {item}" for item in extra_instructions)
         extra = f"\n\nAdditional user instructions:\n{rendered}"
 
+    completion = (
+        f"Complete only the milestone named {milestone!r}, including its acceptance criteria and required validation. "
+        "Do not implement later milestones. If this name does not identify one milestone, report the ambiguity."
+        if milestone else
+        "Complete the whole ExecPlan, including every applicable milestone, acceptance criterion, and required validation. "
+        "Plan size or completing one milestone is not a stopping condition."
+    )
+
     return f"""You are Cursor Agent implementing a checked-in ExecPlan.
 
 Workspace root: {workspace}
@@ -134,7 +158,10 @@ ExecPlan path: {rel_plan}
 Current UTC time for plan updates: {utc_now}
 {worktree_note}
 
-Read the entire ExecPlan before editing code. Treat it as the source of truth for the work. Then inspect the relevant repository files and implement the next incomplete milestone or the full plan if the plan is small enough to complete safely in one run.
+Read the entire ExecPlan before editing code, then inspect the relevant repository files. Use the plan as the implementation specification within the user's requested scope and applicable host instructions.
+
+Requested completion: {completion}
+Continue through that scope without asking for renewed approval for routine already-authorized work. A successful command exit is not proof that the task is complete. Verify the requested acceptance criteria against the resulting code and test evidence before marking Progress complete. If interrupted or blocked, leave accurate completed and remaining items so the parent can continue from the same workspace.
 
 Maintain the ExecPlan as a living document while you work:
 - update Progress with completed and remaining items, using UTC timestamps;
@@ -153,7 +180,8 @@ Implementation expectations:
 - keep changes scoped to the ExecPlan;
 - run the validation commands named by the ExecPlan when feasible;
 - if validation cannot run, capture the exact blocker and command attempted;
-- stop and report clearly if the plan is ambiguous, unsafe, or impossible from repository evidence.
+- resolve routine ambiguity from repository evidence; stop for a material unresolved product/scope decision, missing authority, unsafe action, or unavailable capability, and report the exact blocker;
+- preserve newer user constraints and do not expand permission for external actions.
 
 Final response format:
 - changed files;
@@ -163,11 +191,46 @@ Final response format:
 """
 
 
+def git_worktrees(workspace: Path) -> set[Path]:
+    """Return Git's registered worktree roots without guessing from process output."""
+    try:
+        output = subprocess.check_output(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=workspace,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return set()
+    return {
+        Path(line.removeprefix("worktree ")).resolve()
+        for line in output.splitlines()
+        if line.startswith("worktree ")
+    }
+
+
+def discover_cursor_worktree(workspace: Path, name: str, before: set[Path]) -> Path | None:
+    """Resolve and verify the named checkout Cursor registered with Git."""
+    after = git_worktrees(workspace)
+    documented = (Path.home() / ".cursor" / "worktrees" / workspace.name / name).resolve()
+    if documented in after and documented.is_dir():
+        return documented
+
+    matching = {candidate for candidate in after if candidate != workspace and candidate.name == name and candidate.is_dir()}
+    new_matching = matching - before
+    if len(new_matching) == 1:
+        return new_matching.pop()
+    if len(matching) == 1:
+        return matching.pop()
+    return None
+
+
 def main() -> int:
     args = parse_args()
     workspace, plan = resolve_paths(args.plan, args.workspace)
     ensure_cursor_agent(args.model, args.skip_model_check)
 
+    worktrees_before = git_worktrees(workspace) if args.worktree else set()
     command = [
         "cursor-agent",
         "--print",
@@ -182,8 +245,17 @@ def main() -> int:
     if args.worktree:
         command.extend(["--worktree", args.worktree])
 
-    command.append(build_prompt(workspace, plan, args.extra_instruction, args.worktree))
+    command.append(build_prompt(workspace, plan, args.extra_instruction, args.worktree, args.milestone))
     result = subprocess.run(command, cwd=workspace, check=False)
+    if result.returncode == 0 and args.worktree:
+        actual_worktree = discover_cursor_worktree(workspace, args.worktree, worktrees_before)
+        if actual_worktree is None:
+            print(
+                f"Cursor completed, but the registered worktree named {args.worktree!r} could not be uniquely verified.",
+                file=sys.stderr,
+            )
+            return 1
+        print(json.dumps({"cursorWorktree": str(actual_worktree)}))
     return result.returncode
 
 

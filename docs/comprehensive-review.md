@@ -4,7 +4,7 @@
 
 `jig-review:comprehensive-review` runs independent reviews of the same Git changes and merges their findings. It runs inside Codex, using Codex subagents to perform the native review and forward assignments to selected external CLIs.
 
-The default reviewers are Claude Code and Codex. Cursor is optional. The skill produces a review report; fixes require a separate follow-up request.
+The default reviewers are Claude Code and Codex. Cursor is optional. The review phase is read-only. If the user already requested fixes, the parent may apply them after all reviewer reports are frozen; review-only requests stop at the report. When used by `review-fix-loop`, the loop owns repairs and subsequent rounds.
 
 ## Setup and Invocation
 
@@ -26,11 +26,14 @@ Enter these prompts in Codex from the repository being reviewed:
 | Choose Cursor effort | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh` |
 | Enable Cursor fast mode | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
 | Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-effort high` |
+| Select Astra explicitly | `$jig-review:comprehensive-review --reviewers codex --codex-model gpt-6-astra --codex-effort high` |
 | Use a separate Claude profile | `$jig-review:comprehensive-review --claude-config-dir ~/.claude-appleid` |
 | Exclude one path for this run | `$jig-review:comprehensive-review --scope branch --exclude-path .agent/` |
 | Exclude several paths | `$jig-review:comprehensive-review --exclude-path .agent/ --exclude-path generated/reports/` |
 
 For a direct-copy install, replace `$jig-review:comprehensive-review` with `$comprehensive-review`. Direct installation into Claude Code is unsupported because orchestration depends on Codex subagents.
+
+Native Codex model and effort inherit the host when omitted. Explicit overrides require host/account support; the parser accepting a value does not prove provider availability. Preserve Claude and Cursor selections independently. See the [evaluation guide](skill-evaluations.md) for controlled Astra trials and the distinction between requested and reported configuration.
 
 `--all-reviewers` is shorthand for `--reviewers claude,codex,cursor`. Do not combine the two selection forms. Reviewer-specific controls still apply, for example:
 

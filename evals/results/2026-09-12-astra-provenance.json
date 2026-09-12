@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "scope": "2026-09-12 Astra comparison reports",
+  "artifactPolicy": {
+    "rawArtifactsCommitted": false,
+    "reason": "Raw prompts, traces, stderr, answers, task workspaces, and frozen source bundles may contain repository content and are too large and sensitive for routine source control.",
+    "durability": "machine-local-temporary",
+    "futureRuns": "Use evals/run.mjs --output with persistent private storage when durable replay is required, then record the archive URI and SHA-256 digest in a new provenance record."
+  },
+  "reports": [
+    {
+      "file": "2026-09-12-astra-priorities-initial.json",
+      "reportSha256": "242e227cd03fb2ba98bf5b82297adc0d7322988b80656ed8f4b0175a5f493026",
+      "sourceCommit": "9c47b5e36bb641721abeb7343bed82d72350cdb2",
+      "sourceRun": "/tmp/jig-skill-evals-Cs2ZS4",
+      "harnessHash": "b82ddb8eca64fa52a2ced3d12e91e0845a368ec769237c916768f3dabae4c3ee",
+      "suiteHash": "183d9597d759aad9c1be932484610a80a0804bc5093f1c562641cea6912d944d",
+      "repositoryReverifiable": false,
+      "limitation": "Reverification depends on the unversioned machine-local sourceRun directory."
+    },
+    {
+      "file": "2026-09-12-astra-priorities-corrected.json",
+      "reportSha256": "0be5459edc6486d0047cab0da56afddb87b7efab6e99f70062cf3004bbc61ebf",
+      "sourceCommit": "9c47b5e36bb641721abeb7343bed82d72350cdb2",
+      "sourceRun": "/tmp/jig-skill-evals-dzUVE6",
+      "harnessHash": "b82ddb8eca64fa52a2ced3d12e91e0845a368ec769237c916768f3dabae4c3ee",
+      "suiteHash": "897213b4a4f6c91cfa2cb3db6c71d27541bc935c12c2b9d9642c956128c6304d",
+      "repositoryReverifiable": false,
+      "limitation": "A matching source snapshot was not retained; this report is historical evidence only."
+    },
+    {
+      "file": "2026-09-12-astra-original-initial.json",
+      "reportSha256": "71cd4fe3696acce653af6ca4ecb82849393f7289dea9923e117d714852c2d1cb",
+      "sourceCommit": "9c47b5e36bb641721abeb7343bed82d72350cdb2",
+      "sourceRun": "/tmp/jig-skill-evals-KJaThx",
+      "harnessHash": "b82ddb8eca64fa52a2ced3d12e91e0845a368ec769237c916768f3dabae4c3ee",
+      "suiteHash": "183d9597d759aad9c1be932484610a80a0804bc5093f1c562641cea6912d944d",
+      "repositoryReverifiable": false,
+      "limitation": "Reverification depends on the unversioned machine-local sourceRun directory and baseline checkout."
+    },
+    {
+      "file": "2026-09-12-astra-original-corrected.json",
+      "reportSha256": "7c9888bffd2da689c187cbc324df2ad895597cd10e8b88184237756c29b1e252",
+      "sourceCommit": "9c47b5e36bb641721abeb7343bed82d72350cdb2",
+      "sourceRun": "/tmp/jig-skill-evals-GQDDij",
+      "harnessHash": "b82ddb8eca64fa52a2ced3d12e91e0845a368ec769237c916768f3dabae4c3ee",
+      "suiteHash": "897213b4a4f6c91cfa2cb3db6c71d27541bc935c12c2b9d9642c956128c6304d",
+      "repositoryReverifiable": false,
+      "limitation": "Reverification depends on the unversioned machine-local sourceRun directory and detached baseline checkout."
+    }
+  ]
+}

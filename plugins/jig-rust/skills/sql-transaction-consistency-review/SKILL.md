@@ -220,7 +220,7 @@ Severity guidance:
 - **Critical:** money, authorization, inventory, ledger, payment, or irreversible external side effect can become wrong or duplicated.
 - **High:** durable domain invariant can be violated under realistic concurrency or failure.
 - **Medium:** lifecycle, retry, or connection-lifetime issue can cause intermittent failures, pool starvation, stale cache, or operational inconsistency.
-- **Low:** clarity or maintainability issue that could become dangerous but has no current concrete invariant failure.
+- **Low:** a demonstrated transaction, retry, or consistency failure with limited impact. Speculative future danger and clarity preferences without a concrete failure are not findings.
 
 ## Do not over-report
 

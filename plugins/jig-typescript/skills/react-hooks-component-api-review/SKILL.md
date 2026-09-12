@@ -81,11 +81,13 @@ If the user asked for code changes, patch the API, update call sites/stories/tes
 
 ## Severity rubric
 
-**Blocker/high:** exported API permits invalid states for shared/design-system components; controlled/uncontrolled contract is ambiguous; callback types use `any`, `Function`, or broad rest args; a public generic/polymorphic API is unsound; accessibility-critical props can be omitted.
+**Blocker/high:** a reachable public contract failure breaks important consumer behavior, accessibility, or a broadly used component. Show the accepted input/call and the implementation behavior that violate the contract.
 
-**Medium:** broad `ReactNode` hides a stricter child contract; naming obscures behavior; optional-prop soup makes call sites guess; implementation details leak into reusable API; native prop inheritance is too broad or collides with domain props.
+**Medium:** a demonstrated prop, callback, child, or ownership mismatch causes a bounded consumer failure or concrete compatibility cost.
 
-**Low:** minor naming consistency, doc comments, small prop grouping improvements, or cleanup that does not change the consumer contract materially.
+**Low:** a demonstrated minor consumer contract failure with limited impact.
+
+Syntax such as `any`, `Function`, broad `ReactNode`, optional props, or boolean counts does not set severity. Trace actual or valid prospective callers and compensating checks. Naming, comments, and grouping preferences without a concrete consequence are not defects.
 
 ## Detailed checklist
 

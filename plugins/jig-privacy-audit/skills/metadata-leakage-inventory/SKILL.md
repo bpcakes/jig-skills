@@ -94,7 +94,7 @@ Use `../audit-common/SKILL.md` as authoritative. Typical mappings:
 
 - `high`: metadata exposes sensitive relationships, precise location, health/finance/safety status, protected-class inference, secrets/tokens, or a central privacy claim contradiction at meaningful scale.
 - `medium`: durable identifiers, social graph, content-derived metadata, precise timing/activity, third-party sharing, or policy contradiction creates meaningful linkability, identifiability, or behavioral inference.
-- `low`: overcollection, excessive retention, missing controls, ambiguous disclosure, or lower-impact metadata exposure with limited readers or weak evidence.
+- `low`: demonstrated lower-impact metadata overcollection, excessive retention, or exposure with limited readers. Missing controls, ambiguous disclosure, or weak evidence alone are limitations, not confirmed leakage; investigate the reachable consequence.
 - `informational`: inventory rows, positive evidence, limitations, or minimization recommendations without a concrete failure.
 
 ## Limitations To State

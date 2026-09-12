@@ -160,10 +160,12 @@ Preferred fixes:
 
 ## Finding severity
 
-- **Critical**: definite state corruption, invalid render loop from state flow, stale server/cache data causing destructive user action, or impossible async state likely under normal use.
-- **High**: duplicated source of truth with plausible drift, stale response overwrites current UI, broken optimistic rollback/invalidation, global store misuse affecting broad UI correctness, or controlled/local state ownership conflict.
-- **Medium**: unnecessary derived state, scattered setters that should be one transition, overbroad context causing avoidable rerenders, unclear URL/cache/form ownership, or async flags that permit contradictory UI states.
-- **Low**: naming, small state grouping issues, avoidable memoization, or minor prop drilling/context organization issues without clear bug.
+- **Critical**: reachable state corruption or stale data leads to destructive user action or similarly severe loss.
+- **High**: a demonstrated transition, response race, or ownership conflict breaks important user flows or broad UI correctness.
+- **Medium**: a concrete state/cache/URL mismatch, contradictory UI state, or materially costly rerender path has bounded user impact.
+- **Low**: a demonstrated minor state or UI contract failure with limited impact.
+
+Derived state, scattered setters, naming, memoization, and context organization are investigation leads, not severity categories. Trace a failing transition or concrete consumer cost and check counterevidence before reporting. Keep preferences and missing evidence separate from findings.
 
 Prefer fewer, concrete findings over architecture advice without a demonstrated failure mode.
 

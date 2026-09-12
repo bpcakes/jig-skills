@@ -60,7 +60,7 @@ process.stdin.on('end', async () => {
       change('src/lib.rs', null, 'delete'); change('src/moved.rs', previous, 'add');
       change('src/moved.rs', null, 'delete'); change('src/lib.rs', previous, 'add');
     }
-    if (scenario !== 'negative-glob-read') change('src/lib.rs', 'pub fn classify(value: i32) -> bool { value > 0 }\n');
+    if (!['negative-glob-read', 'preserve-staged'].includes(scenario)) change('src/lib.rs', 'pub fn classify(value: i32) -> bool { value > 0 }\n');
     if (scenario === 'multi-skill-read' || scenario === 'catalog-glob-read') {
       const files = scenario === 'multi-skill-read'
         ? ['rust-simplify', 'react-test-quality-review'].map(name => `.agents/skills/${name}/SKILL.md`)
@@ -83,5 +83,5 @@ process.stdin.on('end', async () => {
     const data = JSON.parse(prompt.slice(prompt.indexOf('\n') + 1));
     fs.writeFileSync(output, JSON.stringify({ checks: data.criteria.map(c => ({ id: c.id, passed: true, evidence: 'Test-double grade; no model judgment claimed.' })) }));
   }
-  console.log(JSON.stringify({ type: 'turn.completed' }));
+  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 120, cached_input_tokens: 40, output_tokens: 15 } }));
 });

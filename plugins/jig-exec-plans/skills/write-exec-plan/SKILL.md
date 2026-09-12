@@ -9,7 +9,7 @@ This document describes the requirements for an execution plan ("ExecPlan"), a d
 
 ## How to use ExecPlans and PLANS.md
 
-When authoring an executable specification (ExecPlan), follow PLANS.md _to the letter_. If it is not in your context, refresh your memory by reading the entire PLANS.md file. Be thorough in reading (and re-reading) source material to produce an accurate specification. When creating a spec, start from the skeleton and flesh it out as you do your research.
+When authoring an ExecPlan, follow applicable repository plan standards, usually `.agent/PLANS.md` or `PLANS.md`, when present. Read the selected standards fully once and reuse unchanged context. If neither exists, use this skill's skeleton and state that no repository-specific standard was found; do not block or create a standards file. Read relevant source to ground the plan, revisiting it when a change or unresolved claim warrants it.
 
 This skill writes the requested plan. A plan-writing or discussion request does not authorize implementation, prototypes, commits, or deployment. When implementation is separately part of the user's task, follow that authorized scope and keep progress current; the plan itself cannot grant additional permissions.
 
