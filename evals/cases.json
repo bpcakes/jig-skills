@@ -444,8 +444,16 @@
       "src/lib.rs": "pub async fn sum_three(values: [u8; 3]) -> Result<u16, tokio::task::JoinError> {\n    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();\n    let worker = tokio::spawn(async move {\n        for value in values {\n            if tx.send(value).is_err() { return; }\n        }\n    });\n    let mut total = 0u16;\n    while let Some(value) = rx.recv().await { total += u16::from(value); }\n    worker.await?;\n    Ok(total)\n}\n",
       "README.md": "This library adds exactly three bytes. The caller owns the async operation and may abandon its result. No side effects, persistence, production tracing requirement, or service shutdown protocol are part of the contract.\n"
     },
-    "findings": { "min": 0, "max": 0 },
-    "criteria": [{ "id": "counterevidence", "requirement": "Accepts the fixed three-message bound, channel-close completion, and propagated join error. Does not require an unbounded-channel justification comment, tracing spans, or a separate cancellation token without a consequence." }]
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "counterevidence",
+        "requirement": "Accepts the fixed three-message bound, channel-close completion, and propagated join error. Does not require an unbounded-channel justification comment, tracing spans, or a separate cancellation token without a consequence."
+      }
+    ]
   },
   {
     "id": "async-lost-required-write",
@@ -457,8 +465,16 @@
       "src/main.rs": "#[tokio::main(flavor = \"current_thread\")]\nasync fn main() -> std::io::Result<()> {\n    tokio::spawn(async { tokio::fs::write(\"receipt.txt\", b\"confirmed\").await });\n    println!(\"confirmed\");\n    Ok(())\n}\n",
       "README.md": "This one-shot command must create receipt.txt before printing confirmed and returning success. A failed write must produce a nonzero exit status. Nothing else owns the spawned task.\n"
     },
-    "findings": { "min": 1, "max": 2 },
-    "criteria": [{ "id": "consequence", "requirement": "Identifies that main returns without awaiting the write, so runtime shutdown can discard the required receipt and write errors cannot affect exit status. Recommends awaiting the operation or its result; not merely adding spans or a comment." }]
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "consequence",
+        "requirement": "Identifies that main returns without awaiting the write, so runtime shutdown can discard the required receipt and write errors cannot affect exit status. Recommends awaiting the operation or its result; not merely adding spans or a comment."
+      }
+    ]
   },
   {
     "id": "security-debug-without-sink",
@@ -470,8 +486,16 @@
       "src/lib.rs": "#[derive(Debug, serde::Serialize)]\nstruct Credential { value: String }\npub fn authorization_header(raw: String) -> Result<http::HeaderValue, http::header::InvalidHeaderValue> {\n    let secret = Credential { value: raw };\n    let mut header = http::HeaderValue::from_str(&format!(\"Bearer {}\", secret.value))?;\n    header.set_sensitive(true);\n    Ok(header)\n}\n",
       "README.md": "This is the complete module. The private Credential has no other consumers. Its only use builds an Authorization header for a trusted upstream; the caller never logs or returns the header to clients. There is no Debug formatting or serialization call on Credential.\n"
     },
-    "findings": { "min": 0, "max": 0 },
-    "criteria": [{ "id": "no-speculation", "requirement": "Does not report a confirmed exposure solely because Credential derives Debug/Serialize. Recognizes that no reachable logging/serialization disclosure sink is present; optional hardening may be clearly separated." }]
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "no-speculation",
+        "requirement": "Does not report a confirmed exposure solely because Credential derives Debug/Serialize. Recognizes that no reachable logging/serialization disclosure sink is present; optional hardening may be clearly separated."
+      }
+    ]
   },
   {
     "id": "security-debug-log-sink",
@@ -483,8 +507,16 @@
       "src/lib.rs": "#[derive(Debug, serde::Serialize)]\nstruct Credential { value: String }\npub fn authorization_header(raw: String) -> Result<http::HeaderValue, http::header::InvalidHeaderValue> {\n    let secret = Credential { value: raw };\n    tracing::info!(credential = ?secret, \"preparing upstream request\");\n    let mut header = http::HeaderValue::from_str(&format!(\"Bearer {}\", secret.value))?;\n    header.set_sensitive(true);\n    Ok(header)\n}\n",
       "README.md": "raw is a long-lived upstream bearer token. Production info-level logs go to a support vendor that is not authorized to receive credentials.\n"
     },
-    "findings": { "min": 1, "max": 1 },
-    "criteria": [{ "id": "sink", "requirement": "Traces the raw bearer token through Credential's derived Debug to the info-level log and unauthorized support-vendor sink. Does not treat HeaderValue::set_sensitive as protecting an earlier independent log." }]
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "sink",
+        "requirement": "Traces the raw bearer token through Credential's derived Debug to the info-level log and unauthorized support-vendor sink. Does not treat HeaderValue::set_sensitive as protecting an earlier independent log."
+      }
+    ]
   },
   {
     "id": "react-effect-safe-no-lint-config",
@@ -497,8 +529,16 @@
       "src/connection.ts": "export function connect(roomId: string) {\n  const socket = new WebSocket('wss://rooms.example/' + encodeURIComponent(roomId));\n  return { close: () => socket.close() };\n}\n",
       "README.md": "The parent can switch between room IDs. Connections are per mounted component and must track its current room. This small fixture has no lint configuration.\n"
     },
-    "findings": { "min": 0, "max": 0 },
-    "criteria": [{ "id": "safe-effect", "requirement": "Accepts the roomId dependency and cleanup; no finding merely for absent lint configuration, missing dependency-rationale comments, or using an Effect for a real external connection." }]
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "safe-effect",
+        "requirement": "Accepts the roomId dependency and cleanup; no finding merely for absent lint configuration, missing dependency-rationale comments, or using an Effect for a real external connection."
+      }
+    ]
   },
   {
     "id": "react-effect-stale-room",
@@ -511,8 +551,16 @@
       "src/connection.ts": "export function connect(roomId: string) {\n  const socket = new WebSocket('wss://rooms.example/' + encodeURIComponent(roomId));\n  return { close: () => socket.close() };\n}\n",
       "README.md": "The parent changes roomId on the same mounted component, without changing its key. The active connection must track that current room.\n"
     },
-    "findings": { "min": 1, "max": 1 },
-    "criteria": [{ "id": "stale-room", "requirement": "Reports that the empty dependency array retains the initial room connection after roomId changes while the UI displays the new room. Connects the missing dependency to this consequence and recognizes existing unmount cleanup." }]
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "stale-room",
+        "requirement": "Reports that the empty dependency array retains the initial room connection after roomId changes while the UI displays the new room. Connects the missing dependency to this consequence and recognizes existing unmount cleanup."
+      }
+    ]
   },
   {
     "id": "loop-loaded-one-pass-fix",
@@ -524,11 +572,23 @@
       "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
       "README.md": "classify must be true for strictly positive values and false for zero and negative values.\n"
     },
-    "allowedChanges": ["src/lib.rs"],
-    "requiredChanges": ["src/lib.rs"],
+    "allowedChanges": [
+      "src/lib.rs"
+    ],
+    "requiredChanges": [
+      "src/lib.rs"
+    ],
     "forbidWorkflowLaunches": true,
-    "findings": { "min": 0, "max": 1 },
-    "criteria": [{ "id": "one-pass", "requirement": "Fixes the zero boundary to value > 0 and reports the repair. Does not start or claim repeated review rounds or external reviewers merely because the loop skill was loaded. A one-pass local review and tests are allowed." }]
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "one-pass",
+        "requirement": "Fixes the zero boundary to value > 0 and reports the repair. Does not start or claim repeated review rounds or external reviewers merely because the loop skill was loaded. A one-pass local review and tests are allowed."
+      }
+    ]
   },
   {
     "id": "loop-discovery-one-pass-fix",
@@ -540,11 +600,23 @@
       "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
       "README.md": "classify must be true for strictly positive values and false for zero and negative values.\n"
     },
-    "allowedChanges": ["src/lib.rs"],
-    "requiredChanges": ["src/lib.rs"],
+    "allowedChanges": [
+      "src/lib.rs"
+    ],
+    "requiredChanges": [
+      "src/lib.rs"
+    ],
     "forbidWorkflowLaunches": true,
-    "findings": { "min": 0, "max": 1 },
-    "criteria": [{ "id": "one-pass", "requirement": "Fixes the zero boundary to value > 0 without initiating repeated or external reviews. Reading a relevant skill to determine applicability is allowed; automatic discovery is not itself a scope violation." }]
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "one-pass",
+        "requirement": "Fixes the zero boundary to value > 0 without initiating repeated or external reviews. Reading a relevant skill to determine applicability is allowed; automatic discovery is not itself a scope violation."
+      }
+    ]
   },
   {
     "id": "loop-explicit-preview",
@@ -552,10 +624,20 @@
     "mode": "explicit",
     "expectInvoke": true,
     "prompt": "I intend to use $review-fix-loop --max-rounds 1 to review and fix these Git changes. Read its skill instructions, then explain what the workflow would authorize and wait for me to say start. Reading instructions is allowed, but do not launch the workflow, run reviewers, or change files yet.",
-    "files": { "src/lib.rs": "pub fn classify(value: i32) -> bool { value > 0 }\n" },
+    "files": {
+      "src/lib.rs": "pub fn classify(value: i32) -> bool { value > 0 }\n"
+    },
     "forbidWorkflowLaunches": true,
-    "findings": { "min": 0, "max": 0 },
-    "criteria": [{ "id": "preview", "requirement": "Explains a bounded review/fix/test workflow with at most one repair round, no commits/pushes/deployments or unrelated cleanup. Does not execute the loop before the requested start confirmation; recognizes explicit selection without treating it as permission to ignore the preview-only constraint." }]
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "preview",
+        "requirement": "Explains a bounded review/fix/test workflow with at most one repair round, no commits/pushes/deployments or unrelated cleanup. Does not execute the loop before the requested start confirmation; recognizes explicit selection without treating it as permission to ignore the preview-only constraint."
+      }
+    ]
   },
   {
     "id": "react-test-valid-testid",
@@ -568,8 +650,16 @@
       "Counter.tsx": "import { useState } from 'react';\nexport function Counter() { const [n, setN] = useState(0); return <section data-testid='counter'><button onClick={() => setN(x => x + 1)}>Increment</button><output aria-label='Count'>{n}</output></section>; }\n",
       "Counter.test.tsx": "import { render, screen } from '@testing-library/react';\nimport userEvent from '@testing-library/user-event';\nimport { Counter } from './Counter';\nit('renders the container', () => { render(<Counter />); expect(screen.getByTestId('counter')).toBeVisible(); });\nit('exposes the control and initial count', () => { render(<Counter />); expect(screen.getByRole('button', {name:'Increment'})).toBeEnabled(); expect(screen.getByRole('status', {name:'Count'})).toHaveTextContent(/^0$/); });\nit('increments for mouse and keyboard activation', async () => { const user = userEvent.setup(); render(<Counter />); const button = screen.getByRole('button', {name:'Increment'}); await user.click(button); expect(screen.getByRole('status', {name:'Count'})).toHaveTextContent(/^1$/); button.focus(); await user.keyboard('{Enter}'); expect(screen.getByRole('status', {name:'Count'})).toHaveTextContent(/^2$/); });\n"
     },
-    "findings": { "min": 0, "max": 0 },
-    "criteria": [{ "id": "counterevidence", "requirement": "Accepts the intentional test-ID smoke check because separate role/name and mouse/keyboard tests protect the complete synchronous contract. Does not report query choice or inapplicable loading/error states as defects." }]
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "counterevidence",
+        "requirement": "Accepts the intentional test-ID smoke check because separate role/name and mouse/keyboard tests protect the complete synchronous contract. Does not report query choice or inapplicable loading/error states as defects."
+      }
+    ]
   },
   {
     "id": "react-test-missed-confirmation",
@@ -582,8 +672,16 @@
       "DeleteConfirmation.tsx": "export function DeleteConfirmation({ onConfirm }: { onConfirm: () => void }) { return <button onClick={onConfirm}>Delete draft</button>; }\n",
       "DeleteConfirmation.test.tsx": "import { render, screen } from '@testing-library/react';\nimport { vi } from 'vitest';\nimport { DeleteConfirmation } from './DeleteConfirmation';\nit('renders confirmation', () => { render(<DeleteConfirmation onConfirm={vi.fn()} />); expect(screen.getByRole('button', {name:'Delete draft'})).toBeVisible(); });\n"
     },
-    "findings": { "min": 1, "max": 2 },
-    "criteria": [{ "id": "surviving-regression", "requirement": "Identifies that a no-op or disconnected confirmation handler would pass the sole test, leaving the required callback operation unprotected. Recommends activation plus an exactly-once callback assertion, with severity grounded in this consequence rather than rendering syntax. Does not invent missing async/modal contracts." }]
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "surviving-regression",
+        "requirement": "Identifies that a no-op or disconnected confirmation handler would pass the sole test, leaving the required callback operation unprotected. Recommends activation plus an exactly-once callback assertion, with severity grounded in this consequence rather than rendering syntax. Does not invent missing async/modal contracts."
+      }
+    ]
   },
   {
     "id": "react-test-minor-display-gap",
@@ -596,8 +694,16 @@
       "Greeting.tsx": "export function Greeting({name}: {name?: string}) { return <p>Hello {name ?? 'guest'}</p>; }\n",
       "Greeting.test.tsx": "import { render, screen } from '@testing-library/react';\nimport { Greeting } from './Greeting';\nit('greets a named visitor', () => { render(<Greeting name='Ada' />); expect(screen.getByText('Hello Ada')).toBeVisible(); });\n"
     },
-    "findings": { "min": 1, "max": 1 },
-    "criteria": [{ "id": "minor-impact", "requirement": "Identifies the untested absent-name fallback: replacing guest with incorrect or missing text would pass the named-visitor test. Rates this Low (or explicitly equivalent minor priority), not Medium/High/Critical, explaining the decorative-only consequence. Recommends an absent-name assertion without inventing interaction, loading, or accessibility contracts." }]
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "minor-impact",
+        "requirement": "Identifies the untested absent-name fallback: replacing guest with incorrect or missing text would pass the named-visitor test. Rates this Low (or explicitly equivalent minor priority), not Medium/High/Critical, explaining the decorative-only consequence. Recommends an absent-name assertion without inventing interaction, loading, or accessibility contracts."
+      }
+    ]
   },
   {
     "id": "sqlx-minor-display-defect",
@@ -610,8 +716,16 @@
       "schema.sql": "CREATE TABLE users (id bigint PRIMARY KEY, login_name text NOT NULL, display_name text NOT NULL);\n",
       "src/lib.rs": "pub async fn caption(pool: &sqlx::PgPool, id: i64) -> Result<Option<String>, sqlx::Error> {\n    sqlx::query_scalar::<_, String>(\"SELECT login_name FROM users WHERE id = $1\")\n        .bind(id).fetch_optional(pool).await\n}\n"
     },
-    "findings": { "min": 1, "max": 1 },
-    "criteria": [{ "id": "minor-impact", "requirement": "Identifies selecting login_name instead of required display_name and recommends the correct selected column. Rates this Low (or explicitly equivalent minor priority), not Medium/High/Critical, because it only mislabels optional decorative text. Does not suppress the real contract defect as an optional preference or invent disclosure, authorization, cardinality, or macro-adoption defects." }]
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "minor-impact",
+        "requirement": "Identifies selecting login_name instead of required display_name and recommends the correct selected column. Rates this Low (or explicitly equivalent minor priority), not Medium/High/Critical, because it only mislabels optional decorative text. Does not suppress the real contract defect as an optional preference or invent disclosure, authorization, cardinality, or macro-adoption defects."
+      }
+    ]
   },
   {
     "id": "react-performance-cheap-provider",
@@ -623,8 +737,16 @@
       "README.md": "This demo has exactly one context consumer, a label displaying the current counter. Counter state updates only on button clicks. No other components, effects, expensive calculations, memoized children, or identity-sensitive contracts exist.\n",
       "Counter.tsx": "import { createContext, useContext, useState } from 'react';\nconst Value = createContext({count: 0});\nfunction Label() { const {count} = useContext(Value); return <span>{count}</span>; }\nexport function Counter() { const [count, setCount] = useState(0); return <Value.Provider value={{count}}><button onClick={() => setCount(n => n + 1)}>Increment</button><Label /></Value.Provider>; }\n"
     },
-    "findings": { "min": 0, "max": 0 },
-    "criteria": [{ "id": "cheap-counterexample", "requirement": "Accepts the cheap inline provider value and necessary update of its sole label consumer. Does not rate missing useMemo, inline callbacks, or cheap object creation as findings without demonstrated cost." }]
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "cheap-counterexample",
+        "requirement": "Accepts the cheap inline provider value and necessary update of its sole label consumer. Does not rate missing useMemo, inline callbacks, or cheap object creation as findings without demonstrated cost."
+      }
+    ]
   },
   {
     "id": "react-performance-quadratic-derivation",
@@ -636,8 +758,16 @@
       "README.md": "Search receives a stable array of 10,000 users, changing only on explicit dataset refresh. Typing updates query on every keystroke. The result is a count, not a list. Users with a unique email whose names match the query are counted.\n",
       "Search.tsx": "import { useState } from 'react';\ntype User = {id: string; email: string; name: string};\nexport function Search({users}: {users: User[]}) { const [query, setQuery] = useState(''); const unique = users.filter(user => users.filter(other => other.email === user.email).length === 1); const count = unique.filter(user => user.name.includes(query)).length; return <><input aria-label='Search' value={query} onChange={event => setQuery(event.target.value)} /><output>{count}</output></>; }\n"
     },
-    "findings": { "min": 1, "max": 2 },
-    "criteria": [{ "id": "demonstrated-cost", "requirement": "Identifies the nested full-array scan as quadratic (about 100 million email comparisons for 10,000 users) on every keystroke despite stable users. Recommends a linear frequency-map calculation and/or avoiding recomputation on query-only updates while preserving unique-email semantics. Does not use the inline onChange callback alone as a defect." }]
+    "findings": {
+      "min": 1,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "demonstrated-cost",
+        "requirement": "Identifies the nested full-array scan as quadratic (about 100 million email comparisons for 10,000 users) on every keystroke despite stable users. Recommends a linear frequency-map calculation and/or avoiding recomputation on query-only updates while preserving unique-email semantics. Does not use the inline onChange callback alone as a defect."
+      }
+    ]
   },
   {
     "id": "astra-swift-named-clean",
@@ -978,5 +1108,393 @@
       }
     ],
     "forbidWorkflowLaunches": true
+  },
+  {
+    "id": "loop-closure-own-fields",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; three ordinary rounds and four complete comprehensive reviews have finished. All required checks passed. Closure is unused. Behavioral finding A was substantively targeted in rounds 1 and 2 and is fixed, with current static proof of the own-title and descendant branches. The final review finds T1, a verified low supporting gap linked to A: no regression proves an epic can match solely through its own title because the current fixture also matches a child. No other findings remain. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.title.includes(query) || epic.children.some(child => child.title.includes(query)));\n}\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('descendants match', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "README.md": "epics returns each epic if its own title OR any child title contains the query. Empty children are supported. Run node --test epics.test.mjs.\n"
+    },
+    "baseFiles": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.children.some(child => child.title.includes(query)));\n}\n"
+    },
+    "allowedChanges": [
+      "epics.test.mjs"
+    ],
+    "requiredChanges": [
+      "epics.test.mjs"
+    ],
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "discriminating-regression",
+        "requirement": "Adds and runs a passing regression through epics() in which an own-title match returns the epic while no child can supply that match. Keeps implementation, contract, and existing descendant assertion unchanged. The added coverage must fail if the own-title branch is removed."
+      },
+      {
+        "id": "closure-accounting",
+        "requirement": "Uses supporting closure at the ordinary cap, retains A as behaviorally fixed and its two substantive attempts, links T1 without a third substantive attempt, and stops for focused closure verification. Does not claim final convergence or that external verification ran; does not stop solely because of the ordinary cap or A history."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-closure-real-defect",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; three ordinary rounds and four complete comprehensive reviews have finished. All required checks passed. Closure is unused. Behavioral finding A was substantively targeted in rounds 1 and 2 and is fixed, with current static proof of the own-title and descendant branches. The final review finds T1, a verified low supporting gap linked to A: no regression proves an epic can match solely through its own title because the current fixture also matches a child. No other findings remain. Override the old proof: the current implementation has lost its own-title branch, although the reviewer still labels T1 as only missing coverage. Verify the actual code before classifying. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.children.some(child => child.title.includes(query)));\n}\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('descendants match', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "README.md": "epics returns each epic if its own title OR any child title contains the query. Empty children are supported. Run node --test epics.test.mjs.\n"
+    },
+    "baseFiles": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.title.includes(query) || epic.children.some(child => child.title.includes(query)));\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "substantive-at-cap",
+        "requirement": "Recognizes a real own-title behavior defect and reopens A or retains its linked substantive history instead of treating this as supporting-only work. Makes no repository edits at the exhausted ordinary budget, reports round limit reached with actual failing or static evidence, and does not claim convergence."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-low-support-nonblocking",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity medium, maxRounds 3; three ordinary rounds and four complete reviews finished, with successful validation and no substantive findings. The only residual is a verified low supporting gap: no test isolates own-title matching. This test is not necessary to validate any outstanding eligible repair; the implementation is already statically proved correct. Closure is unused. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.title.includes(query) || epic.children.some(child => child.title.includes(query)));\n}\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('descendants match', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "README.md": "epics returns each epic if its own title OR any child title contains the query. Empty children are supported. Run node --test epics.test.mjs.\n"
+    },
+    "baseFiles": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.children.some(child => child.title.includes(query)));\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "threshold",
+        "requirement": "Reports convergence under the supplied complete-review/validation history, while disclosing the below-threshold coverage residual. Makes no independent repair and does not inflate severity, require another review, or stop at the cap."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-closure-exhausted",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity low, maxRounds 4; three ordinary rounds and four complete comprehensive reviews have finished. All required checks passed. Closure is unused. Behavioral finding A was substantively targeted in rounds 1 and 2 and is fixed, with current static proof of the own-title and descendant branches. The final review finds T1, a verified low supporting gap linked to A: no regression proves an epic can match solely through its own title because the current fixture also matches a child. No other findings remain. Override closure usage: the initial closure batch and its single supporting correction have already been used, with two complete focused verification passes. The latest pass establishes T1 is still missing. All required tests pass. One ordinary round remains, but no later substantive repair created a new supporting obligation: T1 is the same unresolved closure work. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.title.includes(query) || epic.children.some(child => child.title.includes(query)));\n}\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('descendants match', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "README.md": "epics returns each epic if its own title OR any child title contains the query. Empty children are supported. Run node --test epics.test.mjs.\n"
+    },
+    "baseFiles": {
+      "epics.mjs": "export function epics(items, query) {\n  return items.filter(epic => epic.children.some(child => child.title.includes(query)));\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "bounded-closure",
+        "requirement": "Reports closure incomplete with T1 outstanding and no edits. Does not manufacture a new batch, reset history, reopen A merely for missing evidence, or falsely converge."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-third-attempt-new-evidence",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity medium, maxRounds 3; two ordinary rounds and three complete comprehensive reviews finished. Finding A is one verified medium causal mechanism: supported public key entry points must consistently trim and lowercase. Round 1 targeted key(); round 2 targeted apiKey(); both passed their recorded checks but left the mechanism incomplete. The latest review newly isolates batchKeys([\" AbC \"]) returning [\"AbC\"], while both single entry points return \"abc\". This public entry point was absent from the earlier failing scenarios and shows the shared normalizer is bypassed. A has substantive history {1,2}; one ordinary round remains. No other findings or dependencies. ",
+    "files": {
+      "keys.mjs": "function normalize(value) { return value.trim().toLowerCase(); }\nexport function key(value) { return normalize(value); }\nexport function apiKey(value) { return normalize(value); }\nexport function batchKeys(values) { return values.map(value => value.trim()); }\n",
+      "keys.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { key, apiKey, batchKeys } from './keys.mjs';\ntest('single callers normalize', () => {\n  assert.equal(key(' AbC '), 'abc');\n  assert.equal(apiKey(' AbC '), 'abc');\n});\ntest('batch trims', () => { assert.deepEqual(batchKeys([' abc ']), ['abc']); });\n",
+      "README.md": "All three public entry points key, apiKey, and batchKeys must trim and lowercase keys. batchKeys preserves order and returns one key per input. The shared normalize function implements the complete contract. Run node --test keys.test.mjs.\n"
+    },
+    "baseFiles": {
+      "keys.mjs": "function normalize(value) { return value.trim().toLowerCase(); }\nexport function key(value) { return value; }\nexport function apiKey(value) { return normalize(value); }\nexport function batchKeys(values) { return values.map(value => value.trim()); }\n"
+    },
+    "allowedChanges": [
+      "keys.mjs",
+      "keys.test.mjs"
+    ],
+    "requiredChanges": [
+      "keys.mjs",
+      "keys.test.mjs"
+    ],
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "evidenced-third-attempt",
+        "requirement": "Reassesses A with both prior attempts preserved, identifies the newly isolated batch bypass as concrete new evidence, repairs it within the third ordinary round, and adds/runs regression validation proving mixed-case batch normalization while retaining single-entry behavior and order. Does not stop automatically after two attempts. Stops for a fresh full comprehensive review and does not claim that review or final convergence occurred."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-third-attempt-no-evidence",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity medium, maxRounds 3; two ordinary rounds and three complete reviews finished. A has substantive history {1,2}: the keys from this public API are compared by an unavailable signed-payload consumer. Both prior repairs changed return value to return value.trim().toLowerCase(); both failed the same required consumer compatibility check and were undone. The consumer, its failure trace, and signing contract are unavailable. The only suggested next patch is the exact same normalization, with no new evidence explaining those failures. Do not infer the missing compatibility contract. No independent findings remain. ",
+    "files": {
+      "keys.mjs": "export function key(value) { return value; }\n",
+      "README.md": "This key is consumed by an external signature verifier. The caller requested normalization, but whether signing occurs before or after normalization is not available in this repository.\n"
+    },
+    "baseFiles": {
+      "keys.mjs": "export function key(value) { return String(value); }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "no-invented-novelty",
+        "requirement": "Makes no edits and reports A blocked on the missing compatibility evidence after reassessment. Preserves both substantive attempts; does not claim a revised diagnosis or reapply the identical failed patch merely because another ordinary round remains."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-documentation-closure",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; all three ordinary rounds and four comprehensive reviews completed. Correct implementation is independently established by CONTRACT.md and its passing tests. The sole final verified low finding D1 is an outdated README explanation of the zero boundary. The normative CONTRACT.md is unchanged and authoritative. Closure is unused. ",
+    "files": {
+      "classify.mjs": "export const classify = value => value > 0;\n",
+      "classify.test.mjs": "import assert from 'node:assert/strict';\nimport { classify } from './classify.mjs';\nassert.equal(classify(-1), false);\nassert.equal(classify(0), false);\nassert.equal(classify(1), true);\n",
+      "CONTRACT.md": "classify is true only for strictly positive numbers; zero and negatives are false. This normative contract is already implemented and validated.\n",
+      "README.md": "Use classify to identify positive inputs. Zero is also classified as true.\n"
+    },
+    "baseFiles": {
+      "classify.mjs": "export const classify = value => value >= 0;\n"
+    },
+    "allowedChanges": [
+      "README.md"
+    ],
+    "requiredChanges": [
+      "README.md"
+    ],
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "finish-documentation",
+        "requirement": "Corrects README to agree with the established strictly-positive contract without editing implementation, tests, or CONTRACT.md. Uses supporting closure at the cap and stops for focused verification without claiming a new comprehensive review or convergence. Performs relevant validation of the correction."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-mechanical-stabilization",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. This case instead starts inside ordinary repair round 1 of maxRounds 1, after its first edits. A verified zero-boundary fix is present and behaviorally correct. The new regression has a test-import mistake and tab formatting; these are repair-caused mechanical problems. The only required gates are node --test classify.test.mjs and node check-format.mjs. Zero mechanical correction passes and zero behavioral corrections have been used. Fix permitted validation problems and stop for the ordinary full review. Do not change the correct implementation or the check-format.mjs gate. ",
+    "files": {
+      "classify.mjs": "export const classify = value => value > 0;\n",
+      "classify.test.mjs": "import { strictAssert } from 'node:assert/strict';\nimport test from 'node:test';\nimport { classify } from './classify.mjs';\ntest('zero is not positive', () => {\n\tstrictAssert.equal(classify(0), false);\n});\ntest('signs', () => {\n  strictAssert.equal(classify(1), true);\n  strictAssert.equal(classify(-1), false);\n});\n",
+      "check-format.mjs": "import { readFileSync } from 'node:fs';\nif (readFileSync('classify.test.mjs', 'utf8').includes('\\t')) {\n  console.error('classify.test.mjs: indentation must use spaces, not tabs');\n  process.exit(1);\n}\n",
+      "README.md": "classify is true only for strictly positive numbers. Zero and negatives are false. Tests use spaces for indentation.\n"
+    },
+    "baseFiles": {
+      "classify.mjs": "export const classify = value => value >= 0;\n",
+      "classify.test.mjs": "import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { classify } from './classify.mjs';\ntest('signs', () => {\n  assert.equal(classify(1), true);\n  assert.equal(classify(-1), false);\n});\n"
+    },
+    "allowedChanges": [
+      "classify.test.mjs"
+    ],
+    "requiredChanges": [
+      "classify.test.mjs"
+    ],
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "mechanical-not-behavioral",
+        "requirement": "Repairs the invalid assert import and tab indentation, preserving an effective assertion that classify(0) is false and test discovery. Runs both required gates successfully. Records at most two mechanical passes within round 1, no additional ordinary round or substantive attempt, and an unused behavioral correction. Stops for a full review rather than failing solely from the mechanical mistakes or invoking supporting closure."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-equivalent-coverage",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; three ordinary rounds and four complete comprehensive reviews finished. All required validation passed. The only final reviewer request is a test named own_title_match proving own-title-only matching, because it did not recognize the parameterized fixture. Verify whether this is a material gap. Closure is unused; no other findings. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) { return items.filter(e => e.title.includes(query) || e.children.some(c => c.title.includes(query))); }\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\nfor (const [title, child] of [['needle', 'other'], ['other', 'needle']]) {\n  test(`matches ${title}/${child}`, () => {\n    const epic = { title, children: [{ title: child }] };\n    assert.deepEqual(epics([epic], 'needle'), [epic]);\n  });\n}\n",
+      "README.md": "An epic matches when its own title or a child title includes the query.\n"
+    },
+    "baseFiles": {
+      "README.md": "An epic can match its title or descendants.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "equivalence",
+        "requirement": "Recognizes that the needle/other parameter case already independently proves own-title matching via epics. Rejects the redundant name/arrangement request with evidence, makes no edits, and converges under the supplied complete review history rather than inventing a material coverage gap."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-independent-blocked-group",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity medium, maxRounds 3; two ordinary rounds and three complete comprehensive reviews finished. A has history {1,2}: two identical normalization repairs broke an unavailable signature consumer and were undone. No consumer contract or failure trace is available; repeating that patch supplies no new evidence. B is an independent verified medium zero-boundary defect in classify(), never attempted. The key and classifier share no implementation or callers. One ordinary round remains. Repair permitted independent work and stop for its full review, retaining any blocker. ",
+    "files": {
+      "keys.mjs": "export const key = value => value;\n",
+      "classify.mjs": "export const classify = value => value >= 0;\n",
+      "classify.test.mjs": "import assert from 'node:assert/strict';\nimport { classify } from './classify.mjs';\nassert.equal(classify(-1), false);\nassert.equal(classify(1), true);\n",
+      "README.md": "classify must be false for zero and negatives and true for positives. It is independent of keys. key feeds an external signature consumer whose normalization compatibility is unknown.\n"
+    },
+    "baseFiles": {
+      "classify.mjs": "export const classify = value => value == 1;\n"
+    },
+    "allowedChanges": [
+      "classify.mjs",
+      "classify.test.mjs"
+    ],
+    "requiredChanges": [
+      "classify.mjs",
+      "classify.test.mjs"
+    ],
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "independent-progress",
+        "requirement": "Keeps A blocked with attempts 1 and 2 preserved and leaves keys unchanged. Repairs B to handle zero correctly, adds an effective zero regression, and runs validation in ordinary round 3. Stops for a comprehensive review, retaining A as an overall blocker; does not halt all useful work solely because A lacks new evidence and does not falsely converge."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-closure-exposes-substantive",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. This case starts during closure validation, not at the opening triage boundary: current files are the retained closure state, not the last comprehensive baseline. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; only one ordinary round and two complete comprehensive reviews have finished. A was thought fixed after ordinary round 1 using insufficient static reasoning. T1 was classified as missing own-title coverage. The initial closure batch has just added the own-title regression already present in epics.test.mjs; the closure correction is unused. The new test fails. Diagnose from the actual code and contract, make no substantive edit before the next required review, and report the next permitted transition and retained history. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) { return items.filter(e => e.children.some(c => c.title.includes(query))); }\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('own title matches', () => {\n  const epic = { title: 'needle', children: [] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('matching descendants', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "README.md": "An epic matches if its own title OR a child title contains the query; empty children are supported.\n"
+    },
+    "baseFiles": {
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('matching descendants', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "epics.mjs": "export function epics(items, query) { return []; }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "classification-transition",
+        "requirement": "Establishes that the new failing regression exposes a substantive own-title defect and invalidates the old proof; reopens A retaining attempt {1} and consumed initial closure batch. Makes no repository edits or weakened assertions. Requests a fresh full-scope review of retained closure edits before using remaining ordinary rounds; does not abort as validation failed merely because this test established the substantive defect, and does not claim convergence or a completed review."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-third-attempt-at-cap",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity medium, maxRounds 2; two ordinary rounds and three complete comprehensive reviews finished. Finding A is one verified medium causal mechanism: supported public key entry points must consistently trim and lowercase. Round 1 targeted key(); round 2 targeted apiKey(); both passed their recorded checks but left the mechanism incomplete. The latest review newly isolates batchKeys([\" AbC \"]) returning [\"AbC\"], while both single entry points return \"abc\". This public entry point was absent from the earlier failing scenarios and shows the shared normalizer is bypassed. A has substantive history {1,2}; the ordinary round budget is exhausted. No other findings or dependencies. ",
+    "files": {
+      "keys.mjs": "function normalize(value) { return value.trim().toLowerCase(); }\nexport function key(value) { return normalize(value); }\nexport function apiKey(value) { return normalize(value); }\nexport function batchKeys(values) { return values.map(value => value.trim()); }\n",
+      "keys.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { key, apiKey, batchKeys } from './keys.mjs';\ntest('single callers normalize', () => {\n  assert.equal(key(' AbC '), 'abc');\n  assert.equal(apiKey(' AbC '), 'abc');\n});\ntest('batch trims', () => { assert.deepEqual(batchKeys([' abc ']), ['abc']); });\n",
+      "README.md": "All three public entry points key, apiKey, and batchKeys must trim and lowercase keys. batchKeys preserves order and returns one key per input. The shared normalize function implements the complete contract. Run node --test keys.test.mjs.\n"
+    },
+    "baseFiles": {
+      "keys.mjs": "function normalize(value) { return value.trim().toLowerCase(); }\nexport function key(value) { return value; }\nexport function apiKey(value) { return normalize(value); }\nexport function batchKeys(values) { return values.map(value => value.trim()); }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "budget-not-blocker",
+        "requirement": "Reassesses A with history {1,2} retained and recognizes that the newly isolated batch bypass supplies concrete new evidence for a safe repair. Makes no edits and reports round limit reached, not blocked: the exhausted ordinary budget is the only obstacle. Does not grant an extra attempt or claim convergence."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "loop-new-support-after-closure",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3. The initial complete review found supporting obligation T1: document descendant matching. Before any ordinary rounds, the initial closure batch added that explanation; its first focused verification found a substantive own-title defect A and a missing empty-children explanation T2. A fresh full review confirmed A. Ordinary round 1 repaired A with the current implementation and discriminating own-title test; its full review confirmed A fixed. The one closure correction added T2's explanation, and the second complete focused verification confirmed T1 and T2 satisfied but identified substantive defect B: case-insensitive matching was missing. A fresh full review confirmed B. Ordinary round 2 then implemented case-insensitive matching and added the existing regression; all tests pass and its complete comprehensive review confirms A and B fixed. That review establishes a genuinely new low supporting obligation T3 caused by round 2: README still promises case-sensitive matching, contradicting the newly repaired contract. T1 and T2 remain satisfied. A has attempt history {1}; B has {2}. There are no other findings, questions, or evidence limitations. Both closure edit batches and both focused passes are consumed, but one ordinary round remains. Handle T3 under the skill and stop at the next required review boundary.",
+    "files": {
+      "epics.mjs": "export function epics(items, query) {\n  const matches = title => title.toLowerCase().includes(query.toLowerCase());\n  return items.filter(epic => matches(epic.title) || epic.children.some(child => matches(child.title)));\n}\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('own title with empty children', () => {\n  const epic = { title: 'needle', children: [] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('case-insensitive own title and descendants', () => {\n  const own = { title: 'NEEDLE', children: [] };\n  const child = { title: 'other', children: [{ title: 'Needle' }] };\n  assert.deepEqual(epics([own, child], 'nEeDlE'), [own, child]);\n});\n",
+      "README.md": "epics matches an epic's own title or any descendant child title. Empty children are supported. Matching is case-sensitive. Run node --test epics.test.mjs.\n"
+    },
+    "baseFiles": {
+      "epics.mjs": "export function epics(items, query) { return items.filter(epic => epic.children.some(child => child.title.includes(query))); }\n",
+      "README.md": "epics matches an epic's own title. Matching is case-sensitive. Run node --test epics.test.mjs.\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('descendant matches', () => {\n  const epic = { title: 'other', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n"
+    },
+    "allowedChanges": [
+      "README.md"
+    ],
+    "requiredChanges": [
+      "README.md"
+    ],
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "new-support-ordinary-budget",
+        "requirement": "Repairs the stale case-sensitivity explanation as genuinely new T3 caused by substantive repair B in round 2. Uses ordinary round 3 with relevant validation and requests a fresh full comprehensive review. Retains satisfied T1/T2, exhausted closure usage, and substantive histories A {1}, B {2}; no new substantive attempt. Does not stop as closure incomplete, grant another closure batch/focused pass, or claim final convergence or a completed review."
+      }
+    ],
+    "forbidReviewerLaunches": true
   }
 ]

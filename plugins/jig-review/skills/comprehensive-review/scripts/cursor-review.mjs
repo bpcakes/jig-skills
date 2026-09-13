@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
+import { addClosureEvidence, readClosureContext } from "./closure-context.mjs";
 
 import {
   CURSOR_MODELS,
@@ -50,6 +51,7 @@ function parseArgs(argv) {
     "--effort",
     "--speed",
     "--expected-fingerprint",
+    "--closure-context",
     "--timeout-ms",
     "--exclude-path",
   ]);
@@ -78,6 +80,8 @@ function parseArgs(argv) {
       }
     } else if (argument === "--expected-fingerprint") {
       options.expectedFingerprint = value;
+    } else if (argument === "--closure-context") {
+      options.closureContextPath = value;
     } else {
       options[argument.slice(2)] = value;
     }
@@ -172,8 +176,12 @@ async function runCursorReview(options, dependencies = {}) {
   const promptPath = path.join(promptDirectory, "review-prompt.md");
 
   try {
+    const closureContext = readClosureContext(
+      options.closureContextPath, initialFingerprint.fingerprint, scope.excludePaths,
+    );
+    const closureEvidence = addClosureEvidence(evidence, closureContext);
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context);
+    const prompt = buildReviewPrompt(scope, context, { closureEvidence });
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
     const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;

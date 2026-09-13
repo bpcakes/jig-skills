@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { launchesWorkflow } from './run.mjs';
+import { readFileSync } from 'node:fs';
+import { checkCommands, launchesWorkflow } from './run.mjs';
 
 test('workflow detection follows executable positions and shell wrappers', () => {
   for (const command of ['claude -p review', 'pwd && /usr/bin/claude -p review',
@@ -42,4 +43,36 @@ test('availability and information checks do not launch reviewers', () => {
     'claude --version; codex exec review']) {
     assert.equal(launchesWorkflow(command), true, command);
   }
+});
+
+test('bounded loop cases permit local helpers but reject reviewer launches in executable positions', () => {
+  const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'))
+    .filter(c => c.prompt.startsWith('This is a bounded evaluation'));
+  assert.ok(cases.length > 0);
+  for (const c of cases) {
+    for (const command of [
+      'node .agents/skills/comprehensive-review/scripts/scope-fingerprint.mjs --scope working-tree',
+      'node .agents/skills/review-fix-loop/scripts/loop-options.mjs',
+      'bash -lc "node .agents/skills/comprehensive-review/scripts/review-options.mjs"',
+      'cat .agents/skills/comprehensive-review/scripts/claude-review.mjs',
+      'rg -n "claude|cursor-agent|codex exec" .agents/skills',
+      'command -v claude cursor-agent', 'claude --version',
+    ]) assert.equal(checkCommands(c, [command]), true, `${c.id}: ${command}`);
+    for (const command of [
+      'node .agents/skills/comprehensive-review/scripts/claude-review.mjs --scope working-tree',
+      'node --no-warnings .agents/skills/comprehensive-review/scripts/cursor-review.mjs',
+      'node scripts/scope-fingerprint.mjs && claude -p review',
+      'bash -lc "node scripts/scope-fingerprint.mjs; node scripts/cursor-review.mjs"',
+      'env PROFILE=review command cursor-agent --print review',
+      'codex --model example exec review', 'codex -C /tmp/task e review',
+      'codex review',
+    ]) assert.equal(checkCommands(c, [command]), false, `${c.id}: ${command}`);
+  }
+});
+
+test('reviewer-only enforcement preserves the stricter workflow prohibition', () => {
+  const helper = ['node scripts/scope-fingerprint.mjs'];
+  assert.equal(checkCommands({ forbidWorkflowLaunches: true }, helper), false);
+  assert.equal(checkCommands({ forbidReviewerLaunches: true }, helper), true);
+  assert.equal(checkCommands({ forbidReviewerLaunches: true, forbidWorkflowLaunches: true }, helper), false);
 });

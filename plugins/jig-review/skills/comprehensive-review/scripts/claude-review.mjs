@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { normalizeClaudeConfigDir } from "./claude-config.mjs";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
+import { addClosureEvidence, readClosureContext } from "./closure-context.mjs";
 
 import {
   buildReviewPrompt,
@@ -56,6 +57,7 @@ function parseArgs(argv) {
     "--file-access",
     "--config-dir",
     "--expected-fingerprint",
+    "--closure-context",
     "--timeout-ms",
     "--exclude-path",
   ]);
@@ -84,6 +86,8 @@ function parseArgs(argv) {
       }
     } else if (argument === "--expected-fingerprint") {
       options.expectedFingerprint = value;
+    } else if (argument === "--closure-context") {
+      options.closureContextPath = value;
     } else if (argument === "--file-access") {
       options.fileAccess = value;
     } else if (argument === "--config-dir") {
@@ -212,8 +216,12 @@ async function runClaudeReview(options, dependencies = {}) {
   const scope = await resolveScope(options, { deadlineAt, signal });
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   try {
+    const closureContext = readClosureContext(
+      options.closureContextPath, initialFingerprint.fingerprint, scope.excludePaths,
+    );
+    const closureEvidence = addClosureEvidence(evidence, closureContext);
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context);
+    const prompt = buildReviewPrompt(scope, context, { closureEvidence });
     const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     const result = await runCommand(claudeBin,

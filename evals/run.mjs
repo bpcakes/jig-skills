@@ -121,7 +121,7 @@ function codexSubcommand(args) {
   }
 }
 
-export function launchesWorkflow(command, depth = 0) {
+export function launchesWorkflow(command, depth = 0, reviewersOnly = false) {
   if (depth > 8) return false;
   const groups = shellWords(command);
   return groups.some(original => {
@@ -144,11 +144,12 @@ export function launchesWorkflow(command, depth = 0) {
     if (executable === 'codex') return ['exec', 'e', 'review'].includes(codexSubcommand(args));
     if (['sh', 'bash', 'zsh', 'dash'].includes(executable)) {
       const flag = args.findIndex(a => /^-[A-Za-z]*c[A-Za-z]*$/.test(a));
-      return flag >= 0 && launchesWorkflow(args[flag + 1] ?? '', depth + 1);
+      return flag >= 0 && launchesWorkflow(args[flag + 1] ?? '', depth + 1, reviewersOnly);
     }
     if (executable === 'node' || executable === 'nodejs') {
       const script = args.find(a => !a.startsWith('-')) ?? '';
-      return /^(loop-options|review-options|claude-review|cursor-review|scope-fingerprint)\.mjs$/.test(path.basename(script));
+      return (reviewersOnly ? /^(claude-review|cursor-review)\.mjs$/
+        : /^(loop-options|review-options|claude-review|cursor-review|scope-fingerprint)\.mjs$/).test(path.basename(script));
     }
     return false;
   });
@@ -156,6 +157,7 @@ export function launchesWorkflow(command, depth = 0) {
 
 export function checkCommands(c, commands) {
   return (!c.forbidWorkflowLaunches || !commands.some(command => launchesWorkflow(command))) &&
+    (!c.forbidReviewerLaunches || !commands.some(command => launchesWorkflow(command, 0, true))) &&
     (c.forbiddenCommandPatterns ?? []).every(pattern => !commands.some(command => new RegExp(pattern).test(command)));
 }
 

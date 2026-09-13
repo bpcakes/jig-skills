@@ -65,6 +65,7 @@ A value cannot begin with `--`. For a literal exclusion path beginning with `--`
    - Preserve a finding if any completed reviewer found it actionable and the cited evidence remains plausible.
    - Keep the stronger evidence-supported severity when reviewers disagree.
    - Attribute each finding to the exact reviewers whose frozen reports independently identified it.
+   - Distinguish substantive defects, supporting documentation/validation gaps, and optional suggestions. Require an actionable test gap to name the unproved behavior, a plausible surviving regression, and why equivalent coverage is absent. Do not infer broken behavior from missing coverage alone or inflate severity to make a supporting gap actionable.
 6. Print the consolidated review. With only one completed report, label it a single-reviewer result, not a merged review.
 
 ## Optional One-Pass Repair
@@ -85,10 +86,13 @@ For each finding, use:
 - [severity] [file:line] Short issue title
   Source: <comma-separated reviewer names>
   Why it matters: ...
+  Kind: substantive defect | supporting obligation
   Recommendation: ...
 ```
 
 List only the applicable source names in canonical order: `Claude`, `Codex`, `Cursor`. Use severities: `critical`, `high`, `medium`, `low`.
+
+When the review-fix loop uses its bounded [closure protocol](../review-fix-loop/references/closure.md), retain the full scope, selected reviewers, and fingerprint/evidence checks but use the focused assignment. External adapters accept the internal `--closure-context <absolute-json-path>` flag; it is not a public review control. Native Codex receives the same closure data and requirements. Report explicit evidence-backed verdicts for every obligation and collateral defects, and label the result focused closure verification rather than a comprehensive pass. Ordinary comprehensive reviews remain context-free and do not receive closure data or earlier findings.
 
 After findings, add:
 
