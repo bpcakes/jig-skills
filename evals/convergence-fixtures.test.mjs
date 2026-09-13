@@ -57,3 +57,27 @@ test('closure fixture has a nonempty reviewed implementation change and a newly 
   write({ 'epics.mjs': "export function epics(items, query) { return items.filter(e => e.title.includes(query) || e.children.some(c => c.title.includes(query))); }\n" });
   assert.equal(run('--test', 'epics.test.mjs').status, 0);
 });
+
+test('validation recovery oracle rejects both earlier regressions and preserves the full interval', t => {
+  const { c, write, run } = fixture(t, 'loop-validation-counted-recovery');
+  write(c.files);
+  const failed = run('--test', 'ages.test.mjs');
+  assert.notEqual(failed.status, 0);
+  assert.match(failed.stdout, /age 66/);
+  write({ 'ages.mjs': 'export const accepts = age => age >= 18 && age <= 65;\n' });
+  assert.equal(run('--test', 'ages.test.mjs').status, 0);
+  for (const mutant of ['age >= 17 && age <= 65', 'age >= 18 && age < 65']) {
+    write({ 'ages.mjs': `export const accepts = age => ${mutant};\n` });
+    assert.notEqual(run('--test', 'ages.test.mjs').status, 0);
+  }
+});
+
+test('wrong closure expectation can be corrected without blessing a zero-boundary defect', t => {
+  const { c, write, run } = fixture(t, 'loop-closure-wrong-expectation');
+  write(c.files);
+  assert.notEqual(run('--test', 'classify.test.mjs').status, 0);
+  write({ 'classify.test.mjs': c.files['classify.test.mjs'].replace('classify(0), true', 'classify(0), false') });
+  assert.equal(run('--test', 'classify.test.mjs').status, 0);
+  write({ 'classify.mjs': 'export const classify = value => value >= 0;\n' });
+  assert.notEqual(run('--test', 'classify.test.mjs').status, 0);
+});
