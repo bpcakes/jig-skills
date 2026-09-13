@@ -1415,10 +1415,10 @@
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
-    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. This case starts during closure validation, not at the opening triage boundary: current files are the retained closure state, not the last comprehensive baseline. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; only one ordinary round and two complete comprehensive reviews have finished. A was thought fixed after ordinary round 1 using insufficient static reasoning. T1 was classified as missing own-title coverage. The initial closure batch has just added the own-title regression already present in epics.test.mjs; the closure correction is unused. The new test fails. All retained edits are accounted for, the preceding comprehensive baseline was complete, and there are no unrelated validation failures. Diagnose from the actual code and contract and perform permitted repairs and validation before the next required review. ",
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. This case starts during closure validation, not at the opening triage boundary: current files are the retained closure state, not the last comprehensive baseline. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; only one ordinary round and two complete comprehensive reviews have finished. A was thought fixed after ordinary round 1 using insufficient static reasoning. T1 was classified as missing own-title coverage. The initial closure batch has just strengthened descendant-only and nonmatching coverage and added the own-title regression already present in epics.test.mjs; the closure correction is unused. The new test fails. All retained edits are accounted for, the preceding comprehensive baseline was complete, and there are no unrelated validation failures. Diagnose from the actual code and contract and perform permitted repairs and validation before the next required review. ",
     "files": {
       "epics.mjs": "export function epics(items, query) { return items.filter(e => e.children.some(c => c.title.includes(query))); }\n",
-      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('own title matches', () => {\n  const epic = { title: 'needle', children: [] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('matching descendants', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('own title matches', () => {\n  const epic = { title: 'needle', children: [] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('matching descendants', () => {\n  const epic = { title: 'other', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('nonmatching epic is excluded', () => {\n  const epic = { title: 'other', children: [{ title: 'unrelated' }] };\n  assert.deepEqual(epics([epic], 'needle'), []);\n});\n",
       "README.md": "An epic matches if its own title OR a child title contains the query; empty children are supported.\n"
     },
     "baseFiles": {
@@ -1443,6 +1443,105 @@
     "requiredChanges": [
       "epics.mjs"
     ]
+  },
+  {
+    "id": "loop-closure-mixed-failures-unused",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. This case starts during closure validation, not at the opening triage boundary: current files are the retained closure state, not the last comprehensive baseline. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; only one ordinary round and two complete comprehensive reviews have finished. A was thought fixed after ordinary round 1 using insufficient static reasoning. T1 was classified as missing own-title coverage. The initial closure batch added the retained regressions in epics.test.mjs and smoke.test.mjs; the closure correction is unused. The own-title test fails and the smoke test cannot import its assertion helper. All retained edits are accounted for, the preceding comprehensive baseline was complete, and these are the only validation failures. Required validation is node --test epics.test.mjs smoke.test.mjs. Diagnose from the actual code and contract and perform permitted repairs and validation before the next required review. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) { return items.filter(e => e.children.some(c => c.title.includes(query))); }\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('own title matches', () => {\n  const epic = { title: 'needle', children: [] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('matching descendants', () => {\n  const epic = { title: 'other', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('nonmatching epic is excluded', () => {\n  const epic = { title: 'other', children: [{ title: 'unrelated' }] };\n  assert.deepEqual(epics([epic], 'needle'), []);\n});\n",
+      "README.md": "An epic matches if its own title OR a child title contains the query; empty children are supported.\nRequired validation is node --test epics.test.mjs smoke.test.mjs.\n",
+      "smoke.test.mjs": "import { strictAssert } from 'node:assert/strict';\nimport { epics } from './epics.mjs';\nstrictAssert.deepEqual(epics([], 'needle'), []);\n"
+    },
+    "baseFiles": {
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('matching descendants', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "epics.mjs": "export function epics(items, query) { return []; }\n",
+      "smoke.test.mjs": ""
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "mixed-failure-routing",
+        "requirement": "Verifies the own-title defect and the independent supporting import error. Uses the sole remaining closure correction for the smoke import without weakening its assertion, reruns affected checks, then directly repairs epics in counted ordinary round 2. Validates own-only, descendant-only, nonmatching, and smoke behavior and requests a full review without an intervening focused or comprehensive review. Preserves closure consumption and A history {1,2}; does not charge supporting work to ordinary recovery or claim convergence."
+      }
+    ],
+    "forbidReviewerLaunches": true,
+    "allowedChanges": [
+      "epics.mjs",
+      "smoke.test.mjs"
+    ],
+    "requiredChanges": [
+      "epics.mjs",
+      "smoke.test.mjs"
+    ]
+  },
+  {
+    "id": "loop-closure-mixed-failures-exhausted",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. This case starts during closure validation, not at the opening triage boundary: current files are the retained closure state, not the last comprehensive baseline. Effective controls: minimal, working-tree, minSeverity low, maxRounds 3; only one ordinary round and two complete comprehensive reviews have finished. A was thought fixed after ordinary round 1 using insufficient static reasoning. T1 was classified as missing own-title coverage. The initial closure batch added an ambiguous own-title regression whose matching child hid the defect; validation passed. Its focused verification requested isolated own-title and nonmatching coverage plus a smoke assertion. The sole supporting correction added those retained tests and is now consumed. The own-title test fails and the smoke test cannot import its assertion helper. All retained edits are accounted for, the preceding comprehensive baseline was complete, and these are the only validation failures. Required validation is node --test epics.test.mjs smoke.test.mjs. Diagnose from the actual code and contract and perform permitted repairs and validation before the next required review. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) { return items.filter(e => e.children.some(c => c.title.includes(query))); }\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('own title matches', () => {\n  const epic = { title: 'needle', children: [] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('matching descendants', () => {\n  const epic = { title: 'other', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('nonmatching epic is excluded', () => {\n  const epic = { title: 'other', children: [{ title: 'unrelated' }] };\n  assert.deepEqual(epics([epic], 'needle'), []);\n});\n",
+      "README.md": "An epic matches if its own title OR a child title contains the query; empty children are supported.\nRequired validation is node --test epics.test.mjs smoke.test.mjs.\n",
+      "smoke.test.mjs": "import { strictAssert } from 'node:assert/strict';\nimport { epics } from './epics.mjs';\nstrictAssert.deepEqual(epics([], 'needle'), []);\n"
+    },
+    "baseFiles": {
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('matching descendants', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "epics.mjs": "export function epics(items, query) { return []; }\n",
+      "smoke.test.mjs": ""
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "mixed-failure-routing",
+        "requirement": "Verifies and retains the own-title defect and supporting import failure but makes no edits and starts no ordinary round. Reports validation failed because closure correction is exhausted, despite safe substantive work and remaining ordinary budget. Preserves A history {1}, both closure batches, prior focused pass, and unreviewed failed state. Does not fund the import correction with ordinary recovery, relabel it substantive, or claim convergence."
+      }
+    ],
+    "forbidReviewerLaunches": true,
+    "allowedChanges": [],
+    "requiredChanges": []
+  },
+  {
+    "id": "loop-closure-mixed-failures-at-cap",
+    "skill": "review-fix-loop",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop at its post-review triage boundary. Read its SKILL.md, runtime, and applicable references. Treat the supplied history as frozen reviewer evidence and the current tree as the reviewed state; capture its current fingerprint for this simulated baseline. Do not launch an opening review, external reviewers, or agents. Perform permitted local edits and validation, then stop at the next review boundary without claiming that review ran. Do not prepare external reviewer transport files or temporary copies in this evaluation. Preserve the index and HEAD. This case starts during closure validation, not at the opening triage boundary: current files are the retained closure state, not the last comprehensive baseline. Effective controls: minimal, working-tree, minSeverity low, maxRounds 1; only one ordinary round and two complete comprehensive reviews have finished. A was thought fixed after ordinary round 1 using insufficient static reasoning. T1 was classified as missing own-title coverage. The initial closure batch added the retained regressions in epics.test.mjs and smoke.test.mjs; the closure correction is unused. The own-title test fails and the smoke test cannot import its assertion helper. All retained edits are accounted for, the preceding comprehensive baseline was complete, and these are the only validation failures. Required validation is node --test epics.test.mjs smoke.test.mjs. Diagnose from the actual code and contract and perform permitted repairs and validation before the next required review. ",
+    "files": {
+      "epics.mjs": "export function epics(items, query) { return items.filter(e => e.children.some(c => c.title.includes(query))); }\n",
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('own title matches', () => {\n  const epic = { title: 'needle', children: [] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('matching descendants', () => {\n  const epic = { title: 'other', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\ntest('nonmatching epic is excluded', () => {\n  const epic = { title: 'other', children: [{ title: 'unrelated' }] };\n  assert.deepEqual(epics([epic], 'needle'), []);\n});\n",
+      "README.md": "An epic matches if its own title OR a child title contains the query; empty children are supported.\nRequired validation is node --test epics.test.mjs smoke.test.mjs.\n",
+      "smoke.test.mjs": "import { strictAssert } from 'node:assert/strict';\nimport { epics } from './epics.mjs';\nstrictAssert.deepEqual(epics([], 'needle'), []);\n"
+    },
+    "baseFiles": {
+      "epics.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { epics } from './epics.mjs';\ntest('matching descendants', () => {\n  const epic = { title: 'needle', children: [{ title: 'needle' }] };\n  assert.deepEqual(epics([epic], 'needle'), [epic]);\n});\n",
+      "epics.mjs": "export function epics(items, query) { return []; }\n",
+      "smoke.test.mjs": ""
+    },
+    "findings": {
+      "min": 0,
+      "max": 2
+    },
+    "criteria": [
+      {
+        "id": "mixed-cap-preserves-closure",
+        "requirement": "Verifies the own-title defect and supporting import error and identifies safe corrections with available required checks. Makes no edits because ordinary round 1 exhausts maxRounds 1, reports round limit reached rather than a missing-contract blocker or validation failed, and preserves the unused closure correction. Retains both failed checks, A attempt history {1}, the consumed initial closure batch, and the unreviewed retained state. Starts no ordinary round or review and does not claim convergence. Must check the ordinary cap before spending the supporting correction, despite that correction being available."
+      }
+    ],
+    "forbidReviewerLaunches": true,
+    "allowedChanges": [],
+    "requiredChanges": []
   },
   {
     "id": "loop-third-attempt-at-cap",
@@ -1516,7 +1615,7 @@
       "README.md": "accepts is true exactly for ages in the inclusive interval 18 through 65. This contract is unchanged. All required validation is node --test ages.test.mjs; no external consumer exists.\n"
     },
     "baseFiles": {
-      "README.md": "Fixture contract is supplied in the working tree.\n"
+      "ages.mjs": "export const accepts = age => age >= 17 && age <= 65;\n"
     },
     "findings": {
       "min": 0,
@@ -1548,7 +1647,7 @@
       "README.md": "accepts is true exactly for ages in the inclusive interval 18 through 65. This contract is unchanged. All required validation is node --test ages.test.mjs; no external consumer exists.\n"
     },
     "baseFiles": {
-      "README.md": "Fixture contract is supplied in the working tree.\n"
+      "ages.mjs": "export const accepts = age => age >= 17 && age <= 65;\n"
     },
     "findings": {
       "min": 0,
@@ -1568,14 +1667,14 @@
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
-    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop. Read its SKILL.md, runtime, and applicable references. Use the supplied frozen history and current files; capture the current fingerprint for the simulated retained state. All current changes are attributable to recorded loop work and the preceding review was complete. Do not launch external reviewers or agents, create reviewer transport files, or use temporary repository copies. Perform permitted local repairs and validation, then stop at the next review boundary without claiming that review or convergence occurred. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity medium, maxRounds 3. We are inside round 2; its behavioral correction is consumed. A has attempts {1,2}. Two normalization repairs changed key to value.trim().toLowerCase(), each broke the required external signature compatibility check, and the within-round corrections restored identity. The current local normalization test fails. The external consumer, compatibility contract, and failure traces are unavailable. There is no new evidence explaining why normalization broke signatures, and the only suggested patch is the same normalization. No independent findings exist; one ordinary round remains.",
+    "prompt": "This is a bounded evaluation of an already-authorized $review-fix-loop. Read its SKILL.md, runtime, and applicable references. Use the supplied frozen history and current files; capture the current fingerprint for the simulated retained state. All current changes are attributable to recorded loop work and the preceding review was complete. Do not launch external reviewers or agents, create reviewer transport files, or use temporary repository copies. Perform permitted local repairs and validation, then stop at the next review boundary without claiming that review or convergence occurred. Preserve the index and HEAD. Effective controls: minimal, working-tree, minSeverity medium, maxRounds 3. We are inside round 2; its behavioral correction is consumed. A has attempts {1,2}. Two normalization repairs changed key to value.trim().toLowerCase(), each broke the required external signature compatibility check, and the within-round corrections restored identity. Round 1 added the current local normalization regression; it remains after both source rollbacks and now fails. The external consumer, compatibility contract, and failure traces are unavailable. There is no new evidence explaining why normalization broke signatures, and the only suggested patch is the same normalization. No independent findings exist; one ordinary round remains.",
     "files": {
       "keys.mjs": "export const key = value => value;\n",
       "keys.test.mjs": "import assert from 'node:assert/strict';\nimport { key } from './keys.mjs';\nassert.equal(key(' X '), 'x');\n",
       "README.md": "Keys must normalize input and preserve compatibility with the existing external signature consumer. Its contract and required check are unavailable here. Passing the local normalization test alone does not prove compatibility.\n"
     },
     "baseFiles": {
-      "README.md": "Fixture contract is supplied in the working tree.\n"
+      "keys.test.mjs": "import assert from 'node:assert/strict';\nimport { key } from './keys.mjs';\nassert.equal(key('x'), 'x');\n"
     },
     "findings": {
       "min": 0,
@@ -1603,7 +1702,8 @@
       "README.md": "classify implements CONTRACT.md.\n"
     },
     "baseFiles": {
-      "README.md": "Fixture contract is supplied in the working tree.\n"
+      "classify.mjs": "export const classify = value => value >= 0;\n",
+      "classify.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { classify } from './classify.mjs';\ntest('positive and negative', () => { assert.equal(classify(1), true); assert.equal(classify(-1), false); });\n"
     },
     "findings": {
       "min": 0,
@@ -1635,7 +1735,7 @@
       "scenarios.json": "{\n  \"defaults\": {\n    \"reviewers\": [\n      \"claude\",\n      \"codex\"\n    ],\n    \"sameCompleteFingerprint\": true,\n    \"configurationUnchanged\": true,\n    \"allEvidenceCaptured\": true,\n    \"originalClaudeExitedAndCleaned\": true,\n    \"codexComplete\": true,\n    \"replacementUsed\": false,\n    \"remainingOriginalDeadlineSeconds\": 300,\n    \"noAdditionalUserLimits\": true\n  },\n  \"scenarios\": [\n    {\n      \"id\": \"missing-footer\",\n      \"claude\": \"Report identifies F1 but omits coverage footer.\"\n    },\n    {\n      \"id\": \"unaccounted-process\",\n      \"claude\": \"Forwarder returned empty; provider process handle lost.\",\n      \"originalClaudeExitedAndCleaned\": false\n    },\n    {\n      \"id\": \"valid-unfavorable\",\n      \"claude\": \"Complete coverage and valid F1; Codex found no defects.\"\n    },\n    {\n      \"id\": \"capture-omission\",\n      \"claude\": \"Every retained page attested; a required file was omitted by an unchanged capture size limit.\",\n      \"allEvidenceCaptured\": false\n    },\n    {\n      \"id\": \"exhausted\",\n      \"claude\": \"Replacement also omitted footer.\",\n      \"replacementUsed\": true\n    },\n    {\n      \"id\": \"scope-drift\",\n      \"claude\": \"Missing footer.\",\n      \"sameCompleteFingerprint\": false\n    },\n    {\n      \"id\": \"deadline\",\n      \"claude\": \"Missing footer.\",\n      \"remainingOriginalDeadlineSeconds\": 0\n    },\n    {\n      \"id\": \"replacement-omits-finding\",\n      \"claude\": \"Original incomplete report identified F1. The one replacement independently completed all evidence and reported no findings.\",\n      \"replacementUsed\": true\n    },\n    {\n      \"id\": \"partial-union\",\n      \"claude\": \"Original attested pages 1 and 2 only; replacement attested page 3 only. All three pages were required in both invocations.\",\n      \"replacementUsed\": true\n    },\n    {\n      \"id\": \"explicit-invocation-cap\",\n      \"claude\": \"Missing footer.\",\n      \"noAdditionalUserLimits\": false,\n      \"userLimit\": \"At most one invocation per reviewer.\"\n    }\n  ]\n}\n"
     },
     "baseFiles": {
-      "README.md": "Fixture contract is supplied in the working tree.\n"
+      "classify.mjs": "export const classify = value => value > 0;\n"
     },
     "findings": {
       "min": 0,
