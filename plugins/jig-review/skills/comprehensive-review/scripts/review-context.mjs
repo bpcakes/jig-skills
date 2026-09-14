@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { createGitlinkCapture } from "./gitlink-capture.mjs";
 import {
   exclusionsForSubtree,
   gitPathspec,
@@ -108,6 +109,7 @@ function runCommand(command, args, options = {}) {
     let exitCode = null;
     let exitSignal = null;
     let exitSeen = false;
+    let stdoutEnded = false;
 
     const cleanup = () => {
       clearTimeout(timeoutTimer);
@@ -145,6 +147,15 @@ function runCommand(command, args, options = {}) {
       child.stdout.destroy();
       child.stderr.destroy();
     };
+
+    const incompleteStdoutError = () => commandError(
+      command,
+      "stdout did not finish before command settlement",
+      { outputIncomplete: true },
+    );
+
+    const settlementError = () => terminalError
+      ?? (exitCode === 0 && !stdoutEnded ? incompleteStdoutError() : null);
 
     const terminate = (error) => {
       if (!terminalError) terminalError = error;
@@ -196,6 +207,9 @@ function runCommand(command, args, options = {}) {
         }
       }
     });
+    child.stdout.on("end", () => {
+      stdoutEnded = true;
+    });
     child.stderr.on("data", (chunk) => {
       stderr = tailBuffer(stderr, chunk);
     });
@@ -206,8 +220,9 @@ function runCommand(command, args, options = {}) {
       exitSignal = signal;
       if (!drainTimer) {
         drainTimer = setTimeout(() => {
+          const error = settlementError();
           closeStdio();
-          finish(terminalError);
+          finish(error);
         }, stdioDrainMs);
       }
     });
@@ -216,7 +231,7 @@ function runCommand(command, args, options = {}) {
         exitCode = code;
         exitSignal = signal;
       }
-      finish(terminalError);
+      finish(settlementError());
     });
 
     child.stdin.on("error", (error) => {
@@ -699,18 +714,29 @@ async function collectSubmoduleContexts(
 ) {
   let indexEntries;
   try {
-    indexEntries = (await runGit(
+    const capture = createGitlinkCapture();
+    await runGit(
       repoRoot,
       ["ls-files", "--stage", "-z", ...gitPathspec(options.excludePaths)],
-      { deadlineAt: options.deadlineAt, signal: options.signal },
-    )).stdout;
+      {
+        deadlineAt: options.deadlineAt,
+        signal: options.signal,
+        maxBuffer: 0,
+        overflow: "truncate",
+        onStdout: (chunk) => capture.write(chunk),
+      },
+    );
+    indexEntries = capture.finish();
   } catch (error) {
-    if (!error.outputLimit) throw error;
+    if (!error.outputLimit && !error.outputIncomplete) throw error;
+    const reason = error.outputIncomplete
+      ? "submodule enumeration output was incomplete"
+      : "submodule enumeration exceeded the adapter limit";
     context.add(
       displayPrefix ? `Submodule ${displayPrefix} children` : "Submodules",
-      "[submodule enumeration exceeded the adapter limit]",
+      `[${reason}]`,
     );
-    context.markIncomplete("submodule enumeration exceeded the adapter limit");
+    context.markIncomplete(reason);
     return;
   }
 

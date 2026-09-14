@@ -149,6 +149,7 @@ function runGit(cwd, args, deadlineAt, signal = null) {
     let closedDirectoryFd = false;
     let exitCode = null;
     let exitSeen = false;
+    let stdoutEnded = false;
     const closeDirectoryFd = () => {
       if (directoryFd !== null && !closedDirectoryFd) {
         closeSync(directoryFd);
@@ -186,6 +187,12 @@ function runGit(cwd, args, deadlineAt, signal = null) {
       child.stdout.destroy();
       child.stderr.destroy();
     };
+    const incompleteStdoutError = () => Object.assign(
+      new Error(`git ${args[0]} stdout did not finish before command settlement`),
+      { outputIncomplete: true },
+    );
+    const settlementError = () => terminalError
+      ?? (exitCode === 0 && !stdoutEnded ? incompleteStdoutError() : null);
     const terminate = (error) => {
       if (!terminalError) terminalError = error;
       signalProcessTree(child, "SIGTERM");
@@ -246,6 +253,9 @@ function runGit(cwd, args, deadlineAt, signal = null) {
       }
       stdout.push(Buffer.from(chunk));
     });
+    child.stdout.on("end", () => {
+      stdoutEnded = true;
+    });
     child.stderr.on("data", (chunk) => {
       const combined = stderr.length ? Buffer.concat([stderr, chunk]) : Buffer.from(chunk);
       stderr = combined.length <= MAX_ERROR_BYTES
@@ -258,14 +268,15 @@ function runGit(cwd, args, deadlineAt, signal = null) {
       exitCode = code;
       if (!drainTimer) {
         drainTimer = setTimeout(() => {
+          const error = settlementError();
           closeStdio();
-          finish(terminalError);
+          finish(error);
         }, STDIO_DRAIN_MS);
       }
     });
     child.on("close", (code) => {
       if (!exitSeen) exitCode = code;
-      finish(terminalError);
+      finish(settlementError());
     });
     signal?.addEventListener("abort", handleAbort, { once: true });
     if (signal?.aborted) handleAbort();
@@ -1111,4 +1122,5 @@ if (isMain) {
 export {
   captureFingerprint,
   parseArgs,
+  runGit,
 };

@@ -244,23 +244,26 @@ test("command settlement is bounded when an escaped descendant holds stdout", as
   const pidPath = path.join(temporaryDirectory, "pid.txt");
   const startedAt = Date.now();
 
-  await runCommand(
-    process.execPath,
-    [
-      "-e",
+  await assert.rejects(
+    runCommand(
+      process.execPath,
       [
-        'const { spawn } = require("node:child_process");',
-        'const { writeFileSync } = require("node:fs");',
-        "const child = spawn(process.execPath, [",
-        "  '-e',",
-        "  'setInterval(() => {}, 1000);',",
-        "], { detached: true, stdio: ['ignore', 1, 2] });",
-        "writeFileSync(process.argv[1], String(child.pid));",
-        "child.unref();",
-      ].join(" "),
-      pidPath,
-    ],
-    { timeoutMs: 5_000, stdioDrainMs: 100 },
+        "-e",
+        [
+          'const { spawn } = require("node:child_process");',
+          'const { writeFileSync } = require("node:fs");',
+          "const child = spawn(process.execPath, [",
+          "  '-e',",
+          "  'setInterval(() => {}, 1000);',",
+          "], { detached: true, stdio: ['ignore', 1, 2] });",
+          "writeFileSync(process.argv[1], String(child.pid));",
+          "child.unref();",
+        ].join(" "),
+        pidPath,
+      ],
+      { timeoutMs: 5_000, stdioDrainMs: 100 },
+    ),
+    (error) => error.outputIncomplete === true && error.outputLimit == null,
   );
 
   const escapedPid = Number(readFileSync(pidPath, "utf8"));
@@ -272,6 +275,44 @@ test("command settlement is bounded when an escaped descendant holds stdout", as
     }
   });
   assert.ok(Date.now() - startedAt < 1_500, "stdio drain must settle promptly");
+});
+
+test("a nonzero exit takes precedence over incomplete stdout", async (t) => {
+  const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-review-nonzero-"));
+  t.after(() => rmSync(temporaryDirectory, { recursive: true, force: true }));
+  const pidPath = path.join(temporaryDirectory, "pid.txt");
+
+  await assert.rejects(
+    runCommand(
+      process.execPath,
+      [
+        "-e",
+        [
+          'const { spawn } = require("node:child_process");',
+          'const { writeFileSync } = require("node:fs");',
+          "const child = spawn(process.execPath, [",
+          "  '-e',",
+          "  'setInterval(() => {}, 1000);',",
+          "], { detached: true, stdio: ['ignore', 1, 2] });",
+          "writeFileSync(process.argv[1], String(child.pid));",
+          "child.unref();",
+          "process.exitCode = 17;",
+        ].join(" "),
+        pidPath,
+      ],
+      { timeoutMs: 5_000, stdioDrainMs: 100 },
+    ),
+    (error) => error.exitCode === 17 && error.outputIncomplete == null,
+  );
+
+  const escapedPid = Number(readFileSync(pidPath, "utf8"));
+  t.after(() => {
+    try {
+      process.kill(escapedPid, "SIGKILL");
+    } catch {
+      // The process may already have exited.
+    }
+  });
 });
 
 test("review evidence cannot close its nonce delimiter", () => {

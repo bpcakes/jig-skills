@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   symlinkSync,
@@ -13,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { runGit as runFingerprintGit } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
 
 const fingerprintScript = fileURLToPath(new URL(
   "../skills/comprehensive-review/scripts/scope-fingerprint.mjs",
@@ -343,4 +346,42 @@ test("fingerprint deadline exits with timeout status", (t) => {
     ], { encoding: "utf8", stdio: "pipe" }),
     (error) => error.status === 124,
   );
+});
+
+test("fingerprint Git capture rejects stdout that never reaches end", async (t) => {
+  const repo = makeRepository();
+  const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-fingerprint-stdio-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  });
+  const helperPath = path.join(temporaryDirectory, "hold-stdout.mjs");
+  const pidPath = path.join(temporaryDirectory, "pid.txt");
+  writeFileSync(helperPath, [
+    'import { spawn } from "node:child_process";',
+    'import { writeFileSync } from "node:fs";',
+    "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000);'], {",
+    "  detached: true,",
+    "  stdio: ['ignore', 1, 2],",
+    "});",
+    "writeFileSync(process.argv[2], String(child.pid));",
+    "child.unref();",
+    "",
+  ].join("\n"));
+  const alias = `alias.hold=!${JSON.stringify(process.execPath)} ${JSON.stringify(helperPath)} ${JSON.stringify(pidPath)}`;
+
+  await assert.rejects(
+    runFingerprintGit(repo, ["-c", alias, "hold"], Date.now() + 5_000),
+    (error) => error.outputIncomplete === true && error.outputLimit == null,
+  );
+
+  assert.equal(existsSync(pidPath), true);
+  const escapedPid = Number(readFileSync(pidPath, "utf8"));
+  t.after(() => {
+    try {
+      process.kill(escapedPid, "SIGKILL");
+    } catch {
+      // The process may already have exited.
+    }
+  });
 });

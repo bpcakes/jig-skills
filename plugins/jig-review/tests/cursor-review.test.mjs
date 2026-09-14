@@ -215,6 +215,58 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
   assert.equal(existsSync(captured.promptDirectory), false);
 });
 
+test("Cursor adapter rejects a report whose stdout never finishes", async (t) => {
+  const repo = makeRepository();
+  const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-cursor-stdio-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  });
+  const pidPath = path.join(temporaryDirectory, "descendant-pid.txt");
+  const fakeCursor = path.join(repo, "incomplete-stdout-cursor.mjs");
+  writeFileSync(fakeCursor, [
+    "#!/usr/bin/env node",
+    'import { spawn } from "node:child_process";',
+    'import { writeFileSync } from "node:fs";',
+    "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000);'], {",
+    "  detached: true,",
+    "  stdio: ['ignore', 1, 2],",
+    "});",
+    `writeFileSync(${JSON.stringify(pidPath)}, String(child.pid));`,
+    "child.unref();",
+    "process.stdout.write('apparently complete report');",
+    "",
+  ].join("\n"));
+  chmodSync(fakeCursor, 0o755);
+  const expectedFingerprint = await workingTreeFingerprint(repo);
+
+  await assert.rejects(
+    runCursorReview(
+      {
+        cwd: repo,
+        scope: "working-tree",
+        base: null,
+        effort: "high",
+        speed: "standard",
+        expectedFingerprint,
+        timeoutMs: 5_000,
+      },
+      { cursorBin: fakeCursor },
+    ),
+    (error) => error.outputIncomplete === true && error.outputLimit == null,
+  );
+
+  assert.equal(existsSync(pidPath), true);
+  const escapedPid = Number(readFileSync(pidPath, "utf8"));
+  t.after(() => {
+    try {
+      process.kill(escapedPid, "SIGKILL");
+    } catch {
+      // The process may already have exited.
+    }
+  });
+});
+
 test("empty Cursor output is rejected", () => {
   assert.equal(parseCursorResult(Buffer.from(" Finding text \n")), "Finding text");
   assert.throws(() => parseCursorResult(Buffer.alloc(0)), /no review output/);

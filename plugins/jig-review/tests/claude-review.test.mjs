@@ -293,6 +293,59 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
   assert.equal(captured.argv.some((argument) => /Bash|Edit|Write/.test(argument)), false);
 });
 
+test("Claude adapter rejects a report whose stdout never finishes", async (t) => {
+  const repo = makeRepository();
+  const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-claude-stdio-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  });
+  const pidPath = path.join(temporaryDirectory, "descendant-pid.txt");
+  const fakeClaude = path.join(repo, "incomplete-stdout-claude.mjs");
+  writeFileSync(fakeClaude, [
+    "#!/usr/bin/env node",
+    'import { spawn } from "node:child_process";',
+    'import { writeFileSync } from "node:fs";',
+    "for await (const _chunk of process.stdin) {}",
+    "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000);'], {",
+    "  detached: true,",
+    "  stdio: ['ignore', 1, 2],",
+    "});",
+    `writeFileSync(${JSON.stringify(pidPath)}, String(child.pid));`,
+    "child.unref();",
+    "process.stdout.write(JSON.stringify({ result: 'apparently complete report' }));",
+    "",
+  ].join("\n"));
+  chmodSync(fakeClaude, 0o755);
+  const expectedFingerprint = await workingTreeFingerprint(repo);
+
+  await assert.rejects(
+    runClaudeReview(
+      {
+        cwd: repo,
+        scope: "working-tree",
+        base: null,
+        model: "opus",
+        effort: null,
+        expectedFingerprint,
+        timeoutMs: 5_000,
+      },
+      { claudeBin: fakeClaude },
+    ),
+    (error) => error.outputIncomplete === true && error.outputLimit == null,
+  );
+
+  assert.equal(existsSync(pidPath), true);
+  const escapedPid = Number(readFileSync(pidPath, "utf8"));
+  t.after(() => {
+    try {
+      process.kill(escapedPid, "SIGKILL");
+    } catch {
+      // The process may already have exited.
+    }
+  });
+});
+
 test("terminal Claude JSON is extracted without transport metadata", () => {
   assert.equal(
     parseClaudeResult(Buffer.from('{"type":"result","result":"Finding text","is_error":false}')),
