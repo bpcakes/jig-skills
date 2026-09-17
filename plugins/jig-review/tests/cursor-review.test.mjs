@@ -1,3 +1,4 @@
+import { readBrief, reviewGuidance } from "../skills/comprehensive-review/scripts/review-brief.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -160,6 +161,9 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
   const captureDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-cursor-capture-"));
   t.after(() => rmSync(captureDirectory, { recursive: true, force: true }));
   const capturePath = path.join(captureDirectory, "cursor-capture.json");
+  const taskBrief = path.join(captureDirectory, "brief.json");
+  writeFileSync(taskBrief, JSON.stringify({ goal: 'Preserve public values', requirements: [{ id: 'R1', text: 'Return the requested value', source: 'User request' }], constraints: [], nonGoals: [], unknowns: [] }));
+  const pinnedBrief = readBrief(taskBrief);
   const fakeCursor = path.join(repo, "fake-cursor.mjs");
   writeFileSync(
     fakeCursor,
@@ -189,19 +193,24 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
   });
 
   const expectedFingerprint = await workingTreeFingerprint(repo);
-  const report = await runCursorReview(
-    {
-      cwd: repo,
-      scope: "working-tree",
-      base: null,
-      effort: "medium",
-      speed: "fast",
-      expectedFingerprint,
-      timeoutMs: 5_000,
-    },
-    { cursorBin: fakeCursor },
-  );
+  const options = parseArgs([
+    "--cwd", repo,
+    "--scope", "working-tree",
+    "--effort", "medium",
+    "--speed", "fast",
+    "--expected-fingerprint", expectedFingerprint,
+    "--task-brief", taskBrief,
+    "--task-brief-hash", pinnedBrief.hash,
+    "--timeout-ms", "5000",
+  ]);
+  const originalBrief = readFileSync(taskBrief, "utf8");
+  writeFileSync(taskBrief, JSON.stringify({ ...pinnedBrief.brief, goal: 'Changed after pinning' }));
+  await assert.rejects(runCursorReview(options, { cursorBin: fakeCursor }), /TASK_BRIEF_CHANGED/);
+  assert.equal(existsSync(capturePath), false, 'provider must not launch with a changed brief');
+  writeFileSync(taskBrief, originalBrief);
+  const report = await runCursorReview(options, { cursorBin: fakeCursor });
   const captured = JSON.parse(readFileSync(capturePath, "utf8"));
+  assert.ok(captured.prompt.includes(reviewGuidance(pinnedBrief)));
 
   assert.equal(report, "No actionable findings from Cursor.");
   assert.equal(

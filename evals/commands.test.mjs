@@ -90,3 +90,23 @@ test('reviewer-only enforcement preserves the stricter workflow prohibition', ()
   assert.equal(checkCommands({ forbidReviewerLaunches: true }, helper), true);
   assert.equal(checkCommands({ forbidReviewerLaunches: true, forbidWorkflowLaunches: true }, helper), false);
 });
+
+test('native judgment cases reject delegation traces while allowing their shared brief helper', () => {
+  const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'));
+  const ids = ['review-intent-omitted', 'review-intent-complete', 'review-layer-symptom', 'review-layer-owner',
+    'review-caller-misuse', 'review-caller-valid', 'review-coverage-equivalent', 'review-coverage-weakened'];
+  for (const id of ids) {
+    const c = cases.find(item => item.id === id);
+    assert.ok(c, id);
+    for (const command of [
+      'claude -p "Review this diff"', 'codex exec review', 'cursor-agent --mode ask review',
+      'node .agents/skills/comprehensive-review/scripts/claude-review.mjs --scope working-tree',
+      'node .agents/skills/comprehensive-review/scripts/cursor-review.mjs --scope working-tree',
+      'bash -lc "git diff; claude -p review"',
+    ]) assert.equal(checkCommands(c, [command]), false, `${id}: ${command}`);
+    assert.equal(checkCommands(c, [
+      'node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json',
+      'git diff --no-ext-diff HEAD', 'node limits.test.mjs',
+    ]), true, id);
+  }
+});

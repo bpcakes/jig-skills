@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { readBrief } from "./review-brief.mjs";
+
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { normalizeClaudeConfigDir } from "./claude-config.mjs";
@@ -57,6 +59,8 @@ function parseArgs(argv) {
     "--effort",
     "--file-access",
     "--config-dir",
+    "--task-brief",
+    "--task-brief-hash",
     "--expected-fingerprint",
     "--timeout-ms",
     "--exclude-path",
@@ -77,7 +81,11 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (value == null || value === "") throw new Error(`Missing value for ${argument}`);
     index += 1;
-    if (argument === "--exclude-path") {
+    if (argument === "--task-brief") {
+      options.taskBrief = value;
+    } else if (argument === "--task-brief-hash") {
+      options.taskBriefHash = value;
+    } else if (argument === "--exclude-path") {
       options.excludePaths.push(value);
     } else if (argument === "--timeout-ms") {
       options.timeoutMs = Number(value);
@@ -203,6 +211,8 @@ async function runClaudeReview(options, dependencies = {}) {
     fileAccess: normalizeFileAccess(options.fileAccess),
     configDir: normalizeClaudeConfigDir(options.configDir, "--config-dir"),
   };
+  if (Boolean(options.taskBrief) !== Boolean(options.taskBriefHash)) throw new Error("--task-brief and --task-brief-hash must be supplied together.");
+  const taskBrief = readBrief(options.taskBrief, options.taskBriefHash);
   const deadlineAt = Date.now() + options.timeoutMs;
   const signal = dependencies.signal ?? null;
   const initialFingerprint = await verifyScopeFingerprint(
@@ -216,7 +226,7 @@ async function runClaudeReview(options, dependencies = {}) {
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context);
+    const prompt = buildReviewPrompt(scope, context, { taskBrief });
     const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     const result = await runCommand(claudeBin,

@@ -2,12 +2,18 @@
 
 Use this runtime only for a collected, same-turn comprehensive review. The parent owns reviewer selection, scope resolution, orchestration, and merging. No child receives another child's output or the parent's review conclusions.
 
+## Shared task context
+
+Prepare the brief described in SKILL.md before spawning. Run `node "<skill-root>/scripts/review-brief.mjs" <brief.json>` and retain its exact hash and guidance. For native Codex, embed the returned `guidance` verbatim in the assignment. For external adapters, append `--task-brief <absolute-brief.json> --task-brief-hash <hash>`; they verify the bytes before any provider starts and embed the same guidance. The file is read by the adapter, not exposed as a provider filesystem dependency. Do not hand different summaries to different reviewers. After collection, validate the brief again with `node "<skill-root>/scripts/review-brief.mjs" <brief.json> <hash>`; a mismatch invalidates the same-task review.
+
+The guidance requires evidence for requirement coverage, causal ownership, and counterevidence. Native and external reports should include a compact `Requirement coverage` list, with each supplied ID marked satisfied, unmet, or uncertain. No brief is required for adapters called by other workflows; those callers retain their own task-contract protocol.
+
 ## Resolve Configuration and Scope
 
 Normalize reviewer controls before checking provider prerequisites:
 
 ```text
-node "<skill-root>/scripts/review-options.mjs" [--reviewers <list> | --all-reviewers] [--claude-model <model>] [--claude-effort <level>] [--claude-file-access <restricted|host>] [--claude-config-dir <absolute-path|~/path>] [--codex-model <model>] [--codex-effort <level>] [--cursor-effort <level>] [--cursor-speed <standard|fast>] [--exclude-path <path>]...
+node "<skill-root>/scripts/review-options.mjs" [--reviewers <list> | --all-reviewers] [--claude-model <model>] [--claude-effort <level>] [--claude-file-access <restricted|host>] [--claude-config-dir <absolute-path|~/path>] [--codex-model <model>] [--codex-effort <level>] [--cursor-effort <level>] [--cursor-speed <standard|fast>] [--exclude-path <path>]... [--log-to-beads]
 ```
 
 Use the returned `reviewers` array as the only spawn list. The parser defaults to Claude and Codex; `--all-reviewers` selects Claude, Codex, and Cursor in canonical order and is mutually exclusive with `--reviewers`. It defaults Claude file access to `restricted`, expands a Claude config directory beginning with `~/`, keeps provider settings separate, and maps Cursor effort plus speed to an exact Grok 4.6 model ID. `--claude-config-dir` requires selecting Claude and accepts only an absolute path, `~`, or `~/...`; do not resolve relative paths against the reviewed repository. Do not probe, spawn, or consume tokens for an unselected reviewer.
@@ -139,6 +145,7 @@ The Codex child performs only the native review. Its self-contained prompt inclu
 - the normalized effective exclusions, their trusted `.reviewignore` source, and an instruction not to inspect or report excluded paths;
 - any initial fingerprint `issues`, with an instruction to disclose the resulting coverage limitation;
 - the initial fingerprint and exact helper command; require the child to capture it before any repository inspection and again after drafting the report, returning `CAPTURE_INCOMPLETE` with issues if either capture is incomplete, or `SCOPE_CHANGED` instead of findings if complete captures differ;
+- the exact shared task guidance and brief, including requirement sources, constraints, non-goals, and unknowns;
 - a requirement to remain read-only;
 - an explicit prohibition on invoking `$comprehensive-review`, another review skill, or an external reviewer;
 - priorities: correctness defects, behavioral regressions, security and data-loss risks, concurrency hazards, performance cliffs, and material missing tests; distinguish substantive defects, supporting obligations, and optional suggestions independently of severity. A test gap must identify the behavior not proved, a plausible surviving regression, and why equivalent coverage is absent;

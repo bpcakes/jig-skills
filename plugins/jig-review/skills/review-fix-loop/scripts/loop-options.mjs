@@ -16,6 +16,7 @@ export function parseArgs(argv) {
   const forwarded = [];
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
+    if (flag === "--log-to-beads") throw new Error("--log-to-beads belongs to the comprehensive-review parent; log final residual findings after the controller terminates.");
     if (flag === "--wait") throw new Error("--wait was removed; use the controller's run command to wait for a boundary.");
     if (flag === "--include-working-tree") throw new Error("Branch loops already include working-tree changes; use --base or --scope branch.");
     if (names[flag]) {

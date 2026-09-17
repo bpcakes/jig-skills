@@ -43,6 +43,14 @@ Run commands from the repository root. Select the checks for the helper you chan
 
 Use the [feature-specific runtimes](README.md#requirements). The Ruby smoke test needs Minitest; the TypeScript AST scanner tests need an existing TypeScript installation. The [review CI workflow](.github/workflows/jig-review-tests.yml) runs the review suite on Node 22 and 24. That workflow does not cover every plugin's helpers.
 
+The Beads integration tests require the `br` CLI; CI installs the checksum-pinned [Beads v0.5.7 release](https://github.com/Dicklesworthstone/beads_rust/releases/tag/v0.5.7) and sets `JIG_REVIEW_REQUIRE_BEADS=1`, so a missing or broken executable fails the suite instead of skipping coverage. Local runs without `br` explicitly report these integration tests as skipped. To require the same coverage locally:
+
+```sh
+JIG_REVIEW_REQUIRE_BEADS=1 node --test plugins/jig-review/tests/beads-findings.test.mjs
+```
+
+These tests create temporary trackers and need no authentication. They do not use the repository's tracker.
+
 The ordinary review suite skips authenticated CLI checks. To verify real Claude and Cursor evidence access, explicitly opt in:
 
 ```sh

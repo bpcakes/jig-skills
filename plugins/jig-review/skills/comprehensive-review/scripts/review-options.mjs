@@ -31,7 +31,7 @@ const REVIEW_VALUE_FLAGS = new Map([
 ]);
 
 function reviewOptionTakesValue(flag) {
-  if (flag === "--all-reviewers") return false;
+  if (flag === "--all-reviewers" || flag === "--log-to-beads") return false;
   if (REVIEW_VALUE_FLAGS.has(flag)) return true;
   throw new Error(`Unsupported argument: ${flag}`);
 }
@@ -173,6 +173,7 @@ function parseArgs(argv) {
   }
 
   return {
+    ...(provided.has("--log-to-beads") ? { logToBeads: true } : {}),
     reviewers,
     claude,
     codex,

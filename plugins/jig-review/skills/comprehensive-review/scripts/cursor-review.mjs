@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { readBrief } from "./review-brief.mjs";
+
 import {
   realpathSync,
   writeFileSync,
@@ -51,6 +53,8 @@ function parseArgs(argv) {
     "--include-working-tree",
     "--effort",
     "--speed",
+    "--task-brief",
+    "--task-brief-hash",
     "--expected-fingerprint",
     "--timeout-ms",
     "--exclude-path",
@@ -71,7 +75,11 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (value == null || value === "") throw new Error(`Missing value for ${argument}`);
     index += 1;
-    if (argument === "--exclude-path") {
+    if (argument === "--task-brief") {
+      options.taskBrief = value;
+    } else if (argument === "--task-brief-hash") {
+      options.taskBriefHash = value;
+    } else if (argument === "--exclude-path") {
       options.excludePaths.push(value);
     } else if (argument === "--timeout-ms") {
       options.timeoutMs = Number(value);
@@ -160,6 +168,8 @@ async function runCursorReview(options, dependencies = {}) {
     ...options,
     expectedFingerprint: options.expectedFingerprint.toLowerCase(),
   };
+  if (Boolean(options.taskBrief) !== Boolean(options.taskBriefHash)) throw new Error("--task-brief and --task-brief-hash must be supplied together.");
+  const taskBrief = readBrief(options.taskBrief, options.taskBriefHash);
   const deadlineAt = Date.now() + options.timeoutMs;
   const signal = dependencies.signal ?? null;
   const initialFingerprint = await verifyScopeFingerprint(
@@ -176,7 +186,7 @@ async function runCursorReview(options, dependencies = {}) {
 
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context);
+    const prompt = buildReviewPrompt(scope, context, { taskBrief });
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
     const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;

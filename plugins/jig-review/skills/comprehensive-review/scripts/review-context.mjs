@@ -1,3 +1,5 @@
+import { reviewGuidance } from "./review-brief.mjs";
+
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
@@ -1065,6 +1067,8 @@ function buildReviewPrompt(scope, reviewContext, options = {}) {
     "Ground every finding in the narrowest file and line reference available.",
     "Do not modify, create, or delete files.",
     "",
+    reviewGuidance(options.taskBrief),
+    "",
     `Target: ${scope.label}`,
     ...(scope.includeWorkingTree ? [
       "Review the cumulative effect of the committed branch diff followed by staged and unstaged changes, including untracked files and submodule changes.",
@@ -1086,7 +1090,7 @@ function buildReviewPrompt(scope, reviewContext, options = {}) {
     "  Impact: ...",
     "  Kind: substantive defect | supporting obligation",
     "  Recommendation: ...",
-    "Then add Open questions and Test gaps. If there are no actionable findings, say so explicitly.",
+    "Then add Requirement coverage (each supplied requirement ID: satisfied, unmet, or uncertain, with evidence), Open questions, and Test gaps. If there are no actionable findings, say so explicitly.",
     "",
     openingDelimiter,
     escapedContext,

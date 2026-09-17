@@ -1,3 +1,4 @@
+import { readBrief, reviewGuidance } from "../skills/comprehensive-review/scripts/review-brief.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -242,6 +243,9 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
   const captureDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-claude-capture-"));
   t.after(() => rmSync(captureDirectory, { recursive: true, force: true }));
   const capturePath = path.join(captureDirectory, "capture.json");
+  const taskBrief = path.join(path.dirname(capturePath), "brief.json");
+  writeFileSync(taskBrief, JSON.stringify({ goal: 'Preserve public values', requirements: [{ id: 'R1', text: 'Return the requested value', source: 'User request' }], constraints: [], nonGoals: [], unknowns: [] }));
+  const pinnedBrief = readBrief(taskBrief);
   const fakeClaude = path.join(repo, "fake-claude.mjs");
   writeFileSync(
     fakeClaude,
@@ -265,20 +269,25 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
   });
 
   const expectedFingerprint = await workingTreeFingerprint(repo);
-  const report = await runClaudeReview(
-    {
-      cwd: repo,
-      scope: "working-tree",
-      base: null,
-      model: "opus",
-      effort: "medium",
-      configDir: "~/.claude-appleid",
-      expectedFingerprint,
-      timeoutMs: 5_000,
-    },
-    { claudeBin: fakeClaude },
-  );
+  const options = parseArgs([
+    "--cwd", repo,
+    "--scope", "working-tree",
+    "--model", "opus",
+    "--effort", "medium",
+    "--config-dir", "~/.claude-appleid",
+    "--expected-fingerprint", expectedFingerprint,
+    "--task-brief", taskBrief,
+    "--task-brief-hash", pinnedBrief.hash,
+    "--timeout-ms", "5000",
+  ]);
+  const originalBrief = readFileSync(taskBrief, "utf8");
+  writeFileSync(taskBrief, JSON.stringify({ ...pinnedBrief.brief, goal: 'Changed after pinning' }));
+  await assert.rejects(runClaudeReview(options, { claudeBin: fakeClaude }), /TASK_BRIEF_CHANGED/);
+  assert.equal(existsSync(capturePath), false, 'provider must not launch with a changed brief');
+  writeFileSync(taskBrief, originalBrief);
+  const report = await runClaudeReview(options, { claudeBin: fakeClaude });
   const captured = JSON.parse(readFileSync(capturePath, "utf8"));
+  assert.ok(captured.prompt.includes(reviewGuidance(pinnedBrief)));
 
   assert.equal(report, "No actionable findings from Claude.");
   assert.equal(captured.configDir, path.join(os.homedir(), ".claude-appleid"));

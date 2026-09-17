@@ -38,9 +38,9 @@ node evals/run.mjs --live --model gpt-6-astra --effort medium \
 
 ## What the cases establish
 
-The [68-case suite](../evals/cases.json) covers skill discovery, review findings, repair decisions, and scope preservation. It includes counterexamples for Rust, React, SQL, privacy, and planning skills. The two one-pass review/fix cases explicitly prohibit re-review, matching the current routing contract.
+The [76-case suite](../evals/cases.json) covers skill discovery, review findings, repair decisions, and scope preservation. It includes counterexamples for Rust, React, SQL, privacy, and planning skills. The two one-pass review/fix cases explicitly prohibit re-review, matching the current routing contract.
 
-The 21 frozen-history loop cases are marked `runtime: "markdown-loop-v1"` and excluded from current evaluation selection. Explicit selection is rejected with a pointer to the original evaluator/skill revision. The default suite therefore runs 47 current cases; exports list historical cases separately, never as missing or successful current coverage. Keep these fixtures as historical reproductions, not evidence of controller correctness. Historical live results remain tied to their recorded skill versions.
+The 21 frozen-history loop cases are marked `runtime: "markdown-loop-v1"` and excluded from current evaluation selection. Explicit selection is rejected with a pointer to the original evaluator/skill revision. The default suite therefore runs 55 current cases; exports list historical cases separately, never as missing or successful current coverage. Keep these fixtures as historical reproductions, not evidence of controller correctness. Historical live results remain tied to their recorded skill versions.
 
 Run the current deterministic controller lifecycle checks with:
 
@@ -83,6 +83,21 @@ node evals/export.mjs /path/to/selected-case-run /path/to/new-partial-report.jso
 Full export requires all planned trials and a completed run, as well as every suite case. Partial export requires the explicit `--partial` flag and lists omitted cases, omitted planned trials, and run state; interrupted repetitions cannot masquerade as a complete run. Partial exports may preserve an experiment with no finished trials. Keep separate reports when correcting a fixture and rerunning only that case, including the original failed trial.
 
 Verification recomputes scope, invocation, counts, trace restrictions, and grading checks, and compares hashes of all case artifacts plus both frozen and current schemas. Keep the raw run directory and matching source revision to reverify; a changed suite correctly rejects verification against that newer source. Format-1 through format-3 historical reports require their original evaluator and matching source. Format 4 adds mandatory requested-configuration and per-phase lifecycle provenance rather than inventing it for older records. The exported JSON is a portable outcome record, but its hashes are not proof of authenticity against a malicious evaluator. No manual multi-run aggregation is needed for new result records.
+
+## Comprehensive-review judgment cases
+
+Eight `review-*` cases exercise the native reviewer assignment with the same shared guidance used by external adapters: omitted versus satisfied requirements, a symptom-only correction versus the responsible shared layer, caller misuse versus a valid shared contract, and weakened versus equivalent test coverage. Expected conclusions stay in grader-only criteria. Fixture contracts describe the product without naming the suspected defect.
+
+These are component evaluations of review judgment, not evidence that the parent orchestrator or live multi-provider execution works. The task is explicitly a native child assignment, so it must not spawn reviewers or route to repairs. Local `review-judgment-fixtures.test.mjs` checks concrete behavior and surviving mutants; it does not prove that an agent finds the issue. Adapter tests separately verify that the shared brief reaches provider prompts.
+
+Run affected live cases explicitly when desired, then inspect findings, recommendations, false positives, and traces:
+
+```sh
+node evals/run.mjs --live --case review-intent-omitted --case review-intent-complete \
+  --case review-layer-symptom --case review-layer-owner \
+  --case review-caller-misuse --case review-caller-valid \
+  --case review-coverage-weakened --case review-coverage-equivalent
+```
 
 ## Maintain
 

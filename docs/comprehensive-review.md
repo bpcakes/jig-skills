@@ -18,6 +18,7 @@ Enter these prompts in Codex from the repository being reviewed:
 |---|---|
 | Review working changes with the defaults | `$jig-review:comprehensive-review` |
 | Review with all three providers | `$jig-review:comprehensive-review --all-reviewers` |
+| Store final findings in Beads | `$jig-review:comprehensive-review --log-to-beads` |
 | Use only native Codex | `$jig-review:comprehensive-review --reviewers codex` |
 | Add Cursor | `$jig-review:comprehensive-review --reviewers claude,codex,cursor` |
 | Use Codex and Cursor | `$jig-review:comprehensive-review --reviewers codex,cursor` |
@@ -119,3 +120,9 @@ $jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh 
 | Cursor still requests interactive workspace trust | Check that the installed `jig-review` includes the `--trust` adapter change; follow the [plugin update steps](../README.md#update-marketplace-plugins). |
 
 The [skill entrypoint](../plugins/jig-review/skills/comprehensive-review/SKILL.md) defines all reviewer controls and the report contract. The [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) documents orchestration and evidence handling for maintainers.
+
+## Task intent and causal findings
+
+All reviewers receive the same pinned task brief: intended behavior, sourced requirements, constraints, non-goals, and unknowns. Reports cover omitted requirements as well as regressions in changed lines. Recommendations identify the responsible boundary and check relevant callers and counterevidence; a shared-layer change is warranted only when that layer owns the broken behavior.
+
+With `--log-to-beads`, verified findings that remain actionable at the end of the turn are stored in the existing local Beads database. The flag is optional; ordinary reviews do not access Beads. Repeat findings reuse active issues, and the final response includes issue IDs and any logging failure. This also applies after authorized repairs: fixed findings are not filed. No tracker is initialized and no second task scheduler is introduced. See the [logging contract](../plugins/jig-review/skills/comprehensive-review/references/beads-logging.md) for supported stores, deduplication, and synchronization behavior.

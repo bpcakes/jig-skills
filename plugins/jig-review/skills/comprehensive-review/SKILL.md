@@ -7,7 +7,7 @@ description: Run independent Claude and Codex reviews of Git diffs and merge fin
 
 Produce one consolidated code review from one or more isolated reviewers. Default to Claude Code and native Codex; include Cursor Agent with Grok 4.6 only when selected.
 
-The review phase is read-only: neither the parent nor reviewers may change the reviewed files until all selected reviewers have finished or reached terminal failure and their reports are frozen. A review-only request ends with the consolidated report. An ordinary review-and-fix request routes to the sibling [review-fix-loop](../review-fix-loop/SKILL.md), which owns repairs, validation, and bounded re-review without another authorization question. Use the one-pass repair section only when the user explicitly requests one pass or prohibits re-review. Loading this skill alone never authorizes fixes.
+The review phase is read-only: neither the parent nor reviewers may change the reviewed files until all selected reviewers have finished or reached terminal failure and their reports are frozen. A review-only request ends with the consolidated report and, only with `--log-to-beads`, final issue logging. An ordinary review-and-fix request routes to the sibling [review-fix-loop](../review-fix-loop/SKILL.md), which owns repairs, validation, and bounded re-review without another authorization question. Use the one-pass repair section only when the user explicitly requests one pass or prohibits re-review. Loading this skill alone never authorizes fixes.
 
 If that controller rejects unsupported repository capabilities, stop with its precise explanation; do not continue reviewing or repairing through a fallback workflow.
 
@@ -23,6 +23,7 @@ Accept these reviewer options:
 - `--codex-model <model>` and `--codex-effort <low|medium|high|xhigh|max|ultra>` configure the native Codex child. Both inherit host defaults when omitted.
 - `--cursor-effort <low|medium|high|xhigh>` selects the Grok 4.6 effort level. Default: `high` when Cursor is selected.
 - `--cursor-speed <standard|fast>` selects the corresponding standard or `-fast` Cursor model. Default: `standard`.
+- `--log-to-beads` stores final actionable findings in the existing Beads tracker at the end of the turn. Logging is off by default. Read [Beads logging](references/beads-logging.md) before scope capture when selected; retain this flag in the parent when routing repairs to review-fix-loop.
 - `--exclude-path <repository-relative-path>` excludes one exact path and all its descendants. Repeat the flag to exclude multiple paths. This is additive with the repository's `.reviewignore` policy.
 
 Selecting Cursor runs it with workspace trust for the reviewed repository (`--trust`), read-only ask mode, and sandboxing. Claude's non-interactive `-p` mode already skips its workspace trust dialog.
@@ -34,6 +35,8 @@ Run `node scripts/review-options.mjs` from this skill directory with the reviewe
 A value cannot begin with `--`. For a literal exclusion path beginning with `--`, use its repository-root form, such as `--exclude-path /--output`.
 
 ## Workflow
+
+Before starting reviewers, write one concise task brief outside the repository: `goal`, `requirements` (each with `id`, `text`, and `source`), `constraints`, `nonGoals`, and `unknowns`. Use the user's request and established repository contracts; label unavailable intent as unknown. Do not turn the proposed implementation into its own acceptance criterion or include suspected findings. Validate and pin it with `node "<skill-root>/scripts/review-brief.mjs" <brief.json>`, retaining its `hash` and `guidance`. Give exactly that brief and shared guidance to every reviewer. Keep it immutable throughout the review. This checks omitted requirements as well as changed-line defects without inventing a specification.
 
 1. Resolve one concrete review scope.
    - Accept `--wait`, `--base <ref>`, `--scope working-tree|branch|auto`, and `--include-working-tree` in addition to the reviewer controls. The inclusion flag requires branch scope. Reject `--scope auto` combined with `--include-working-tree` before inspecting the checkout, with guidance to use `--scope branch` or `--base`; validity must not depend on whether the checkout is dirty.
@@ -67,8 +70,10 @@ A value cannot begin with `--`. For a literal exclusion path beginning with `--`
    - Preserve a finding if any completed reviewer found it actionable and the cited evidence remains plausible.
    - Keep the stronger evidence-supported severity when reviewers disagree.
    - Attribute each finding to the exact reviewers whose frozen reports independently identified it.
+   - Retain each finding's trigger, violated requirement/invariant, responsible boundary, and consequence. Recommendations should correct the owning layer and required callers; do not inflate a local defect into a redesign. Preserve counterevidence and uncertainty.
    - Distinguish substantive defects, supporting documentation/validation gaps, and optional suggestions. Require an actionable test gap to name the unproved behavior, a plausible surviving regression, and why equivalent coverage is absent. Do not infer broken behavior from missing coverage alone or inflate severity to make a supporting gap actionable.
-6. Print the consolidated review. With only one completed report, label it a single-reviewer result, not a merged review.
+6. If `--log-to-beads` is selected, follow the final logging step in [Beads logging](references/beads-logging.md) after any authorized repairs and before responding.
+7. Print the consolidated review. With only one completed report, label it a single-reviewer result, not a merged review.
 
 ## Optional One-Pass Repair
 
@@ -87,6 +92,7 @@ For each finding, use:
 ```markdown
 - [severity] [file:line] Short issue title
   Source: <comma-separated reviewer names>
+  Root cause / violated requirement: ...
   Why it matters: ...
   Kind: substantive defect | supporting obligation
   Recommendation: ...
@@ -97,6 +103,9 @@ List only the applicable source names in canonical order: `Claude`, `Codex`, `Cu
 After findings, add:
 
 ```markdown
+Requirement coverage:
+- <requirement ID>: satisfied|unmet|uncertain — evidence or limitation
+
 Open questions:
 - ...
 

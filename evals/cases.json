@@ -1778,5 +1778,223 @@
     ],
     "forbidReviewerLaunches": true,
     "allowedChanges": []
+  },
+  {
+    "id": "review-intent-omitted",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Implement parseLimit(text) for the pagination query parameter.\nInput is a string or undefined. An absent parameter returns 20. Supplied parameters are decimal digit strings representing integers from 1 through 100 inclusive; reject everything else with RangeError. Leading zeros are allowed.\n",
+      "task-brief.json": "{\n  \"goal\": \"Implement parseLimit(text) for the pagination query parameter.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Input is a string or undefined. An absent parameter returns 20. Supplied parameters are decimal digit strings representing integers from 1 through 100 inclusive; reject everything else with RangeError. Leading zeros are allowed.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "limits.mjs": "export function parseLimit(text) { if (text === undefined) return 20; const value = Number(text); if (!/^\\d+$/.test(text) || !Number.isInteger(value) || value < 1) throw new RangeError('limit'); return value; }\n",
+      "limits.test.mjs": "import assert from 'node:assert/strict';\nimport { parseLimit } from './limits.mjs';\nassert.equal(parseLimit(undefined), 20);\nfor (let n = 1; n <= 100; n++) assert.equal(parseLimit(String(n)), n);\nfor (const text of ['0', '101', '-1', '1.5', '', 'abc']) assert.throws(() => parseLimit(text), RangeError);\n"
+    },
+    "baseFiles": {
+      "limits.mjs": "export function parseLimit(text) { return 20; }\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "requirement-coverage",
+        "requirement": "Checks the upper bound from R1, not merely local consistency in changed lines. Reports that 101 is accepted and recommends enforcing the upper bound in parseLimit; does not invent a lower-level parser redesign."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "review-intent-complete",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Implement parseLimit(text) for the pagination query parameter.\nInput is a string or undefined. An absent parameter returns 20. Supplied parameters are decimal digit strings representing integers from 1 through 100 inclusive; reject everything else with RangeError. Leading zeros are allowed.\n",
+      "task-brief.json": "{\n  \"goal\": \"Implement parseLimit(text) for the pagination query parameter.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Input is a string or undefined. An absent parameter returns 20. Supplied parameters are decimal digit strings representing integers from 1 through 100 inclusive; reject everything else with RangeError. Leading zeros are allowed.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "limits.mjs": "export function parseLimit(text) { if (text === undefined) return 20; const value = Number(text); if (!/^\\d+$/.test(text) || !Number.isInteger(value) || value < 1 || value > 100) throw new RangeError('limit'); return value; }\n",
+      "limits.test.mjs": "import assert from 'node:assert/strict';\nimport { parseLimit } from './limits.mjs';\nassert.equal(parseLimit(undefined), 20);\nfor (let n = 1; n <= 100; n++) assert.equal(parseLimit(String(n)), n);\nfor (const text of ['0', '101', '-1', '1.5', '', 'abc']) assert.throws(() => parseLimit(text), RangeError);\n"
+    },
+    "baseFiles": {
+      "limits.mjs": "export function parseLimit(text) { return 20; }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "requirement-coverage",
+        "requirement": "Recognizes both bounds and valid default behavior with direct test coverage; no invented missing requirements or test obligations."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "review-layer-symptom",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Treat negative quantities as zero in all total calculations.\ntotal(lines) owns quantity normalization for checkout and invoice generation. Prices and quantities are finite numbers; prices are nonnegative. Fractional quantities remain valid.\n",
+      "task-brief.json": "{\n  \"goal\": \"Treat negative quantities as zero in all total calculations.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"total(lines) owns quantity normalization for checkout and invoice generation. Prices and quantities are finite numbers; prices are nonnegative. Fractional quantities remain valid.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "total.mjs": "export const total = lines => lines.reduce((sum, line) => sum + line.price * line.quantity, 0);\n",
+      "checkout.mjs": "import { total } from './total.mjs';\nexport const checkoutTotal = lines => total(lines.map(line => ({ ...line, quantity: Math.max(0, line.quantity) })));\n",
+      "invoice.mjs": "import { total } from './total.mjs';\nexport const invoiceTotal = lines => total(lines);\n",
+      "totals.test.mjs": "import assert from 'node:assert/strict';\nimport { checkoutTotal } from './checkout.mjs';\nimport { invoiceTotal } from './invoice.mjs';\nfor (const total of [checkoutTotal, invoiceTotal]) { assert.equal(total([{price:5,quantity:-2},{price:3,quantity:2}]),6); assert.equal(total([{price:4,quantity:0.5}]),2); }\n"
+    },
+    "baseFiles": {
+      "total.mjs": "export const total = lines => lines.reduce((sum, line) => sum + line.price * line.quantity, 0);\n",
+      "checkout.mjs": "import { total } from './total.mjs';\nexport const checkoutTotal = lines => total(lines);\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "responsible-boundary",
+        "requirement": "Traces both callers and shared total. Identifies that checkout-only normalization leaves invoiceTotal returning negative totals and recommends fixing total, with coverage for both callers; does not recommend duplicating the guard in invoice."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "review-layer-owner",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Treat negative quantities as zero in all total calculations.\ntotal(lines) owns quantity normalization for checkout and invoice generation. Prices and quantities are finite numbers; prices are nonnegative. Fractional quantities remain valid.\n",
+      "task-brief.json": "{\n  \"goal\": \"Treat negative quantities as zero in all total calculations.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"total(lines) owns quantity normalization for checkout and invoice generation. Prices and quantities are finite numbers; prices are nonnegative. Fractional quantities remain valid.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "total.mjs": "export const total = lines => lines.reduce((sum, line) => sum + line.price * Math.max(0, line.quantity), 0);\n",
+      "checkout.mjs": "import { total } from './total.mjs';\nexport const checkoutTotal = lines => total(lines);\n",
+      "invoice.mjs": "import { total } from './total.mjs';\nexport const invoiceTotal = lines => total(lines);\n",
+      "totals.test.mjs": "import assert from 'node:assert/strict';\nimport { checkoutTotal } from './checkout.mjs';\nimport { invoiceTotal } from './invoice.mjs';\nfor (const total of [checkoutTotal, invoiceTotal]) { assert.equal(total([{price:5,quantity:-2},{price:3,quantity:2}]),6); assert.equal(total([{price:4,quantity:0.5}]),2); }\n"
+    },
+    "baseFiles": {
+      "total.mjs": "export const total = lines => lines.reduce((sum, line) => sum + line.price * line.quantity, 0);\n",
+      "checkout.mjs": "import { total } from './total.mjs';\nexport const checkoutTotal = lines => total(lines);\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "responsible-boundary",
+        "requirement": "Traces both callers and shared total. Accepts normalization in total as satisfying both callers; no demand for duplicate guards, a new abstraction, or validation outside the documented finite input domain."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "review-caller-misuse",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Connect the checkout dollar display to the existing total calculation.\ntotalCents(lines) accepts finite integer cents and nonnegative integer quantities and returns cents. invoiceCents must keep returning cents. checkoutDollars must return dollars.\n",
+      "task-brief.json": "{\n  \"goal\": \"Connect the checkout dollar display to the existing total calculation.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"totalCents(lines) accepts finite integer cents and nonnegative integer quantities and returns cents. invoiceCents must keep returning cents. checkoutDollars must return dollars.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "money.mjs": "export const totalCents = lines => lines.reduce((sum, line) => sum + line.priceCents * line.quantity, 0);\n",
+      "checkout.mjs": "import { totalCents } from './money.mjs';\nexport const checkoutDollars = lines => totalCents(lines);\n",
+      "invoice.mjs": "import { totalCents } from './money.mjs';\nexport const invoiceCents = totalCents;\n",
+      "money.test.mjs": "import assert from 'node:assert/strict';\nimport { checkoutDollars } from './checkout.mjs';\nimport { invoiceCents } from './invoice.mjs';\nconst lines = [{priceCents:125, quantity:2}];\nassert.equal(checkoutDollars(lines), 2.5);\nassert.equal(invoiceCents(lines), 250);\n"
+    },
+    "baseFiles": {
+      "checkout.mjs": "export const checkoutDollars = lines => lines.reduce((sum, line) => sum + line.priceCents * line.quantity / 100, 0);\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "caller-ownership",
+        "requirement": "Examines the established shared contract and invoice caller. Reports the 100x display amount in checkoutDollars and recommends conversion there; does not change totalCents to dollars or force invoice callers to compensate."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "review-caller-valid",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Connect the checkout dollar display to the existing total calculation.\ntotalCents(lines) accepts finite integer cents and nonnegative integer quantities and returns cents. invoiceCents must keep returning cents. checkoutDollars must return dollars.\n",
+      "task-brief.json": "{\n  \"goal\": \"Connect the checkout dollar display to the existing total calculation.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"totalCents(lines) accepts finite integer cents and nonnegative integer quantities and returns cents. invoiceCents must keep returning cents. checkoutDollars must return dollars.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "money.mjs": "export const totalCents = lines => lines.reduce((sum, line) => sum + line.priceCents * line.quantity, 0);\n",
+      "checkout.mjs": "import { totalCents } from './money.mjs';\nexport const checkoutDollars = lines => totalCents(lines) / 100;\n",
+      "invoice.mjs": "import { totalCents } from './money.mjs';\nexport const invoiceCents = totalCents;\n",
+      "money.test.mjs": "import assert from 'node:assert/strict';\nimport { checkoutDollars } from './checkout.mjs';\nimport { invoiceCents } from './invoice.mjs';\nconst lines = [{priceCents:125, quantity:2}];\nassert.equal(checkoutDollars(lines), 2.5);\nassert.equal(invoiceCents(lines), 250);\n"
+    },
+    "baseFiles": {
+      "checkout.mjs": "export const checkoutDollars = lines => lines.reduce((sum, line) => sum + line.priceCents * line.quantity / 100, 0);\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "caller-ownership",
+        "requirement": "Examines the established shared contract and invoice caller. Accepts caller-level conversion and the unchanged shared cents contract. Does not invent a shared-layer normalization defect."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "review-coverage-equivalent",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Consolidate the eligibility tests while retaining protection for the supported age domain.\naccepts(age) returns true exactly for integer ages 18 through 65 inclusive. Inputs are integers from 0 through 120. node ages.test.mjs is the entire CI test suite; no other jobs or tests exist.\n",
+      "task-brief.json": "{\n  \"goal\": \"Consolidate the eligibility tests while retaining protection for the supported age domain.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"accepts(age) returns true exactly for integer ages 18 through 65 inclusive. Inputs are integers from 0 through 120. node ages.test.mjs is the entire CI test suite; no other jobs or tests exist.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "ages.mjs": "export const accepts = age => age >= 18 && age <= 65;\n",
+      "ages.test.mjs": "import assert from 'node:assert/strict';\nimport { accepts } from './ages.mjs';\nfor (let age = 0; age <= 120; age++) assert.equal(accepts(age), age >= 18 && age <= 65);\n"
+    },
+    "baseFiles": {
+      "ages.test.mjs": "import assert from 'node:assert/strict';\nimport { accepts } from './ages.mjs';\nfor (const [age, expected] of [[17,false],[18,true],[65,true],[66,false]]) assert.equal(accepts(age), expected);\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "coverage-counterevidence",
+        "requirement": "Checks actual assertions and surviving mutants. Finds no actionable test gap: exhaustive exact results replace and subsume the separate boundary checks. Does not count deleted test structure as lost coverage."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "review-coverage-weakened",
+    "skill": "comprehensive-review",
+    "mode": "loaded",
+    "prompt": "You are the native Codex reviewer child for a comprehensive review, not the parent orchestrator. Review the current Git diff read-only. The parent has supplied task-brief.json; run node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json and use the returned shared guidance and task context. Inspect relevant repository evidence and counterevidence. Return actionable findings with cause, consequence, and recommendation, plus requirement coverage. Do not invoke the parent workflow, other agents, external reviewers, or repairs. Do not edit files or install dependencies.",
+    "files": {
+      "README.md": "Consolidate the eligibility tests while retaining protection for the supported age domain.\naccepts(age) returns true exactly for integer ages 18 through 65 inclusive. Inputs are integers from 0 through 120. node ages.test.mjs is the entire CI test suite; no other jobs or tests exist.\n",
+      "task-brief.json": "{\n  \"goal\": \"Consolidate the eligibility tests while retaining protection for the supported age domain.\",\n  \"requirements\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"accepts(age) returns true exactly for integer ages 18 through 65 inclusive. Inputs are integers from 0 through 120. node ages.test.mjs is the entire CI test suite; no other jobs or tests exist.\",\n      \"source\": \"README.md\"\n    }\n  ],\n  \"constraints\": [\n    \"Preserve existing public contracts outside this task\"\n  ],\n  \"nonGoals\": [\n    \"Unrelated refactoring\"\n  ],\n  \"unknowns\": []\n}\n",
+      "ages.mjs": "export const accepts = age => age >= 18 && age <= 65;\n",
+      "ages.test.mjs": "import assert from 'node:assert/strict';\nimport { accepts } from './ages.mjs';\nfor (const age of [17,18,65,66]) assert.equal(typeof accepts(age), 'boolean');\n"
+    },
+    "baseFiles": {
+      "ages.test.mjs": "import assert from 'node:assert/strict';\nimport { accepts } from './ages.mjs';\nfor (const [age, expected] of [[17,false],[18,true],[65,true],[66,false]]) assert.equal(accepts(age), expected);\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "coverage-counterevidence",
+        "requirement": "Checks actual assertions and surviving mutants. Reports lost boundary protection as a supporting validation obligation: accepting 17 or rejecting 65 would now pass. Does not claim the unchanged implementation is currently broken."
+      }
+    ],
+    "forbidReviewerLaunches": true
   }
 ]
