@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { root, snapshot, skillSnapshot, skillBundlePolicy, schemaNames, skillDirs, parseTrace, traceMetrics, completedCommands, skillReadEvidence, checkInvocation, changedPaths, checkScope, checkGrade, checkCommands } from './run.mjs';
+import { root, snapshot, skillSnapshot, skillBundlePolicy, schemaNames, skillDirs, parseTrace, traceMetrics, completedCommands, skillReadEvidence, checkInvocation, changedPaths, checkScope, checkGrade, checkCommands, currentCases } from './run.mjs';
 
 const sha = value => createHash('sha256').update(value).digest('hex');
 const json = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -102,7 +102,8 @@ export function createReport(runDirectory, sourceRoot = root, { allowPartial = f
   const summary = json(path.join(run, 'summary.json'));
   if (summary.formatVersion !== 4) throw new Error('Legacy run: verify with its original evaluator revision; configuration and phase provenance were not recorded under the current contract');
   requireEqual(summary.skillBundlePolicy, skillBundlePolicy, 'skill bundle policy');
-  const cases = json(path.join(sourceRoot, 'evals/cases.json'));
+  const catalogCases = json(path.join(sourceRoot, 'evals/cases.json'));
+  const cases = currentCases(catalogCases);
   requireEqual(sha(readFileSync(path.join(sourceRoot, 'evals/run.mjs'))), summary.harnessHash, 'current harness');
   requireEqual(sha(readFileSync(path.join(sourceRoot, 'evals/cases.json'))), summary.suiteHash, 'current suite');
   requireEqual(Object.keys(summary.schemaHashes ?? {}).sort(), [...schemaNames].sort(), 'schema inventory');
@@ -222,6 +223,7 @@ export function createReport(runDirectory, sourceRoot = root, { allowPartial = f
   return { schemaVersion: 4, sourceRun: run, sourceSummaryHash: sha(readFileSync(path.join(run, 'summary.json'))),
     skillBundlePolicy, schemaHashes: summary.schemaHashes,
     coverage: { allowPartial, completeSuite: missingCases.length === 0 && runComplete, missingCases, missingTrials,
+      historicalCases: catalogCases.filter(c => c.runtime === 'markdown-loop-v1').map(c => c.id),
       plannedTrials: plan, runState: summary.state, runComplete, runError: summary.error ?? null },
     startedAt: summary.startedAt, cli: summary.cli, model: summary.model, configuration: summary.configuration, sourceCommit: summary.commit,
     harnessHash: summary.harnessHash, suiteHash: summary.suiteHash, exporterHash: sha(readFileSync(fileURLToPath(import.meta.url))), skillHashes: summary.skillHashes,

@@ -115,7 +115,7 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 | Skill | Use it for | Default result |
 |---|---|---|
 | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
-| [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs bounded working-tree or branch cycles of comprehensive review, triage, minimal or comprehensive fixes, tests, and fresh re-review. Branch rounds include uncommitted repairs. | Code changes and convergence report |
+| [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, recoverable repairs, local validation, and independent terminal reviews. | Code changes and run record |
 
 Both skills run in Codex and require its subagent facility. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 
@@ -196,7 +196,7 @@ Omit the skill name to install every compatible skill, or pass multiple names to
 
 Start a new agent session in the project you want to review after copying. Direct copies use the skill name without the plugin prefix. Claude's `/skill-name` syntax is documented in its [skills guide](https://code.claude.com/docs/en/skills).
 
-`comprehensive-review` and `review-fix-loop` are Codex-only because they orchestrate Codex subagents. The installer excludes them when installing all skills for Claude and rejects an explicit request to install either there. A standalone `review-fix-loop` install includes its required `comprehensive-review`; each user-facing privacy skill includes `audit-common`. Existing dependencies must match this checkout. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Calling Claude as an external reviewer from Codex is supported.
+`comprehensive-review` and `review-fix-loop` are Codex-only because they orchestrate Codex subagents. The installer excludes them when installing all skills for Claude and rejects an explicit request to install either there. Selecting either review skill installs both matching skills so review-and-fix routing works; each user-facing privacy skill includes `audit-common`. Existing dependencies must match this checkout. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Calling Claude as an external reviewer from Codex is supported.
 
 The installer preserves automatic dependencies even with `--force`. To replace a differing dependency, select both explicitly: `scripts/install.sh codex --force comprehensive-review review-fix-loop`, or `scripts/install.sh codex --force audit-common network-payload-zero-knowledge-test`. Use `--dest <directory>` before skill names to select a different skills directory; this also supports isolated installation checks without changing your agent configuration.
 
@@ -212,6 +212,7 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Ruby/Rails scanner | Ruby; Minitest for its smoke tests |
 | TypeScript/React scanners | Node.js; use Node 22 or newer. The duplication scanner also needs an existing `typescript` package in the target repository or a global installation. |
 | Comprehensive review and review-fix loop | Node.js ≥ 22 and Codex subagents. Linux, macOS, or Windows through WSL; native Windows is unsupported by the external adapters. |
+| Review-fix controller | Git ≥ 2.42; Linux `flock` or macOS Python 3. Uses the existing project's validation environment; isolated validation is opt-in. |
 | Claude pass in comprehensive review | Installed, authenticated [Claude Code](https://claude.ai/code) CLI |
 | Cursor pass in comprehensive review | Installed, authenticated [Cursor Agent](https://cursor.com/) CLI |
 | Cursor ExecPlan implementation | Python ≥ 3.10 and an authenticated Cursor Agent CLI |
@@ -251,10 +252,10 @@ $jig-review:comprehensive-review --reviewers claude,codex
 Review, fix, test, and freshly re-review working changes:
 
 ```text
-$jig-review:review-fix-loop --all-reviewers --min-severity medium --max-rounds 4
+$jig-review:review-fix-loop --base main
 ```
 
-The review example returns merged findings plus reviewer and coverage notes. The loop example changes files but does not commit them. See [comprehensive-review usage](docs/comprehensive-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.
+The review example returns merged findings plus reviewer and coverage notes. The loop example changes files but does not commit them. Repair defaults to `--fix-mode balanced`: diagnose the demonstrated cause and repair the responsible boundary, expanding scope when evidence warrants it. Use `--fix-mode comprehensive` for broader investigation of related mechanisms and recurrence risks, or `--fix-mode minimal` for focused investigation with the same causal-repair standard. See [comprehensive-review usage](docs/comprehensive-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.
 
 Some skills use different inputs:
 

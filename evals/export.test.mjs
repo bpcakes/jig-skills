@@ -264,6 +264,20 @@ test('selected-case exports require explicit partial mode and list every omitted
   assert.equal(report.total, 1);
 });
 
+test('coverage lists historical fixtures separately and cannot count them as current trials', t => {
+  const f = fixture(t);
+  f.write(path.join(f.source, 'evals/cases.json'), [f.c, { ...f.c, id: 'retired', runtime: 'markdown-loop-v1' }]);
+  f.summary.suiteHash = sha(readFileSync(path.join(f.source, 'evals/cases.json')));
+  f.write(path.join(f.run, 'summary.json'), f.summary);
+  const report = createReport(f.run, f.source);
+  assert.equal(report.coverage.completeSuite, true);
+  assert.deepEqual(report.coverage.historicalCases, ['retired']);
+  assert.deepEqual(report.coverage.missingCases, []);
+  f.summary.plannedTrials.push({ id: 'retired', iteration: 1 });
+  f.write(path.join(f.run, 'summary.json'), f.summary);
+  assert.throws(() => createReport(f.run, f.source), /Invalid planned trial/);
+});
+
 test('export preserves a failed trial instead of selecting only successes', t => {
   const f = fixture(t);
   f.summary.results[0] = { ...f.summary.results[0], passed: false, error: 'agent: timeout' };

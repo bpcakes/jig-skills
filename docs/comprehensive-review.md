@@ -4,7 +4,7 @@
 
 `jig-review:comprehensive-review` runs independent reviews of the same Git changes and merges their findings. It runs inside Codex, using Codex subagents to perform the native review and forward assignments to selected external CLIs.
 
-The default reviewers are Claude Code and Codex. Cursor is optional. The review phase is read-only. If the user already requested fixes, the parent may apply them after all reviewer reports are frozen; review-only requests stop at the report. When used by `review-fix-loop`, the loop owns repairs and subsequent rounds.
+The default reviewers are Claude Code and Codex. Cursor is optional. Review-only requests stop at the report. Ordinary review-and-fix requests route to [review-fix-loop](review-fix-loop.md) without another authorization question. Explicit “once” or “do not re-review” requests permit one repair phase after all reviewer reports are frozen.
 
 ## Setup and Invocation
 

@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
-import { addClosureEvidence, readClosureContext } from "./closure-context.mjs";
+import { gitEnvironment } from "./git-environment.mjs";
 
 import {
   CURSOR_MODELS,
@@ -23,6 +23,7 @@ import {
 } from "./review-context.mjs";
 import {
   assertSupportedAdapterPlatform,
+  assertScopeMatchesFingerprint,
   installAdapterCancellation,
   providerTimeout,
   verifyScopeFingerprint,
@@ -51,7 +52,6 @@ function parseArgs(argv) {
     "--effort",
     "--speed",
     "--expected-fingerprint",
-    "--closure-context",
     "--timeout-ms",
     "--exclude-path",
   ]);
@@ -80,8 +80,6 @@ function parseArgs(argv) {
       }
     } else if (argument === "--expected-fingerprint") {
       options.expectedFingerprint = value;
-    } else if (argument === "--closure-context") {
-      options.closureContextPath = value;
     } else {
       options[argument.slice(2)] = value;
     }
@@ -171,17 +169,14 @@ async function runCursorReview(options, dependencies = {}) {
     signal,
   );
   const scope = await resolveScope(options, { deadlineAt, signal });
+  assertScopeMatchesFingerprint(scope, initialFingerprint);
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   const promptDirectory = evidence.directory;
   const promptPath = path.join(promptDirectory, "review-prompt.md");
 
   try {
-    const closureContext = readClosureContext(
-      options.closureContextPath, initialFingerprint.fingerprint, scope.excludePaths,
-    );
-    const closureEvidence = addClosureEvidence(evidence, closureContext);
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context, { closureEvidence });
+    const prompt = buildReviewPrompt(scope, context);
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
     const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
@@ -190,6 +185,7 @@ async function runCursorReview(options, dependencies = {}) {
       buildCursorArgs(options, scope, promptDirectory, promptPath),
       {
         cwd: scope.repoRoot,
+        env: gitEnvironment(),
         timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
         maxBuffer: MAX_CURSOR_OUTPUT_BYTES,
         signal,

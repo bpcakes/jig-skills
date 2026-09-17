@@ -15,6 +15,7 @@ import {
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { gitEnvironment } from "./git-environment.mjs";
 import {
   exclusionsForSubtree,
   gitPathspec,
@@ -127,7 +128,7 @@ function signalProcessTree(child, signal) {
 }
 
 function runGit(cwd, args, deadlineAt, signal = null) {
-  const environment = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
+  const environment = gitEnvironment();
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(signal.reason instanceof Error

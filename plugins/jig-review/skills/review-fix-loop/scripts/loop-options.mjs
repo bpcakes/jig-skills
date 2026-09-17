@@ -1,129 +1,53 @@
 #!/usr/bin/env node
-
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import {
-  parseArgs as parseReviewArgs,
-  readOptionValue,
-  reviewOptionTakesValue,
-} from "../../comprehensive-review/scripts/review-options.mjs";
+import { parseArgs as reviewArgs, readOptionValue, reviewOptionTakesValue } from "../../comprehensive-review/scripts/review-options.mjs";
+import { DEFAULT_FIX_MODE, repairPolicy } from "./repair-policy.mjs";
 
-const DEFAULT_MAX_ROUNDS = 4;
-const MAX_ROUNDS = 5;
-const SEVERITIES = new Set(["critical", "high", "medium", "low"]);
-const FIX_MODES = new Set(["minimal", "comprehensive"]);
+export const DEFAULT_MAX_ROUNDS = 3;
+export const MAX_ROUNDS = 10;
 
-function parseArgs(argv) {
-  let scope = null;
-  let base = null;
-  let fixMode = "minimal";
-  let minSeverity = "medium";
-  let maxRounds = DEFAULT_MAX_ROUNDS;
-  const reviewArgv = [];
-  const provided = new Set();
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const flag = argv[index];
-
-    if (flag === "--wait") continue;
-    if (flag === "--include-working-tree") {
-      throw new Error(
-        "review-fix-loop already includes working-tree changes in branch scope; "
-        + "use --base or --scope branch without --include-working-tree.",
-      );
-    }
-    if (flag === "--base") {
-      if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
-      base = readOptionValue(argv, index, flag);
-      if (!base.trim()) throw new Error("--base must not be blank.");
-      provided.add(flag);
-      index += 1;
-      continue;
-    }
-    if (flag === "--scope") {
-      if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
-      scope = readOptionValue(argv, index, flag);
-      if (!["working-tree", "branch", "auto"].includes(scope)) {
-        throw new Error("--scope must be working-tree, branch, or auto.");
-      }
-      provided.add(flag);
-      index += 1;
-      continue;
-    }
-    if (flag === "--fix-mode") {
-      if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
-      fixMode = readOptionValue(argv, index, flag).trim().toLowerCase();
-      if (!FIX_MODES.has(fixMode)) {
-        throw new Error(
-          `Unsupported --fix-mode value "${fixMode}". Use minimal or comprehensive.`,
-        );
-      }
-      provided.add(flag);
-      index += 1;
-      continue;
-    }
-    if (flag === "--min-severity") {
-      if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
-      minSeverity = readOptionValue(argv, index, flag).trim().toLowerCase();
-      if (!SEVERITIES.has(minSeverity)) {
-        throw new Error(
-          `Unsupported --min-severity value "${minSeverity}". Use critical, high, medium, or low.`,
-        );
-      }
-      provided.add(flag);
-      index += 1;
-      continue;
-    }
-    if (flag === "--max-rounds") {
-      if (provided.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
-      maxRounds = Number(readOptionValue(argv, index, flag));
-      if (!Number.isSafeInteger(maxRounds) || maxRounds < 1 || maxRounds > MAX_ROUNDS) {
-        throw new Error(`--max-rounds must be an integer from 1 to ${MAX_ROUNDS}.`);
-      }
-      provided.add(flag);
-      index += 1;
-      continue;
-    }
-
-    reviewArgv.push(flag);
-    if (reviewOptionTakesValue(flag)) {
-      reviewArgv.push(readOptionValue(argv, index, flag));
-      index += 1;
+export function parseArgs(argv) {
+  const options = { scope: "auto", base: null, fixMode: DEFAULT_FIX_MODE, minSeverity: "low", maxRounds: DEFAULT_MAX_ROUNDS,
+    reviewPolicy: "balanced", maxProviderAttempts: 3, infrastructureRetries: 1 };
+  const names = { "--scope": "scope", "--base": "base", "--fix-mode": "fixMode", "--min-severity": "minSeverity",
+    "--max-rounds": "maxRounds", "--review-policy": "reviewPolicy", "--max-provider-attempts": "maxProviderAttempts" };
+  const seen = new Set();
+  const forwarded = [];
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i];
+    if (flag === "--wait") throw new Error("--wait was removed; use the controller's run command to wait for a boundary.");
+    if (flag === "--include-working-tree") throw new Error("Branch loops already include working-tree changes; use --base or --scope branch.");
+    if (names[flag]) {
+      if (seen.has(flag)) throw new Error(`Duplicate argument: ${flag}`);
+      seen.add(flag);
+      options[names[flag]] = readOptionValue(argv, i++, flag).trim();
+    } else {
+      forwarded.push(flag);
+      if (reviewOptionTakesValue(flag)) forwarded.push(readOptionValue(argv, i++, flag));
     }
   }
-
-  if (base && scope === "working-tree") {
-    throw new Error("--base cannot be combined with --scope working-tree.");
+  if (!["auto", "branch", "working-tree"].includes(options.scope)) throw new Error("--scope must be auto, branch, or working-tree.");
+  if (!["balanced", "strict"].includes(options.reviewPolicy)) throw new Error("--review-policy must be balanced or strict.");
+  options.fixMode = options.fixMode.toLowerCase();
+  repairPolicy(options.fixMode);
+  options.minSeverity = options.minSeverity.toLowerCase();
+  if (!["low", "medium", "high", "critical"].includes(options.minSeverity)) throw new Error("Unsupported --min-severity.");
+  for (const key of ["maxRounds", "maxProviderAttempts"]) {
+    options[key] = Number(options[key]);
+    if (!Number.isSafeInteger(options[key]) || options[key] < 1 || options[key] > MAX_ROUNDS) throw new Error(`${key} must be an integer from 1 to ${MAX_ROUNDS}.`);
   }
-
-  return {
-    scope: base ? "branch" : scope ?? "working-tree",
-    base,
-    fixMode,
-    minSeverity,
-    maxRounds,
-    review: parseReviewArgs(reviewArgv),
-  };
-}
-
-function main() {
-  process.stdout.write(`${JSON.stringify(parseArgs(process.argv.slice(2)), null, 2)}\n`);
-}
-
-const isMain = process.argv[1]
-  && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
-
-if (isMain) {
-  try {
-    main();
-  } catch (error) {
-    process.stderr.write(`loop-options: ${error.message}\n`);
-    process.exitCode = 1;
+  if (seen.has("--base") && !options.base) throw new Error("--base must not be blank.");
+  if (options.base && options.scope === "working-tree") throw new Error("--base cannot be combined with --scope working-tree.");
+  if (options.base) options.scope = "branch";
+  if (!forwarded.includes("--reviewers") && !forwarded.includes("--all-reviewers")) {
+    forwarded.unshift("--reviewers", options.reviewPolicy === "strict" ? "claude,codex" : "codex");
   }
+  options.review = reviewArgs(forwarded);
+  return options;
 }
 
-export {
-  DEFAULT_MAX_ROUNDS,
-  MAX_ROUNDS,
-  parseArgs,
-};
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try { process.stdout.write(`${JSON.stringify(parseArgs(process.argv.slice(2)), null, 2)}\n`); }
+  catch (error) { process.stderr.write(`loop-options: ${error.message}\n`); process.exitCode = 1; }
+}

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { normalizeClaudeConfigDir } from "./claude-config.mjs";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
-import { addClosureEvidence, readClosureContext } from "./closure-context.mjs";
+import { gitEnvironment } from "./git-environment.mjs";
 
 import {
   buildReviewPrompt,
@@ -15,6 +15,7 @@ import {
 } from "./review-context.mjs";
 import {
   assertSupportedAdapterPlatform,
+  assertScopeMatchesFingerprint,
   installAdapterCancellation,
   providerTimeout,
   verifyScopeFingerprint,
@@ -57,7 +58,6 @@ function parseArgs(argv) {
     "--file-access",
     "--config-dir",
     "--expected-fingerprint",
-    "--closure-context",
     "--timeout-ms",
     "--exclude-path",
   ]);
@@ -86,8 +86,6 @@ function parseArgs(argv) {
       }
     } else if (argument === "--expected-fingerprint") {
       options.expectedFingerprint = value;
-    } else if (argument === "--closure-context") {
-      options.closureContextPath = value;
     } else if (argument === "--file-access") {
       options.fileAccess = value;
     } else if (argument === "--config-dir") {
@@ -214,14 +212,11 @@ async function runClaudeReview(options, dependencies = {}) {
     signal,
   );
   const scope = await resolveScope(options, { deadlineAt, signal });
+  assertScopeMatchesFingerprint(scope, initialFingerprint);
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   try {
-    const closureContext = readClosureContext(
-      options.closureContextPath, initialFingerprint.fingerprint, scope.excludePaths,
-    );
-    const closureEvidence = addClosureEvidence(evidence, closureContext);
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context, { closureEvidence });
+    const prompt = buildReviewPrompt(scope, context);
     const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     const result = await runCommand(claudeBin,
@@ -231,9 +226,9 @@ async function runClaudeReview(options, dependencies = {}) {
         timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
         maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
         signal,
-        env: options.configDir == null
+        env: gitEnvironment(options.configDir == null
           ? process.env
-          : { ...process.env, CLAUDE_CONFIG_DIR: options.configDir },
+          : { ...process.env, CLAUDE_CONFIG_DIR: options.configDir }),
       });
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
     return evidence.annotateReport(parseClaudeResult(result.stdout), context);

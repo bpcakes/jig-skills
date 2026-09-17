@@ -1,7 +1,7 @@
 interface:
   display_name: "Review Fix Loop"
-  short_description: "Review loops with minimal or comprehensive fixes"
-  default_prompt: "Use $review-fix-loop to review my working changes, fix verified medium-or-higher findings, and re-review until clean or the round limit is reached."
+  short_description: "Persisted review, repair, and validation loops"
+  default_prompt: "Use $review-fix-loop to review and fix this code, validate the task requirements, and obtain terminal reviews within the repair limit."
 
 policy:
   allow_implicit_invocation: true

@@ -567,7 +567,7 @@
     "skill": "review-fix-loop",
     "mode": "loaded",
     "expectInvoke": null,
-    "prompt": "Review classify in src/lib.rs against README.md and fix any behavior bug you find.",
+    "prompt": "Review classify in src/lib.rs against README.md and fix any behavior bug you find in one pass. Do not re-review.",
     "files": {
       "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
       "README.md": "classify must be true for strictly positive values and false for zero and negative values.\n"
@@ -595,7 +595,7 @@
     "skill": "review-fix-loop",
     "mode": "implicit",
     "expectInvoke": null,
-    "prompt": "Review classify in src/lib.rs against README.md and fix any behavior bug you find.",
+    "prompt": "Review classify in src/lib.rs against README.md and fix any behavior bug you find in one pass. Do not re-review.",
     "files": {
       "src/lib.rs": "pub fn classify(value: i32) -> bool { value >= 0 }\n",
       "README.md": "classify must be true for strictly positive values and false for zero and negative values.\n"
@@ -1111,6 +1111,7 @@
   },
   {
     "id": "loop-closure-own-fields",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1147,6 +1148,7 @@
   },
   {
     "id": "loop-closure-real-defect",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1173,6 +1175,7 @@
   },
   {
     "id": "loop-low-support-nonblocking",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1199,6 +1202,7 @@
   },
   {
     "id": "loop-closure-exhausted",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1225,6 +1229,7 @@
   },
   {
     "id": "loop-third-attempt-new-evidence",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1259,6 +1264,7 @@
   },
   {
     "id": "loop-third-attempt-no-evidence",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1284,6 +1290,7 @@
   },
   {
     "id": "loop-documentation-closure",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1317,6 +1324,7 @@
   },
   {
     "id": "loop-mechanical-stabilization",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1351,6 +1359,7 @@
   },
   {
     "id": "loop-equivalent-coverage",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1377,6 +1386,7 @@
   },
   {
     "id": "loop-independent-blocked-group",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1412,6 +1422,7 @@
   },
   {
     "id": "loop-closure-exposes-substantive",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1446,6 +1457,7 @@
   },
   {
     "id": "loop-closure-mixed-failures-unused",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1483,6 +1495,7 @@
   },
   {
     "id": "loop-closure-mixed-failures-exhausted",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1514,6 +1527,7 @@
   },
   {
     "id": "loop-closure-mixed-failures-at-cap",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1545,6 +1559,7 @@
   },
   {
     "id": "loop-third-attempt-at-cap",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1571,6 +1586,7 @@
   },
   {
     "id": "loop-new-support-after-closure",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1605,6 +1621,7 @@
   },
   {
     "id": "loop-validation-counted-recovery",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1637,6 +1654,7 @@
   },
   {
     "id": "loop-validation-recovery-at-cap",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1664,6 +1682,7 @@
   },
   {
     "id": "loop-validation-recovery-oscillation",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1691,6 +1710,7 @@
   },
   {
     "id": "loop-closure-wrong-expectation",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,
@@ -1725,6 +1745,7 @@
   },
   {
     "id": "loop-reviewer-recovery-decisions",
+    "runtime": "markdown-loop-v1",
     "skill": "review-fix-loop",
     "mode": "explicit",
     "expectInvoke": true,

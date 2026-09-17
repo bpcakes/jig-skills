@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,6 +8,10 @@ import { fileURLToPath } from "node:url";
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
 const installer = path.join(repo, "scripts/install.sh");
+function legacyReviewOnly(destination) {
+  mkdirSync(destination, { recursive: true });
+  cpSync(path.join(repo, "plugins/jig-review/skills/comprehensive-review"), path.join(destination, "comprehensive-review"), { recursive: true });
+}
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(os.tmpdir(), "jig-install-"));
@@ -25,11 +29,12 @@ function fixture(t) {
 function assertInstalledParser(destination) {
   const result = JSON.parse(execFileSync(process.execPath, [
     path.join(destination, "review-fix-loop/scripts/loop-options.mjs"),
-    "--all-reviewers", "--fix-mode", "comprehensive", "--max-rounds", "1",
+    "--all-reviewers", "--review-policy", "strict", "--max-rounds", "1", "--fix-mode", "comprehensive",
   ], { encoding: "utf8" }));
   assert.deepEqual(result.review.reviewers, ["claude", "codex", "cursor"]);
-  assert.equal(result.fixMode, "comprehensive");
+  assert.equal(result.reviewPolicy, "strict");
   assert.equal(result.maxRounds, 1);
+  assert.equal(result.fixMode, "comprehensive");
 }
 
 test("fresh direct installation includes a usable review dependency", (t) => {
@@ -38,6 +43,52 @@ test("fresh direct installation includes a usable review dependency", (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Required dependency: comprehensive-review/);
   assertInstalledParser(destination);
+});
+
+test("standalone comprehensive review installs both usable workflow entrypoints", t => {
+  const { destination, install } = fixture(t);
+  const result = install("comprehensive-review");
+  assert.equal(result.status, 0, result.stderr); assertInstalledParser(destination);
+  const project = path.join(path.dirname(destination), "project"); mkdirSync(project);
+  execFileSync("git", ["init", "-q", project]);
+  const plan = spawnSync(process.execPath, [path.join(destination, "review-fix-loop/scripts/review-fix-loop.mjs"), "plan-validation", "--cwd", project], { encoding: "utf8" });
+  assert.equal(plan.status, 0, plan.stderr); assert.ok(JSON.parse(plan.stdout));
+});
+
+for (const selected of ["review-fix-loop", "comprehensive-review"]) {
+  for (const existing of ["review-fix-loop", "comprehensive-review"]) {
+    for (const differing of [false, true]) test(`partial pair: select ${selected}, existing ${existing}, differing=${differing}`, t => {
+      const { destination, install } = fixture(t);
+      mkdirSync(destination, { recursive: true });
+      cpSync(path.join(repo, "plugins/jig-review/skills", existing), path.join(destination, existing), { recursive: true });
+      const marker = path.join(destination, existing, "custom.txt");
+      if (differing) writeFileSync(marker, "preserve customized skill\n");
+      const result = install(selected);
+      assert.equal(result.status, differing ? 1 : 0, result.stderr);
+      if (differing) {
+        assert.match(result.stderr, /No skills were changed/);
+        assert.deepEqual(readdirSync(destination), [existing]);
+        assert.equal(readFileSync(marker, "utf8"), "preserve customized skill\n");
+        const forced = install("--force", selected);
+        assert.equal(forced.status, selected === existing ? 0 : 1, forced.stderr);
+        if (forced.status !== 0) assert.deepEqual(readdirSync(destination), [existing]);
+        assert.equal(install("--force", "review-fix-loop", "comprehensive-review").status, 0);
+      }
+      assertInstalledParser(destination);
+    });
+  }
+}
+
+test("automatic loop dependencies are never overwritten by force on comprehensive review", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("comprehensive-review").status, 0);
+  const marker = path.join(destination, "review-fix-loop/custom.txt"); writeFileSync(marker, "keep\n");
+  for (const args of [["comprehensive-review"], ["--force", "comprehensive-review"]]) {
+    const result = install(...args); assert.equal(result.status, 1); assert.match(result.stderr, /No skills were changed/);
+    assert.equal(readFileSync(marker, "utf8"), "keep\n");
+  }
+  assert.equal(install("--force", "comprehensive-review", "review-fix-loop").status, 0);
+  assert.equal(existsSync(marker), false);
 });
 
 test("differing dependencies fail before modifying either skill", async (t) => {
@@ -93,7 +144,7 @@ test("explicit --force replacement updates both selected skills", (t) => {
 
 test("a differing dependency cannot leave a newly installed loop behind", (t) => {
   const { destination, install } = fixture(t);
-  assert.equal(install("comprehensive-review").status, 0);
+  legacyReviewOnly(destination);
   writeFileSync(path.join(destination, "comprehensive-review/scripts/review-options.mjs"), "throw new Error('old parser');\n");
   const result = install("review-fix-loop");
   assert.equal(result.status, 1);
@@ -120,7 +171,7 @@ test("all-skills installs skip an incompatible loop and preserve existing copies
   for (const existingLoop of [false, true]) {
     await t.test(existingLoop ? "existing loop" : "new loop", (t) => {
       const { destination, install } = fixture(t);
-      assert.equal(install("comprehensive-review").status, 0);
+      legacyReviewOnly(destination);
       const oldParser = "export function parseArgs() { return { reviewers: ['claude', 'codex'] }; }\n";
       const dependencyParser = path.join(destination, "comprehensive-review/scripts/review-options.mjs");
       writeFileSync(dependencyParser, oldParser);
@@ -250,7 +301,8 @@ test("all-skills privacy conflict skips dependents, not unrelated skills", t => 
 
 test("all-skills isolates simultaneous review and privacy dependency conflicts", t => {
   const { destination, install } = fixture(t);
-  assert.equal(install("comprehensive-review", "audit-common").status, 0);
+  legacyReviewOnly(destination);
+  assert.equal(install("audit-common").status, 0);
   const reviewMarker = path.join(destination, "comprehensive-review/local.md");
   const privacyMarker = path.join(destination, "audit-common/local.md");
   writeFileSync(reviewMarker, "preserve review dependency\n");

@@ -31,6 +31,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: node --test plugins/jig-review/tests/*.test.mjs
+      - name: Review adapters and controller lifecycle tests
+        run: node --test plugins/jig-review/tests/*.test.mjs
       - run: node --test evals/*.test.mjs
       - run: python3 plugins/jig-exec-plans/skills/cursor-implement-exec-plan/scripts/test_run_cursor_execplan.py
+
+  macos-controller:
+    name: macOS controller / Node ${{ matrix.node }}
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: macOS locking, sandbox, and complete controller lifecycles
+        run: node --test plugins/jig-review/tests/adapter-environment.test.mjs plugins/jig-review/tests/loop-platform.test.mjs plugins/jig-review/tests/loop-failure-boundaries.test.mjs plugins/jig-review/tests/repository-copy.test.mjs plugins/jig-review/tests/review-fix-controller.test.mjs plugins/jig-review/tests/controller-boundaries.test.mjs plugins/jig-review/tests/review-fix-options.test.mjs plugins/jig-review/tests/assignment-schema.test.mjs plugins/jig-review/tests/install.test.mjs

@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { checkCommands, launchesWorkflow } from './run.mjs';
+import { checkCommands, launchesWorkflow, selectCases } from './run.mjs';
+
+test('live case selection excludes the retired runtime and refuses explicit historical runs', () => {
+  const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'));
+  const selected = selectCases(cases);
+  const historical = cases.filter(c => c.runtime === 'markdown-loop-v1');
+  assert.equal(historical.length, 21);
+  assert.equal(selected.length + historical.length, cases.length);
+  assert.ok(selected.some(c => c.id === 'loop-loaded-one-pass-fix'));
+  for (const c of historical) {
+    assert.equal(selected.some(s => s.id === c.id), false);
+    assert.throws(() => selectCases(cases, [c.id]), /Historical case.*original evaluator/);
+  }
+  assert.throws(() => selectCases(cases, ['missing-case']), /Unknown case/);
+});
 
 test('workflow detection follows executable positions and shell wrappers', () => {
   for (const command of ['claude -p review', 'pwd && /usr/bin/claude -p review',

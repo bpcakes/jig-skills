@@ -39,6 +39,7 @@ find_skill_source() {
 required_dependency() {
     case "$1" in
         review-fix-loop) printf '%s\n' comprehensive-review ;;
+        comprehensive-review) printf '%s\n' review-fix-loop ;;
         audit-common) ;;
         *)
             if [ -f "$plugins_dir/jig-privacy-audit/skills/$1/SKILL.md" ]; then
@@ -143,11 +144,28 @@ done
 
 automatic_dependencies=
 skipped_dependents=
-for dependency in comprehensive-review audit-common; do
+explicit_skills=" $* "
+# Resolve the entire dependency closure before checking compatibility. In
+# particular, the two review entrypoints depend on each other's bundled code.
+while :; do
+    added=0
+    for skill in "$@"; do
+        dependency=$(required_dependency "$skill")
+        if [ -z "$dependency" ]; then continue; fi
+        case " $* " in *" $dependency "*) continue ;; esac
+        find_skill_source "$dependency" >/dev/null
+        automatic_dependencies="$automatic_dependencies $dependency"
+        set -- "$dependency" "$@"
+        added=1
+        printf 'Required dependency: %s (matching existing copy is preserved)\n' "$dependency"
+    done
+    if [ "$added" -eq 0 ]; then break; fi
+done
+for dependency in review-fix-loop comprehensive-review audit-common; do
     dependents=
     selected_dependency=0
     for skill in "$@"; do
-        if [ "$skill" = "$dependency" ]; then selected_dependency=1; fi
+        case "$explicit_skills" in *" $dependency "*) selected_dependency=1 ;; esac
         if [ "$(required_dependency "$skill")" = "$dependency" ]; then
             dependents="$dependents $skill"
         fi
@@ -165,11 +183,6 @@ for dependency in comprehensive-review audit-common; do
                 exit 1
             fi
         fi
-    fi
-    if [ "$selected_dependency" -eq 0 ]; then
-        automatic_dependencies="$automatic_dependencies $dependency"
-        set -- "$dependency" "$@"
-        printf 'Required dependency: %s (matching existing copy is preserved)\n' "$dependency"
     fi
 done
 

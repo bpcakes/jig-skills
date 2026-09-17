@@ -1,7 +1,25 @@
 import { captureFingerprint } from "./scope-fingerprint.mjs";
+import { realpathSync } from "node:fs";
 
 const MAX_FINAL_FINGERPRINT_RESERVE_MS = 5 * 60 * 1000;
 const MAX_FINGERPRINT_TIMEOUT_MS = 5 * 60 * 1000;
+
+function assertCompleteFingerprint(fingerprint) {
+  if (fingerprint.complete !== true) {
+    const issues = fingerprint.issues?.length ? JSON.stringify(fingerprint.issues) : "capture did not establish complete evidence";
+    throw Object.assign(new Error(`CAPTURE_INCOMPLETE: ${issues}. Workflow stopped; no partial-review fallback is permitted.`), { code: "CAPTURE_INCOMPLETE" });
+  }
+}
+function assertScopeMatchesFingerprint(scope, fingerprint) {
+  assertCompleteFingerprint(fingerprint);
+  const fields = ["scope", "headOid", "baseOid", "mergeBaseOid"];
+  if (realpathSync(scope.repoRoot) !== realpathSync(fingerprint.repoRoot)
+      || fields.some(field => scope[field] !== fingerprint[field])
+      || Boolean(scope.includeWorkingTree) !== Boolean(fingerprint.includeWorkingTree)
+      || JSON.stringify(scope.excludePaths ?? []) !== JSON.stringify(fingerprint.excludePaths ?? [])) {
+    throw Object.assign(new Error("Review evidence scope does not match the pinned fingerprint."), { scopeChanged: true });
+  }
+}
 
 function adapterTimeoutError(message = "adapter exceeded its overall deadline") {
   return Object.assign(new Error(message), { timedOut: true });
@@ -80,6 +98,7 @@ async function verifyScopeFingerprint(
     ),
     signal,
   });
+  assertCompleteFingerprint(result);
   if (expectedFingerprint && result.fingerprint !== expectedFingerprint) {
     throw Object.assign(
       new Error(
@@ -92,6 +111,8 @@ async function verifyScopeFingerprint(
 }
 
 export {
+  assertCompleteFingerprint,
+  assertScopeMatchesFingerprint,
   adapterTimeoutError,
   assertSupportedAdapterPlatform,
   installAdapterCancellation,

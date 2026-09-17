@@ -408,6 +408,19 @@ export function parseOptions(argv) {
   return options;
 }
 
+export function currentCases(cases) {
+  return cases.filter(c => c.runtime !== 'markdown-loop-v1');
+}
+
+export function selectCases(cases, ids = []) {
+  for (const id of ids) {
+    const c = cases.find(c => c.id === id);
+    if (!c) throw new Error(`Unknown case: ${id}`);
+    if (c.runtime === 'markdown-loop-v1') throw new Error(`Historical case ${id}: use its original evaluator and skill revision; this runtime was retired.`);
+  }
+  return currentCases(cases).filter(c => !ids.length || ids.includes(c.id));
+}
+
 export async function main(argv) {
   const options = parseOptions(argv);
   if (options.help) {
@@ -415,8 +428,7 @@ export async function main(argv) {
     return;
   }
   const all = JSON.parse(readFileSync(path.join(root, 'evals/cases.json'), 'utf8'));
-  for (const id of options.cases) if (!all.some(c => c.id === id)) throw new Error(`Unknown case: ${id}`);
-  const cases = all.filter(c => !options.cases.length || options.cases.includes(c.id));
+  const cases = selectCases(all, options.cases);
   if (!options.live) { console.log(JSON.stringify(cases.map(c => ({ id: c.id, mode: c.mode, prompt: c.prompt })), null, 2)); return; }
   const outputPath = options.output ?? mkdtempSync(path.join(tmpdir(), 'jig-skill-evals-'));
   if (options.output) mkdirSync(outputPath); // Never overwrite a prior run.

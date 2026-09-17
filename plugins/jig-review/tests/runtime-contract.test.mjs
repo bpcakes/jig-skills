@@ -11,14 +11,6 @@ const skillPath = fileURLToPath(new URL(
   "../skills/comprehensive-review/SKILL.md",
   import.meta.url,
 ));
-const loopRuntimePath = fileURLToPath(new URL(
-  "../skills/review-fix-loop/references/loop-runtime.md",
-  import.meta.url,
-));
-const loopSkillPath = fileURLToPath(new URL(
-  "../skills/review-fix-loop/SKILL.md",
-  import.meta.url,
-));
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 function loadForwarderRecipe(runtime) {
@@ -118,20 +110,5 @@ test("combined branch scope has deterministic normalization and index warnings",
     assert.match(contract, /re-stage tracked paths/);
     assert.match(contract, /add (?:intended )?untracked paths/);
     assert.match(contract, /commit changes inside (?:each )?dirty submodule/);
-  }
-});
-
-test("branch-loop handoff retains complete final index-state guidance", () => {
-  for (const contractPath of [loopRuntimePath, loopSkillPath]) {
-    const contract = readFileSync(contractPath, "utf8");
-    assert.match(contract, /final matching fingerprint/);
-    assert.match(contract, /including pre-existing local changes/);
-    assert.match(contract, /workingTreePathsDifferingFromIndex/);
-    assert.match(contract, /workingTreePathsAbsentFromIndex/);
-    assert.match(contract, /dirtySubmodulePaths/);
-    assert.match(contract, /pathInventoryComplete/);
-    assert.match(contract, /`Truncated`/);
-    assert.match(contract, /capped/);
-    assert.match(contract, /innermost-submodule-first|innermost submodule/);
   }
 });
