@@ -1,13 +1,13 @@
 ---
 name: rust-architecture-review
-description: Review Rust module boundaries, dependencies, ownership, and public APIs for structural consequences.
+description: Review Rust architecture when the user explicitly requests an architecture or structural design assessment of modules, crates, dependencies, ownership, or public APIs. Do not select for routine coding, bug fixes, explanations, or general code reviews without an architectural focus.
 ---
 
 # Rust Architecture Review
 
 Review structural consequences in the requested Rust diff, files, or snippet: modules, crates, dependencies, ownership, traits, and public APIs. When a review has no specified target, inspect current staged and unstaged changes. Follow neighbors only to validate a boundary affected by that scope.
 
-Automatic discovery does not start a review whenever code changes. Use this skill to serve the user's task. Review-only requests produce findings and proposals; implement refactors only when the user requests changes.
+Select this skill for a named invocation or a request such as "review these crate boundaries" or "assess this ownership design." Changes to Rust modules, ownership, or public APIs alone do not warrant selection. If loaded during routine implementation, bug fixing, explanation, or a general review without an architectural focus, follow that task without adding an architecture audit. Review-only requests produce findings and proposals; implement refactors only when the user requests changes.
 
 ## Evidence standard
 

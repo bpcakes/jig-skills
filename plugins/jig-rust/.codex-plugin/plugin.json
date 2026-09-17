@@ -1,6 +1,6 @@
 {
   "name": "jig-rust",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Rust simplification, Fowler-style refactoring assessments, duplicate-abstraction analysis, source reorganization, architecture and abstraction-boundary review, async concurrency review, security-boundary review, SQLx query safety review, SQL transaction consistency review, error handling review, and test quality review skills.",
   "author": {
     "name": "Jig"
