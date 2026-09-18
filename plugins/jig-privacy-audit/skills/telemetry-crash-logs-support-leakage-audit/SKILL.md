@@ -60,6 +60,8 @@ Tag each observed field or payload with one or more classes:
 
 ## Workflow
 
+Select source review, supplied-artifact analysis, or new runtime testing from the request. Source review traces emitted values and redaction without exercising accounts or pulling logs. Analyze supplied logs and captures directly using any existing sentinel manifest. Steps that generate sentinels, exercise flows, query services, or test runtime controls apply only when those activities are part of the authorized task. Reuse established scope and report missing evidence without adding intake or runtime phases.
+
 1. Define scope and claims.
    - Record exact privacy, E2EE, zero-knowledge, "not logged", support-access, analytics opt-out, crash collection, and retention claims.
    - Identify first-party and third-party sinks, vendors, SDKs, ingestion endpoints, local stores, dashboards, support tools, exports, and warehouses.
@@ -75,23 +77,23 @@ Tag each observed field or payload with one or more classes:
    - For each field, note source object, redaction point, serializer, sink, principal able to read it, retention, indexing/searchability, and whether it is sent to a third party.
    - Distinguish client-side redaction before collection from server-side or vendor-side scrubbing after collection.
 
-4. Generate synthetic sentinels.
+4. For authorized new runtime tests, generate synthetic sentinels.
    - Use unique values per class and flow: content, metadata, identifier-like, token-like, recovery-like, support-text, search-term, filename, validation-error, and crash-context values.
    - Use `templates/sentinel-manifest.template.json` as a private manifest shape. Do not commit real sentinel values.
    - Test exact, normalized, encoded, truncated, hashed, tokenized, lowercased, URL-encoded, base64/base64url, JSON-escaped, gzip-wrapped, and stack-trace-rendered forms.
 
-5. Exercise representative flows.
+5. For authorized new runtime tests, exercise the relevant scoped flows.
    - Normal flows: onboarding, login/logout, content create/edit/delete, search, share, import/export, attachment upload, settings, billing, notification, sync, background refresh.
    - Error flows: validation failure, authorization failure, network timeout, retry, non-fatal exception, crash, unhandled rejection, panic, API 4xx/5xx, dead-letter job, webhook failure.
    - Support flows: ticket creation, support reply, attachment upload, debug bundle export, impersonation/start/end, account lookup, support search, DSAR/account export.
    - Consent flows: analytics disabled, crash reporting opt-out, "do not sell/share", regional privacy modes, child/minor mode where applicable.
 
-6. Inspect runtime artifacts.
+6. Inspect supplied artifacts or artifacts collected during authorized tests.
    - Pull only scoped artifacts: event debugger output, crash issue payloads, log query results, trace ids, metric series labels, support ticket fields, export files, warehouse rows, replay payload metadata.
    - Search for sentinels and derivatives. Manually inspect matched payloads and nearby fields to identify source and sink.
    - Verify redaction failure modes: nested objects, arrays, exception messages, stack locals, request bodies, headers, URL query strings, breadcrumbs, attachments, free text, and fallback serializers.
 
-7. Test controls and failure behavior.
+7. Review controls and failure behavior in the selected evidence mode; execute tests only within the authorized test scope.
    - Confirm logging failures do not reveal sensitive data through fallback logs, console output, local files, crash loops, retries, queues, or support bundles.
    - Confirm redaction is deny-by-default for sensitive domain types or allowlist-based for outbound telemetry fields.
    - Confirm support impersonation and exports produce access logs, approval records, bounded scopes, expiry, and least-privilege views.

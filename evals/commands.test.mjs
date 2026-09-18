@@ -91,6 +91,48 @@ test('reviewer-only enforcement preserves the stricter workflow prohibition', ()
   assert.equal(checkCommands({ forbidReviewerLaunches: true, forbidWorkflowLaunches: true }, helper), false);
 });
 
+test('Cursor implementation case rejects launcher execution but allows inspection', () => {
+  const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'));
+  const c = cases.find(item => item.id === 'selection-cursor-generic-implementation');
+  assert.ok(c);
+  for (const command of [
+    'cat /opt/skills/scripts/run_cursor_execplan.py',
+    'rg -n run_cursor_execplan.py /opt/skills',
+    'rg -n "run_cursor_execplan.py" SKILL.md',
+    'command -v run_cursor_execplan.py',
+    'python3 -c run_cursor_execplan.py',
+    'python3 -m other_module run_cursor_execplan.py',
+    'python3 -m other_run_cursor_execplan plan.md',
+    'python3 -mother_run_cursor_execplan plan.md',
+    'rg -n "python3 -m run_cursor_execplan" SKILL.md',
+    'env -u run_cursor_execplan.py cat plan.md',
+    'env --split-string="rg run_cursor_execplan.py SKILL.md"',
+    'env -S "cat /opt/skills/scripts/run_cursor_execplan.py"',
+    'python3 --version /opt/skills/scripts/run_cursor_execplan.py',
+  ]) assert.equal(checkCommands(c, [command]), true, command);
+  for (const command of [
+    'python3 /opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'python3 -B /opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'python3 -X dev /opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'python3 -m run_cursor_execplan plan.md',
+    'python3 -mrun_cursor_execplan plan.md',
+    'python3 -m scripts.run_cursor_execplan plan.md',
+    'python3 -mscripts.run_cursor_execplan plan.md',
+    'python3 -X dev -m package.scripts.run_cursor_execplan plan.md',
+    'python3 -X dev -m run_cursor_execplan plan.md',
+    'env PYTHONPATH=/opt/skills/scripts python3 -m run_cursor_execplan plan.md',
+    '/opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'env PYTHONPATH=/opt command python3 /opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'env -u PYTHONPATH python3 /opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'env --unset PYTHONPATH --chdir /tmp python3 /opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'env --split-string="python3 /opt/skills/scripts/run_cursor_execplan.py plan.md"',
+    'env --split-string "python3 /opt/skills/scripts/run_cursor_execplan.py plan.md"',
+    'env -S "python3 /opt/skills/scripts/run_cursor_execplan.py plan.md"',
+    'python3 --check-hash-based-pycs always /opt/skills/scripts/run_cursor_execplan.py plan.md',
+    'bash -lc "cat plan.md; python3 /opt/skills/scripts/run_cursor_execplan.py plan.md"',
+  ]) assert.equal(checkCommands(c, [command]), false, command);
+});
+
 test('native judgment cases reject delegation traces while allowing their shared brief helper', () => {
   const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'));
   const ids = ['review-intent-omitted', 'review-intent-complete', 'review-layer-symptom', 'review-layer-owner',

@@ -1,9 +1,11 @@
 ---
 name: write-exec-plan
-description: Write an executable implementation plan with milestones, acceptance criteria, and validation for complex work.
+description: Write a self-contained executable implementation plan when the user requests an ExecPlan or a detailed implementation plan with milestones and validation. Complexity alone does not trigger plan creation.
 ---
 
 # Write ExecPlan
+
+Select for a named invocation or a request to produce an executable implementation plan. A complex implementation task, a request for a brief approach, or an existing plan does not by itself call for a new ExecPlan. Follow those tasks without adding a plan artifact.
 
 This document describes the requirements for an execution plan ("ExecPlan"), a design document that a coding agent can follow to deliver a working feature or system change. Treat the reader as a complete beginner to this repository: they have only the current working tree and the single ExecPlan file you provide. There is no memory of prior plans and no external context.
 

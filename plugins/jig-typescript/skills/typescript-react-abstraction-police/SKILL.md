@@ -1,6 +1,6 @@
 ---
 name: typescript-react-abstraction-police
-description: Review TypeScript/React abstractions for implementation coupling and concrete consumer or compatibility costs.
+description: Review TypeScript/React abstraction boundaries when the user requests an assessment of implementation coupling or consumer burden. Excludes routine coding and general code review.
 metadata:
   compatibility: TypeScript/TSX and React repositories. Optional Node.js 18+ runs the bundled dependency-free candidate scanner. No network access required.
   version: "1.0.0"
@@ -9,6 +9,8 @@ metadata:
 ---
 
 # Abstraction Police: TypeScript + React
+
+Select for a named invocation or an explicit boundary assessment, such as "does this hook expose its cache implementation to consumers?" Exported types, hooks, and adapters alone do not start this audit. Follow other tasks without adding an abstraction review.
 
 Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
@@ -53,7 +55,7 @@ For each candidate, state its apparent promise in one sentence. If no coherent p
 
 ### 2. Generate Leads
 
-When Node.js is available, run:
+For broad boundary discovery when Node.js is available, optionally run the scanner within the requested scope. For a named boundary, inspect it and its consumers directly:
 
 ```bash
 node /absolute/path/to/typescript-react-abstraction-police/scripts/scan.mjs <scope> --format text

@@ -5,7 +5,7 @@ description: Internal support for privacy audits; shared evidence, severity, red
 
 # Audit Common
 
-This is a support skill for the Jig privacy-audit suite. Do not use it alone for an audit. Use it to normalize evidence, findings, limitations, and severity across the narrower audit skills.
+This is a support skill for the Jig privacy-audit suite. In Codex, `agents/openai.yaml` disables automatic standalone selection. Claude installations should treat this as a support skill and avoid selecting it alone for an audit. Narrower audit skills read this file directly when needed. Use it to normalize evidence, findings, limitations, and severity across the narrower audit skills.
 
 ## Task and evidence boundaries
 

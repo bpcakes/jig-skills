@@ -45,7 +45,7 @@ This example uses your Codex session without a second reviewer CLI. The commands
 | Get independent reviews of the same diff | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Combined findings and coverage notes |
 | Review, fix, test, and re-review working changes | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Validated code changes and convergence report |
 | Write, improve, or execute an implementation plan | [ExecPlans](#jig-execplans) | Plan, plan edits, or implementation |
-| Assess privacy or encryption claims | [audit-intake-and-evidence-map](plugins/jig-privacy-audit/skills/audit-intake-and-evidence-map/SKILL.md), then the relevant [privacy skills](#jig-privacy-audit) | Audit scope and evidence map |
+| Assess privacy or encryption claims | Relevant [privacy skills](#jig-privacy-audit); use [audit intake](plugins/jig-privacy-audit/skills/audit-intake-and-evidence-map/SKILL.md) when requesting scope or evidence planning | Findings or an audit plan |
 
 ## Plugins
 
@@ -127,7 +127,7 @@ Plugin: `jig-exec-plans` · [Browse files](plugins/jig-exec-plans)
 |---|---|---|
 | [write-exec-plan](plugins/jig-exec-plans/skills/write-exec-plan/SKILL.md) | Writes a self-contained implementation plan with milestones, acceptance criteria, and validation steps. | Implementation plan |
 | [improve-exec-plan](plugins/jig-exec-plans/skills/improve-exec-plan/SKILL.md) | Revises an existing plan against repository evidence. Edits a named file in place; returns a revised plan when the target is in chat. | Plan edits |
-| [cursor-implement-exec-plan](plugins/jig-exec-plans/skills/cursor-implement-exec-plan/SKILL.md) | Runs Cursor Agent with Composer 2.5 to implement a checked-in plan and update its progress. | Code and plan changes |
+| [cursor-implement-exec-plan](plugins/jig-exec-plans/skills/cursor-implement-exec-plan/SKILL.md) | Runs Cursor Agent with Composer 2.5 to implement a checked-in plan when Cursor is explicitly requested. | Code and plan changes |
 
 ### Jig Privacy Audit
 
@@ -147,7 +147,7 @@ Plugin: `jig-privacy-audit` · [Browse files](plugins/jig-privacy-audit)
 | [telemetry-crash-logs-support-leakage-audit](plugins/jig-privacy-audit/skills/telemetry-crash-logs-support-leakage-audit/SKILL.md) | Checks logs, traces, crash reporters, analytics, and support tooling for sensitive leakage. | Audit report |
 | [vulnerability-disclosure-and-retest-manager](plugins/jig-privacy-audit/skills/vulnerability-disclosure-and-retest-manager/SKILL.md) | Normalizes findings, tracks remediation status, and produces retest summaries. | Audit report |
 
-[audit-common](plugins/jig-privacy-audit/skills/audit-common/SKILL.md) is the shared support skill for severity, confidence, evidence, and redaction rules. Start with intake to establish authorized scope and available evidence before choosing a specialized audit.
+[audit-common](plugins/jig-privacy-audit/skills/audit-common/SKILL.md) supplies severity, confidence, evidence, and redaction rules. In Codex, its standalone automatic selection is disabled by `agents/openai.yaml`; specialized audits load it directly. Claude installations should treat it as a support skill and avoid selecting it alone for an audit. Use intake when requesting scope or evidence planning. Focused questions with supplied artifacts or established scope go directly to the relevant audit. Finding summaries, disclosure drafts, and retest plans do not initiate runtime testing or additional audits.
 
 ## Installation
 
@@ -257,11 +257,13 @@ $jig-review:review-fix-loop --base main
 
 The review example returns merged findings plus reviewer and coverage notes. The loop example changes files but does not commit them. Repair defaults to `--fix-mode balanced`: diagnose the demonstrated cause and repair the responsible boundary, expanding scope when evidence warrants it. Use `--fix-mode comprehensive` for broader investigation of related mechanisms and recurrence risks, or `--fix-mode minimal` for focused investigation with the same causal-repair standard. See [comprehensive-review usage](docs/comprehensive-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.
 
+Automatic selection follows the requested task. Abstraction, duplication, Fowler refactoring, and component API assessments require a request for that kind of design analysis; routine coding and general review do not start those audits. Natural-language requests work without naming the skill. Correctness reviews, simplification, and review orchestration retain their existing task boundaries.
+
 Some skills use different inputs:
 
 - Fowler refactoring, abstraction police, and duplication unification can assess requested repositories or paths, including unchanged code. The TypeScript duplication skill defaults to the current directory.
 - `swift-simplify` focuses on uncommitted Swift code and directly related support files. `typescript-type-system-review` can review pasted code.
-- `write-exec-plan` creates an implementation plan and reads `.agent/PLANS.md` when available. `improve-exec-plan` needs a named plan file or a recent plan in chat. `cursor-implement-exec-plan` implements a checked-in plan; save and commit a chat-only plan first.
+- `write-exec-plan` creates a requested executable implementation plan and reads `.agent/PLANS.md` when available; task complexity alone does not trigger it. `improve-exec-plan` needs an existing plan target. `cursor-implement-exec-plan` requires an explicit Cursor choice and a checked-in plan; save and commit a chat-only plan first.
 - Privacy audits start from product claims and explicitly authorized evidence: repositories, documentation, test accounts, network captures, and storage or logging artifacts.
 
 ## Troubleshooting and Updates

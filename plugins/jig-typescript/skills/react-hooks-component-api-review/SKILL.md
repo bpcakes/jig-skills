@@ -1,9 +1,11 @@
 ---
 name: react-hooks-component-api-review
-description: Review React component and hook contracts, including props, controlled state, children, callbacks, and invalid combinations.
+description: Review React component and hook API design when the user requests an assessment of props, callbacks, controlled state, or consumer contracts. Excludes routine UI changes and general code review.
 ---
 
 # React Component and Hook API Review
+
+Select for a named invocation or an API design question, such as "is this controlled/uncontrolled component contract safe for consumers?" Adding a prop or editing a hook alone does not start an API audit. Follow routine UI implementation, explanation, and general review requests without adding this assessment.
 
 Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 

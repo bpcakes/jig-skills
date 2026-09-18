@@ -1,9 +1,11 @@
 ---
 name: fowler-ruby-rails-refactoring
-description: Assess Ruby/Rails code smells and produce a behavior-preserving refactoring plan; excludes upgrades and behavior changes.
+description: Assess Ruby/Rails refactoring opportunities and produce a behavior-preserving plan when the user requests a refactoring assessment or plan. Excludes routine implementation and general code review.
 ---
 
 # Fowler-Grounded Ruby and Rails Refactoring
+
+Select for a named invocation or a request to assess refactoring opportunities, such as "plan a behavior-preserving refactor of this Rails model." Follow routine implementation, bug-fix, explanation, and general review requests without adding a refactoring assessment.
 
 ## Purpose
 

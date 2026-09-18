@@ -1996,5 +1996,292 @@
       }
     ],
     "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-rust-boundary-assessment",
+    "skill": "rust-abstraction-police",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Assess whether the Label abstraction in src/lib.rs leaks representation details or burdens its callers, using README.md as its contract. Keep this assessment read-only.",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"boundary\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+      "src/lib.rs": "pub struct Label(String);\nimpl Label {\n    pub fn new(value: String) -> Self { Self(value) }\n    pub fn text(&self) -> &str { &self.0 }\n}\n",
+      "README.md": "Label is an immutable owned string label. Its public contract exposes borrowed text; it makes no promise of validation or storage independence. There are no external services.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "contract",
+        "requirement": "Evaluates the borrowed text API against the immutable string-label contract and finds no supported abstraction leak; does not demand hiding &str or introduce a hypothetical future representation."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-rust-general-review",
+    "skill": "rust-abstraction-police",
+    "mode": "negative",
+    "expectInvoke": false,
+    "prompt": "Review src/lib.rs for correctness against README.md. Report only concrete bugs; keep this read-only.",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"boundary\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+      "src/lib.rs": "pub struct Label(String);\nimpl Label {\n    pub fn new(value: String) -> Self { Self(value) }\n    pub fn text(&self) -> &str { &self.0 }\n}\n",
+      "README.md": "Label is an immutable owned string label. Its public contract exposes borrowed text; it makes no promise of validation or storage independence. There are no external services.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "scope",
+        "requirement": "Completes the correctness review without adding a structural or abstraction design audit or proposing speculative wrappers."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-typescript-consolidation",
+    "skill": "typescript-react-dup-unifier",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Should formatInvoiceId and formatShipmentId in src/format.ts share an abstraction? Assess the consolidation tradeoff using README.md and leave the files unchanged.",
+    "files": {
+      "src/format.ts": "export function formatInvoiceId(id: number): string { return `I-${id}`; }\nexport function formatShipmentId(id: number): string { return `S-${id}`; }\n",
+      "README.md": "Invoice and shipment identifiers belong to separate domains; their prefixes are independent public contracts. Both functions only format integers. No other callers or shared formatting rules exist.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "decision",
+        "requirement": "Weighs the trivial repetition against independent domain contracts, recommending separation or at most an optional small shared mechanism with a concrete justification. Does not claim similarity alone requires consolidation."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-typescript-duplicate-explanation",
+    "skill": "typescript-react-dup-unifier",
+    "mode": "negative",
+    "expectInvoke": false,
+    "prompt": "Explain what each function in src/format.ts returns for the input 7.",
+    "files": {
+      "src/format.ts": "export function formatInvoiceId(id: number): string { return `I-${id}`; }\nexport function formatShipmentId(id: number): string { return `S-${id}`; }\n",
+      "README.md": "Invoice and shipment identifiers belong to separate domains; their prefixes are independent public contracts. Both functions only format integers. No other callers or shared formatting rules exist.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "answer",
+        "requirement": "Answers I-7 and S-7 without a duplication audit or unsolicited consolidation proposal."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-cursor-generic-implementation",
+    "skill": "cursor-implement-exec-plan",
+    "mode": "negative",
+    "expectInvoke": false,
+    "prompt": "Implement the change described in plan.md and validate it.",
+    "files": {
+      "plan.md": "# Inclusive adult boundary\n\nImplement exactly one change: accepts(age) in src/age.mjs must accept ages 18 and older. Preserve the public export and leave other files unchanged. Validate with node --input-type=module -e 'import { accepts } from \"./src/age.mjs\"; if (!accepts(18) || accepts(17)) process.exit(1)'.\n",
+      "src/age.mjs": "export const accepts = age => age > 18;\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "implementation",
+        "requirement": "Changes accepts to include age 18 while rejecting age 17 and preserving the export. Completes implementation directly without introducing a provider-selection question or delegating to Cursor."
+      }
+    ],
+    "forbidReviewerLaunches": true,
+    "allowedChanges": [
+      "src/age.mjs"
+    ],
+    "requiredChanges": [
+      "src/age.mjs"
+    ],
+    "forbiddenScriptLaunches": [
+      "run_cursor_execplan.py"
+    ]
+  },
+  {
+    "id": "selection-write-executable-plan",
+    "skill": "write-exec-plan",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Write a self-contained executable implementation plan in plan.md for making src/age.mjs satisfy README.md. Include milestones and observable validation. Leave implementation for a later task.",
+    "files": {
+      "src/age.mjs": "export const accepts = age => age > 18;\n",
+      "README.md": "The age gate must accept ages 18 and older. This fixture uses Node.js and has no dependencies or existing tests.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "plan",
+        "requirement": "Creates a grounded plan addressing the inclusive age-18 boundary, preservation of other ages and exports, and an executable Node validation for ages 17, 18, and 19. Does not change source or run a prototype."
+      }
+    ],
+    "forbidReviewerLaunches": true,
+    "allowedChanges": [
+      "plan.md"
+    ],
+    "requiredChanges": [
+      "plan.md"
+    ]
+  },
+  {
+    "id": "selection-brief-approach",
+    "skill": "write-exec-plan",
+    "mode": "negative",
+    "expectInvoke": false,
+    "prompt": "Briefly explain the approach you would take to correct src/age.mjs against README.md.",
+    "files": {
+      "src/age.mjs": "export const accepts = age => age > 18;\n",
+      "README.md": "The age gate must accept ages 18 and older. This fixture uses Node.js and has no dependencies or existing tests.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "answer",
+        "requirement": "Explains changing the comparison to include 18 and checking neighboring boundaries concisely, without creating or proposing a required ExecPlan phase."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-privacy-intake-planning",
+    "skill": "audit-intake-and-evidence-map",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Plan a source-only privacy audit of this app. Map the claim, available evidence, and testing limits from README.md into audit-manifest.json. Return the plan in your answer; create only that manifest.",
+    "files": {
+      "README.md": "Local source-only privacy audit. The app claims note bodies never leave the client in plaintext. The repository and supplied synthetic fixtures are the entire authorized scope. No network, accounts, live captures, or production access are available.\n",
+      "src/upload.js": "export function uploadNote(note, transport) { return transport.send({ body: note.body }); }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "scope",
+        "requirement": "Creates an evidence map for the note-body plaintext claim, records local source as available and unavailable runtime evidence as a limit, without attempting a capture or reaching a final security certification."
+      }
+    ],
+    "forbidReviewerLaunches": true,
+    "allowedChanges": [
+      "audit-manifest.json"
+    ],
+    "requiredChanges": [
+      "audit-manifest.json"
+    ]
+  },
+  {
+    "id": "selection-privacy-focused-source",
+    "skill": "audit-intake-and-evidence-map",
+    "mode": "negative",
+    "expectInvoke": false,
+    "prompt": "Does src/upload.js send the note body in plaintext, contrary to README.md? Explain what the supplied source proves.",
+    "files": {
+      "README.md": "Local source-only privacy audit. The app claims note bodies never leave the client in plaintext. The repository and supplied synthetic fixtures are the entire authorized scope. No network, accounts, live captures, or production access are available.\n",
+      "src/upload.js": "export function uploadNote(note, transport) { return transport.send({ body: note.body }); }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "source",
+        "requirement": "Identifies that the code passes note.body directly to transport.send without application-layer encryption. Distinguishes that observation from wire behavior or a full security conclusion and answers without requiring an intake plan or manifest."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-privacy-retest-plan",
+    "skill": "vulnerability-disclosure-and-retest-manager",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Draft a retest plan for finding.md using the current src/log.js. Return the plan in your answer.",
+    "files": {
+      "finding.md": "# P-001: note bodies in diagnostic events\nStatus: open.\nClaim: diagnostic events never contain note content.\nEvidence: src/log.js in release v1 called sink.emit({body: note.body}); an authorized synthetic fixture confirmed the body reached the diagnostic sink.\nThe owner reports that commit abc123 removes the body field. No deployment or retest evidence has been supplied.\n",
+      "src/log.js": "export function logNote(note, sink) { sink.emit({ event: \"note_saved\" }); }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "plan",
+        "requirement": "Provides concrete synthetic-input retest steps and acceptance criteria for diagnostic events, records that deployment and runtime results are unknown, and leaves the finding unverified/open. Does not execute tests or rerun audit skills because the request is for a plan."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-privacy-loaded-summary",
+    "skill": "vulnerability-disclosure-and-retest-manager",
+    "mode": "loaded",
+    "expectInvoke": null,
+    "prompt": "Summarize the current status of finding.md.",
+    "files": {
+      "finding.md": "# P-001: note bodies in diagnostic events\nStatus: open.\nClaim: diagnostic events never contain note content.\nEvidence: src/log.js in release v1 called sink.emit({body: note.body}); an authorized synthetic fixture confirmed the body reached the diagnostic sink.\nThe owner reports that commit abc123 removes the body field. No deployment or retest evidence has been supplied.\n",
+      "src/log.js": "export function logNote(note, sink) { sink.emit({ event: \"note_saved\" }); }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "summary",
+        "requirement": "Reports that the owner claims a fix but deployment and retest evidence are missing, so the finding remains open/unverified. Does not execute tests, rerun audits, create a register, draft disclosure, or mark the finding fixed."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "selection-telemetry-source-review",
+    "skill": "telemetry-crash-logs-support-leakage-audit",
+    "mode": "implicit",
+    "expectInvoke": true,
+    "prompt": "Review src/log.js against the diagnostic privacy claim in README.md using the supplied source.",
+    "files": {
+      "README.md": "Diagnostic events must never include note bodies. sink.emit forwards its argument to a remote diagnostic collector without redaction.\n",
+      "src/log.js": "export function logNote(note, sink) { sink.emit({ event: \"saved\", body: note.body }); }\n"
+    },
+    "findings": {
+      "min": 1,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "flow",
+        "requirement": "Reports the direct note.body to remote diagnostic sink flow and recommends omitting the protected value before collection. Does not generate sentinels, exercise account flows, query services, or claim runtime verification."
+      }
+    ],
+    "forbidReviewerLaunches": true
   }
 ]

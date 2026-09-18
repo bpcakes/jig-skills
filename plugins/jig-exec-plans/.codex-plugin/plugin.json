@@ -1,6 +1,6 @@
 {
   "name": "jig-exec-plans",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "ExecPlan authoring, improvement, and Cursor Agent implementation skills for self-contained implementation plans.",
   "author": {
     "name": "Jig"

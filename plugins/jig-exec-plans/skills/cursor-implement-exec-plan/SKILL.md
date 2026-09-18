@@ -1,9 +1,11 @@
 ---
 name: cursor-implement-exec-plan
-description: Delegate a checked-in ExecPlan to Cursor Agent with Composer 2.5 when agent implementation from a plan is requested.
+description: Delegate a checked-in ExecPlan to Cursor Agent with Composer 2.5 when the user explicitly requests Cursor implementation. Generic requests to implement a plan do not select a provider.
 ---
 
 # Cursor Implement ExecPlan
+
+Select for a named invocation or an explicit request to use Cursor, including an established Cursor choice earlier in the conversation. A plan file or a generic request for agent implementation does not authorize selecting Cursor. Follow the requested implementation task without adding delegation when no provider choice has been made.
 
 Use this skill when the user wants Cursor Agent to implement code from an ExecPlan.
 

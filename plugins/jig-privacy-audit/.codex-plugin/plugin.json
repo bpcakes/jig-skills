@@ -1,6 +1,6 @@
 {
   "name": "jig-privacy-audit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Privacy, zero-knowledge, and E2EE audit-support skills for scoped evidence collection and review.",
   "author": {
     "name": "bpcakes"

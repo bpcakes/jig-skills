@@ -25,6 +25,8 @@ It cannot prove a product is zero knowledge or E2EE. Negative sentinel results o
 
 ## Workflow
 
+Choose source review, supplied-artifact analysis, or new runtime testing according to the user's task. Source review traces reachable code and access controls without querying live stores. Artifact analysis uses the supplied snapshots and existing sentinel mapping. New sentinel generation and store queries apply only to authorized runtime testing. Reuse established scope; missing runtime evidence limits the conclusion without requiring intake or additional testing.
+
 ### 1. Bound The Claim And Trust Boundary
 
 Identify the exact claim, feature, account type, environment, commit/build, and data classes under review. Define who is considered "server side": app services, databases, search/index systems, caches, object stores, queue consumers, notification workers, observability vendors, analytics pipelines, admin/support tools, batch jobs, recovery services, KMS/HSM operators, and third-party processors.
@@ -70,9 +72,9 @@ For each path, record who or what can trigger it, what input is required, whethe
 
 ### 5. Run Sentinel Searches Across Server Stores
 
-Use unique synthetic sentinels for content, metadata, filenames, notification text, search terms, key-like values, recovery material, and low-sensitivity controls. Search exact, normalized, encoded, truncated, tokenized, compressed, serialized, and content-derived forms across approved artifacts.
+For supplied artifacts, search the existing sentinel values when provided. For authorized runtime testing, use unique synthetic sentinels for the requested data classes and flows. Search exact, normalized, encoded, truncated, tokenized, compressed, serialized, and content-derived forms across approved artifacts. Skip this step for source-only review.
 
-Minimum search surfaces when available:
+Relevant search surfaces within the requested scope:
 
 - relational rows, JSON columns, full-text indexes, document stores, vector/embedding pipelines, cache dumps, and warehouse tables;
 - object keys, object metadata, tags, manifests, CDN logs, and object inventory exports;

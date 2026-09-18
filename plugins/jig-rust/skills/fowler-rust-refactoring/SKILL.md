@@ -1,9 +1,11 @@
 ---
 name: fowler-rust-refactoring
-description: Assess Rust code smells and produce a behavior-preserving refactoring plan; implementation and bug fixes are separate tasks.
+description: Assess Rust refactoring opportunities and produce a behavior-preserving plan when the user requests a refactoring assessment or plan. Excludes routine implementation and general code review.
 ---
 
 # Fowler Rust Refactoring
+
+Select for a named invocation or a request to assess refactoring opportunities, such as "plan a behavior-preserving refactor of this module." Follow routine implementation, bug-fix, explanation, and general review requests without adding a refactoring assessment.
 
 Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
@@ -63,7 +65,7 @@ Record failures that predate the review. If the baseline is red, do not claim la
 
 ### 3. Run the heuristic scanner
 
-Resolve this skill's directory from the loaded `SKILL.md` path, then run:
+For broad opportunity discovery, resolve this skill's directory from the loaded `SKILL.md` path and run the scanner within the requested scope. For a named function or type, direct source and caller inspection is sufficient; scanning is optional:
 
 ```bash
 python3 <skill-directory>/scripts/scan_refactoring_opportunities.py . --format json

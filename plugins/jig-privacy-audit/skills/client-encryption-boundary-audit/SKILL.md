@@ -51,6 +51,8 @@ Anything that sends, stores, logs, indexes, or queues protected plaintext before
 
 ## Workflow
 
+Choose the evidence mode from the user's task. For source review, trace the requested paths and inspect existing tests; runtime verification gaps remain limitations. For supplied captures or storage artifacts, analyze them directly and preserve their existing sentinel mapping. Run new dynamic tests only when testing is part of the authorized task. Neither static nor artifact review requires a new capture or an intake manifest.
+
 ### 1. Build The Flow Inventory
 
 List each protected field and whether the claim covers content, metadata, attachments, filenames, titles, tags, folder names, search terms, timestamps, or sharing graph data. Include both foreground and background variants.
@@ -100,14 +102,14 @@ Treat test fixtures as lower risk unless they ship, seed production, or prove pr
 
 ### 5. Run Targeted Dynamic Tests
 
-Use synthetic sentinels for protected content and metadata. Capture:
+For an authorized dynamic test, use synthetic sentinels for protected content and metadata. Capture only the requested flows:
 
 - request and response payloads for create/edit/share/import/export/sync flows;
 - local storage snapshots before encryption, after save, after offline retry, after crash/restart, and after logout;
 - app logs, crash/analytics payloads, telemetry spans, and third-party requests;
 - queued background jobs and retry buffers where authorized.
 
-Use the sibling network-payload skill for HAR/payload scanning. Absence of a sentinel in one capture is only limited negative evidence.
+Use the sibling network-payload skill when available and useful for the requested HAR/payload analysis. Loading it does not authorize new captures. Absence of a sentinel in one capture is only limited negative evidence.
 
 ### 6. Review Boundary Tests
 

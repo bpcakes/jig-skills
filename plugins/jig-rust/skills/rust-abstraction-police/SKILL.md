@@ -1,9 +1,11 @@
 ---
 name: rust-abstraction-police
-description: Review Rust abstractions for implementation details that violate boundary promises and burden callers; not a style audit.
+description: Review Rust abstraction boundaries when the user requests an assessment of encapsulation, implementation coupling, or caller burden. Excludes routine coding and general code review.
 ---
 
 # Rust Abstraction Police
+
+Select for a named invocation or an explicit boundary assessment, such as "does this API leak storage details to callers?" The presence of traits, public types, or adapters alone does not start this audit. Follow other tasks without adding an abstraction review.
 
 Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 

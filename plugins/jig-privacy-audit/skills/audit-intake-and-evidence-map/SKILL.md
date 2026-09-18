@@ -1,11 +1,13 @@
 ---
 name: audit-intake-and-evidence-map
-description: Scope privacy, zero-knowledge, or E2EE audits and map authorized targets, available evidence, and testing limits.
+description: Scope a privacy, zero-knowledge, or E2EE audit when the user requests audit planning or evidence mapping. Use supplied scope directly for focused artifact or code analysis.
 ---
 
 # Audit Intake And Evidence Map
 
-Use this skill before narrow privacy, zero-knowledge, E2EE, telemetry, metadata, storage, network, key-management, or remediation audit skills. The output is a scoped audit plan and `audit-manifest.json`; it is not a security certification or final audit report.
+Select for a named invocation or a request to plan an audit, establish its scope, or map available evidence. A focused question with supplied code, captures, or an established scope can go directly to the relevant analysis; do not add intake or a manifest as a prerequisite.
+
+For an audit-planning request, produce a scoped audit plan and `audit-manifest.json`. Reuse scope and evidence already established in the conversation. Narrow privacy, encryption, telemetry, or remediation analysis does not require this planning phase. The output is not a security certification or final audit report.
 
 ## Shared Rules
 

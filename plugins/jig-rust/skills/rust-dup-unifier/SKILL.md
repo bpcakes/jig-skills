@@ -1,9 +1,11 @@
 ---
 name: rust-dup-unifier
-description: Audit similar Rust abstractions and recommend unification, a shared core, or separation using caller and contract evidence.
+description: Assess whether similar Rust abstractions should be unified when the user requests duplication or consolidation analysis. Excludes routine coding and general code review.
 ---
 
 # Rust Dup Unifier
+
+Select for a named invocation or a consolidation question, such as "should these two configuration types share a core?" Similar code discovered during another task does not start a duplication scan. Follow that task within its requested scope.
 
 Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
@@ -34,7 +36,7 @@ Resolve:
 
 ## Candidate Generation
 
-Run the bundled scanner first:
+For repository-wide discovery, run the bundled scanner within the authorized scope. For named definitions, compare them and their callers directly; the scanner is optional:
 
 ```bash
 python3 <skill_dir>/scripts/scan_rust_dup_unifier.py <repo_root> \

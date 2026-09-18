@@ -1,0 +1,1748 @@
+{
+  "schemaVersion": 4,
+  "sourceRun": "/tmp/jig-selection-review-fix-20260918-3",
+  "sourceSummaryHash": "c5fde897b120775c676d31fa081749035545ac8d6fc3d9211c2dbef22e18fd51",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-test-only-weakened",
+      "rust-test-only-valid-consolidation",
+      "rust-loaded-explain",
+      "rust-implicit-simplify",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-test-valid-testid",
+      "react-test-missed-confirmation",
+      "react-test-minor-display-gap",
+      "sqlx-minor-display-defect",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation",
+      "astra-swift-named-clean",
+      "astra-ruby-assessment-no-tests",
+      "astra-component-independent-options",
+      "astra-component-callback-defect",
+      "astra-state-benign-draft",
+      "astra-state-stale-response",
+      "astra-dup-independent-options",
+      "astra-transaction-single-statement",
+      "astra-privacy-expected-control",
+      "astra-privacy-protected-leak",
+      "astra-plan-noop-no-standard",
+      "astra-plan-repair-no-standard",
+      "astra-review-prior-authorized-fix",
+      "review-prior-authorized-stale-finding",
+      "review-intent-omitted",
+      "review-intent-complete",
+      "review-layer-symptom",
+      "review-layer-owner",
+      "review-caller-misuse",
+      "review-caller-valid",
+      "review-coverage-equivalent",
+      "review-coverage-weakened"
+    ],
+    "missingTrials": [],
+    "historicalCases": [
+      "loop-closure-own-fields",
+      "loop-closure-real-defect",
+      "loop-low-support-nonblocking",
+      "loop-closure-exhausted",
+      "loop-third-attempt-new-evidence",
+      "loop-third-attempt-no-evidence",
+      "loop-documentation-closure",
+      "loop-mechanical-stabilization",
+      "loop-equivalent-coverage",
+      "loop-independent-blocked-group",
+      "loop-closure-exposes-substantive",
+      "loop-closure-mixed-failures-unused",
+      "loop-closure-mixed-failures-exhausted",
+      "loop-closure-mixed-failures-at-cap",
+      "loop-third-attempt-at-cap",
+      "loop-new-support-after-closure",
+      "loop-validation-counted-recovery",
+      "loop-validation-recovery-at-cap",
+      "loop-validation-recovery-oscillation",
+      "loop-closure-wrong-expectation",
+      "loop-reviewer-recovery-decisions"
+    ],
+    "plannedTrials": [
+      {
+        "id": "selection-rust-boundary-assessment",
+        "iteration": 1
+      },
+      {
+        "id": "selection-rust-general-review",
+        "iteration": 1
+      },
+      {
+        "id": "selection-typescript-consolidation",
+        "iteration": 1
+      },
+      {
+        "id": "selection-typescript-duplicate-explanation",
+        "iteration": 1
+      },
+      {
+        "id": "selection-cursor-generic-implementation",
+        "iteration": 1
+      },
+      {
+        "id": "selection-write-executable-plan",
+        "iteration": 1
+      },
+      {
+        "id": "selection-brief-approach",
+        "iteration": 1
+      },
+      {
+        "id": "selection-privacy-intake-planning",
+        "iteration": 1
+      },
+      {
+        "id": "selection-privacy-focused-source",
+        "iteration": 1
+      },
+      {
+        "id": "selection-privacy-retest-plan",
+        "iteration": 1
+      },
+      {
+        "id": "selection-privacy-loaded-summary",
+        "iteration": 1
+      },
+      {
+        "id": "selection-telemetry-source-review",
+        "iteration": 1
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-09-18T07:52:28.054Z",
+  "cli": "codex-cli 0.155.0",
+  "model": "CLI default (--ignore-user-config)",
+  "configuration": {
+    "agent": {
+      "model": null,
+      "effort": null
+    },
+    "judge": {
+      "model": null,
+      "effort": null
+    }
+  },
+  "sourceCommit": "44f3dc73c182e774f8c2c53c7156f7b8ad7f8a79",
+  "harnessHash": "196d1bf0911c817e9da47e581cec27cf811e27782a451d328ea4f79362d4c8d5",
+  "suiteHash": "b992c1969df4feae76069849994b0b0771fd59c3b5c8e7a0d6a97ad7de933f28",
+  "exporterHash": "c5cb5070da38b64f270a2cb17658b791e3175a2a84cbb66b20e5ec93ed19bde4",
+  "skillHashes": {
+    "audit-common": "3af5ae87447ef43fc138d72c70246949482a38213e0910701636e63b917df360",
+    "audit-intake-and-evidence-map": "88710a66f86548b20ae41a8da54847361bacfe62034bb5dca7ba408efa143ade",
+    "client-encryption-boundary-audit": "093ca63f3d73e7f736a2c5e2829b2dcb6b43787052415c53a3b7529026665aed",
+    "comprehensive-review": "93995f9e0e81455145fdf1526e71e27e0fc0bece11258da06e4841bdfba6af4c",
+    "crypto-architecture-review": "9c7beb6e8bdb50e97450d5d5a556d64fe92c978134969bf1001ac6acb0baf62e",
+    "crypto-implementation-static-review": "ba5e53ce4c39f353740137c935008f91384782863a9b0e3c7a2f0a4ac185803c",
+    "cursor-implement-exec-plan": "bd61111606eb387a84db9be8fb38c881b1360e6ec2286466a5b203e04bfecc77",
+    "fowler-ruby-rails-refactoring": "9009d2f8fd453f5a94340f5a3d88f6440a2bb782f0919fbfbbbafaf9ca89e233",
+    "fowler-rust-refactoring": "b91a78c21ddd96b461d57946677a5c9da6df8d9b36a75048648f53c5131e059a",
+    "improve-exec-plan": "f7c47ed75fb673ef282f29e0c2a216f248dabf3e46684d7e5cb2da787a45faae",
+    "metadata-leakage-inventory": "1805a7c7daf8cd1dcc4a75d73d97a77a48dcea2fcc57e14f03583b0aee5d324c",
+    "network-payload-zero-knowledge-test": "0732aee4b933e1b555750c2b6234373d3d93bc6eab11c70eea9e13df5daa8ee5",
+    "privacy-claims-field-classifier": "01bbdd6454f8ca2dbfd5787693daa21d4e04db8b58466987e6dcae9ea1561df1",
+    "react-hooks-component-api-review": "8529b8a8e90b2a8d321b54a2efb62536e7a6b340cb71d6cdb057cf0eac91abf3",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "c602d657e93ab60753dcff08039be9e2c0699f5277ab75923fb141c08e9d45f4",
+    "react-test-quality-review": "b8f8185a36c704500f41946e55749efc138c7cf344b125516ecf53da9ddd2ed5",
+    "review-fix-loop": "32db46a36555306277b3418f96d90633e5630f1a08cefdff764346c5b4455a13",
+    "rust-abstraction-police": "657f14aee8b74bf9561abd0367c28c6e1b0205c4c85dd3cd9b9a2fa8df3d66f9",
+    "rust-architecture-review": "fabc3f0239d4c0c8d689ad49093830626bd1c371ae1632ffc03508d08101b0c1",
+    "rust-async-concurrency-review": "1ca0c9af1cd292aa0cb914df86b2be87e7d33a5e9abf767d7fca65dc02bc9f11",
+    "rust-dup-unifier": "acdcebdf694f918a4b03392ecf951710cb14c379f6b385e33cf73e35d1100564",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "7f3b4e08d6651fd27ffa7105e356e718a715c25764ded77df90625ed9caaecdb",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "d953d0331ba499cfff33e386f2932055a4ad8d93bc5ac8b41d3879ef09485525",
+    "rust-test-quality-review": "45b4096320f491ebe88d4ccb6dc6e3788cc2105c1bc08e9987673ef7595ec6c2",
+    "server-decryptability-and-plaintext-path-audit": "5ff024da53f04e2f9fe11ebf20efcf5f7eb1ac725315a1f01a24665a1abe349c",
+    "sql-transaction-consistency-review": "a336fa862d76ff6fcf248ab0e8bb4ed63cc2dd51f4a30e5633f07ee11ec09851",
+    "sqlx-query-safety-review": "af846ba60ecfcb87f104d889061e3a60c29eebd5a84b443ccc1cca05b2c44b06",
+    "swift-simplify": "d8a70e1eb302b6efd501c4da5190ac1ee4e9812b61ea53e4e1c5245785b94562",
+    "telemetry-crash-logs-support-leakage-audit": "fcaa0e712c052464bd3d443fbbcb2035d5b65ec7186e79e7ed77b3ccad11d848",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "00c5523830ed4f36c2e3d08c3aa2c4b303500a37b2920892b7cc1f36cbbba0a5",
+    "typescript-react-dup-unifier": "d6526dffcd9e16f6627b17a4da5c8225d385ab81d5c222a4104c839f49391e6e",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "6d5a97ddc92d313a59641d978f1b0578a781b2c00f78d92bc6b446a18355c8ba",
+    "write-exec-plan": "d49e5ebab05586604fca728be51c8cb11e1b8ca449d065531802b5c0d9f03753"
+  },
+  "passed": 11,
+  "total": 12,
+  "skillsEvaluated": 7,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Requested model/effort are verified against recorded CLI arguments for every attempted phase; a null reported configuration means effective provider selection was not independently exposed. Skill-resource mention and repeated-command metrics are command-text proxies, not judgments of reads or waste.",
+    "Current source verification covers every discovery entrypoint and all files of recorded target skills and skills read or possibly read in completed trials; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "selection-rust-boundary-assessment",
+      "iteration": 1,
+      "skill": "rust-abstraction-police",
+      "mode": "implicit",
+      "passed": false,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": false
+      },
+      "changed": [],
+      "reads": [
+        "rust-abstraction-police"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'README.md' -g 'lib.rs' -g 'Cargo.toml'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-abstraction-police/references/leak-taxonomy.md .agents/skills/rust-abstraction-police/references/report-template.md .agents/skills/rust-abstraction-police/references/remediation-playbook.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md; cat Cargo.toml; nl -ba README.md; nl -ba src/lib.rs; rg --files src tests examples'"
+      ],
+      "answer": {
+        "answer": "No abstraction leaks or unjustified caller burdens confirmed (0 high, 0 medium, 0 low).\n\nReviewed `Label`, `new`, and `text` against README.md:1. The field is private (src/lib.rs:1), and `text()` exposes only immutable borrowed text (src/lib.rs:4), exactly as documented. Its borrow lifetime follows that contract.\n\nRequiring `String` in `new()` (src/lib.rs:3) is consistent with an owned label. Callers with borrowed text must allocate, but that is not evidence of a leak. Missing validation is also intentional: the README explicitly promises neither validation nor storage independence. Internal storage could still change to `Box<str>` while preserving both method signatures.\n\nThis was a read-only source assessment; no files changed or tests run. No in-repository consumers were available to assess additional usage-specific burden.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "contract",
+            "passed": false,
+            "evidence": "Correctly finds no supported leak in immutable borrowed text under the README contract, but introduces a hypothetical future representation: “Internal storage could still change to `Box<str>` while preserving both method signatures.” The criterion explicitly excludes introducing such a representation."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 22050,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 9051,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 22050,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 57354,
+          "cached_input_tokens": 31488,
+          "output_tokens": 460
+        },
+        "completedCommands": 4,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 2,
+        "skillResourceMentionOutputBytes": 50382
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 9051,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12631,
+          "cached_input_tokens": 0,
+          "output_tokens": 173
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "b8943f27fecb404002f05458106dc2456914573127c1d0e42a0de47cdd4ef670"
+    },
+    {
+      "id": "selection-rust-general-review",
+      "iteration": 1,
+      "skill": "rust-abstraction-police",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'README.md' -g 'lib.rs' -g 'Cargo.toml'\"",
+        "/usr/bin/bash -lc 'cat README.md src/lib.rs Cargo.toml'",
+        "/usr/bin/bash -lc 'cat AGENTS.md; rg --files src'"
+      ],
+      "answer": {
+        "answer": "No concrete bugs found. `Label` owns its string and exposes borrowed text through `&str`, consistent with README.md. Review was static and read-only.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "scope",
+            "passed": true,
+            "evidence": "The review correctly connects owned String storage and borrowed &str access to README.md, reports no concrete bugs, and adds no design audit or speculative wrappers. Before and after files are identical, with no file changes."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 17566,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 6244,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 17566,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 42756,
+          "cached_input_tokens": 27904,
+          "output_tokens": 196
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 6244,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12551,
+          "cached_input_tokens": 0,
+          "output_tokens": 69
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "d80e77ed7bffcd21199b021145e471e1656b0dce1e9929803b103d56d7c66d41"
+    },
+    {
+      "id": "selection-typescript-consolidation",
+      "iteration": 1,
+      "skill": "typescript-react-dup-unifier",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "typescript-react-dup-unifier"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/typescript-react-dup-unifier/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'README.md' -g 'format.ts'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/typescript-react-dup-unifier/references/unification-decision-rubric.md .agents/skills/typescript-react-dup-unifier/references/report-contract.md; git status --short'",
+        "/usr/bin/bash -lc \"cat AGENTS.md README.md; nl -ba src/format.ts; rg --files -g '\"'!node_modules'\"' -g '\"'!.agents/**'\"'; rg -n 'formatInvoiceId|formatShipmentId' -g '\"'!.agents/**'\"'\""
+      ],
+      "answer": {
+        "answer": "No—keep them separate as an intentional duplicate (high confidence). In src/format.ts:1–2, both functions interpolate a prefix and numeric ID, but README.md explicitly defines the prefixes as independent public contracts in separate domains, with no shared formatting rules or other callers.\n\nThe strongest argument for consolidation is that a small prefix helper could express both implementations without flags. However, it would replace two trivial expressions with indirection and couple behavior that may evolve independently. There is no meaningful duplicated maintenance cost to remove.\n\nRetain both exported functions as their respective domain boundaries; no extraction or migration is warranted. Reconsider a private shared core only if a substantive shared rule emerges. Source and usage inspection completed; no tests were run. Files remain unchanged.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "decision",
+            "passed": true,
+            "evidence": "The response recommends separation because README.md defines independent public prefix contracts in separate domains. It weighs a small prefix helper against added indirection and coupling, finding negligible maintenance savings from two trivial expressions. It would reconsider sharing only if a substantive shared rule emerges. Before and after files are identical."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 22381,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 9169,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 22381,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 48784,
+          "cached_input_tokens": 29952,
+          "output_tokens": 432
+        },
+        "completedCommands": 4,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 2,
+        "skillResourceMentionOutputBytes": 17733
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 9169,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12519,
+          "cached_input_tokens": 9216,
+          "output_tokens": 84
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "e6e060eab311e3f3f6e33798f69bc93eec684cf857399999e8f97505379865b7"
+    },
+    {
+      "id": "selection-typescript-duplicate-explanation",
+      "iteration": 1,
+      "skill": "typescript-react-dup-unifier",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat src/format.ts'"
+      ],
+      "answer": {
+        "answer": "For input `7`, `formatInvoiceId(7)` returns the string `\"I-7\"`, and `formatShipmentId(7)` returns the string `\"S-7\"`. Each prefixes the number with its respective identifier.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The response correctly states that formatInvoiceId(7) returns \"I-7\" and formatShipmentId(7) returns \"S-7\", with no duplication audit or consolidation proposal."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 12955,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 6488,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 12955,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 28085,
+          "cached_input_tokens": 23040,
+          "output_tokens": 123
+        },
+        "completedCommands": 1,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 6488,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12212,
+          "cached_input_tokens": 9216,
+          "output_tokens": 65
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "f09e1c136b2e7831e1d17b9281a992ab03afa5c94b72d19f964a1aa349b4799e"
+    },
+    {
+      "id": "selection-cursor-generic-implementation",
+      "iteration": 1,
+      "skill": "cursor-implement-exec-plan",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/age.mjs"
+      ],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'plan.md' -g 'AGENTS.md' -g 'Cargo.toml' -g 'package.json' -g '*lock*'\"",
+        "/usr/bin/bash -lc 'cat plan.md'",
+        "/usr/bin/bash -lc \"cat AGENTS.md src/age.mjs; git status --short; rg --files src -g 'AGENTS.md'\"",
+        "/usr/bin/bash -lc \"node --input-type=module -e 'import { accepts } from \\\"./src/age.mjs\\\"; if (\"'!accepts(18) || accepts(17)) process.exit(1)'\"'\"",
+        "/usr/bin/bash -lc 'git diff --check; git diff --stat; git diff -- src/age.mjs'"
+      ],
+      "answer": {
+        "answer": "Updated src/age.mjs to accept ages 18 and older using >= 18. Preserved the public export and left other files unchanged. The prescribed Node validation and git diff --check passed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "implementation",
+            "passed": true,
+            "evidence": "The workspace diff changes only src/age.mjs from `export const accepts = age => age > 18;` to `export const accepts = age => age >= 18;`, accepting 18 and rejecting 17 while preserving the export. The recorded commands include the prescribed Node validation. No provider-selection question or Cursor delegation appears."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 20094,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 7514,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 20094,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 57490,
+          "cached_input_tokens": 51328,
+          "output_tokens": 378
+        },
+        "completedCommands": 5,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 7514,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12475,
+          "cached_input_tokens": 0,
+          "output_tokens": 95
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "57fce13ea73632262184ede4b67b693ee7e4d277a0793572dcbc8f05fdb0ffa7"
+    },
+    {
+      "id": "selection-write-executable-plan",
+      "iteration": 1,
+      "skill": "write-exec-plan",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "plan.md"
+      ],
+      "reads": [
+        "write-exec-plan"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'README.md' -g 'age.mjs' -g 'package.json' -g '*test*' -g 'plan.md' -g 'PLANS.md'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/write-exec-plan/SKILL.md'",
+        "/usr/bin/bash -lc \"ls -la && rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"' && cat AGENTS.md README.md src/age.mjs && git status --short\"",
+        "/usr/bin/bash -lc 'for p in PLANS.md .agent/PLANS.md .agents/PLANS.md; do if [ -f \"$p\" ]; then cat \"$p\"; fi; done'",
+        "/usr/bin/bash -lc \"node --version && node --input-type=module -e 'import { accepts } from \\\"./src/age.mjs\\\"; for (const age of [17, 18, 19]) console.log(\"'`${age}: ${accepts(age)}`);'\"'\"",
+        "/usr/bin/bash -lc 'git diff --check && git status --short && cat src/age.mjs'"
+      ],
+      "answer": {
+        "answer": "Created [plan.md](/tmp/jig-skill-case-jJUfMi/plan.md) with implementation milestones, regression tests, exact validation commands, and expected results. Implementation remains unchanged.",
+        "findings": [
+          {
+            "location": "src/age.mjs:1",
+            "issue": "The comparison `age > 18` rejects age 18, contradicting README.md.",
+            "consequence": "Eligible 18-year-olds are rejected.",
+            "counterevidence": "Observed ages 17 and 19 already return the expected results."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "plan",
+            "passed": true,
+            "evidence": "Added plan.md specifying age >= 18, preservation of the named accepts export and calling convention, and rejection below 18 with acceptance above it. Includes milestones, Node test instructions for 17/18/19, an executable direct invocation, and explicit expected results. src/age.mjs and README.md remain unchanged; recorded commands inspect and invoke the existing implementation without creating or running a prototype."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 107167,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 7619,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 107167,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 89045,
+          "cached_input_tokens": 76928,
+          "output_tokens": 2849
+        },
+        "completedCommands": 6,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 1,
+        "skillResourceMentionOutputBytes": 16368
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 7619,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 14799,
+          "cached_input_tokens": 9216,
+          "output_tokens": 106
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "75a2cdba40ccb75e938473a4b5d9516b62fcb354b3c3eb3c4b49055ea3f08a66"
+    },
+    {
+      "id": "selection-brief-approach",
+      "iteration": 1,
+      "skill": "write-exec-plan",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'pwd && rg --files -g AGENTS.md -g README.md -g age.mjs -g package.json'",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md && nl -ba src/age.mjs'"
+      ],
+      "answer": {
+        "answer": "Change `age > 18` to `age >= 18` to match README.md, then verify that 17 is rejected and 18 and 19 are accepted. No files were changed.",
+        "findings": [
+          {
+            "location": "src/age.mjs:1",
+            "issue": "The strict comparison excludes age 18, contrary to the README requirement to accept ages 18 and older.",
+            "consequence": "Eligible 18-year-olds are rejected.",
+            "counterevidence": "Ages above 18 are already accepted correctly."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "answer",
+            "passed": true,
+            "evidence": "The answer concisely proposes changing `age > 18` to `age >= 18` and verifying that 17 is rejected while 18 and 19 are accepted. It does not create or require an ExecPlan phase."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 19146,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 5656,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 19146,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 42415,
+          "cached_input_tokens": 27776,
+          "output_tokens": 234
+        },
+        "completedCommands": 2,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 5656,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12218,
+          "cached_input_tokens": 0,
+          "output_tokens": 74
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "a70a96cd6003da220580876a02971ed93c959b722a2c99af4b08ca4f997632be"
+    },
+    {
+      "id": "selection-privacy-intake-planning",
+      "iteration": 1,
+      "skill": "audit-intake-and-evidence-map",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "audit-manifest.json"
+      ],
+      "reads": [
+        "audit-common",
+        "audit-intake-and-evidence-map"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'README.md' -g 'AGENTS.md' -g 'audit-manifest.json' -g 'SKILL.md' -g '\"'!node_modules'\"' -g '\"'!vendor'\"'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/audit-intake-and-evidence-map/SKILL.md'",
+        "/usr/bin/bash -lc 'cat README.md AGENTS.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/audit-common/SKILL.md .agents/skills/audit-intake-and-evidence-map/templates/audit-manifest.schema.json .agents/skills/audit-intake-and-evidence-map/templates/audit-manifest.template.json'",
+        "/usr/bin/bash -lc \"rg --files -g '\"'!.agents/**'\"' -g '\"'!.git/**'\"' && git status --short\"",
+        "/usr/bin/bash -lc \"rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"' && nl -ba src/upload.js\"",
+        "/usr/bin/bash -lc \"python - <<'PY'\nimport json\nfrom pathlib import Path\nm = {\n 'audit': {\n  'product': 'unknown',\n  'objective': 'Plan a source-only assessment of whether note bodies leave the client in plaintext; no audit conclusion is asserted.',\n  'requested_by': 'user', 'prepared_by': 'Codex', 'dates': {'prepared': '2026-09-18'},\n  'environment': 'Local isolated repository; platform and deployment target unknown.',\n  'repository_path': '/tmp/jig-skill-case-M9GZxw',\n  'authorization': {'status': 'confirmed', 'approved_by': 'user',\n   'permitted_targets': ['Local repository source and documentation', 'Supplied synthetic fixtures, if present'],\n   'prohibited_targets': ['Network access', 'External services', 'Accounts and live captures', 'Production systems and customer data', 'Dependency installation'],\n   'notes': ['README.md:1 and user instructions define the entire authorized scope.', 'This task produces a plan and only audit-manifest.json; follow-up skills are recommendations, not executed audits.']},\n  'scope': {'in_scope': ['Claim mapping from README.md:1', 'Static tracing of note bodies through available client source to outbound sinks', 'Inventory of supplied synthetic fixtures and evidence gaps'],\n   'out_of_scope': ['Live or deployed behavior verification', 'Network capture collection', 'Production, account, or third-party inspection', 'General privacy, compliance, E2EE, or zero-knowledge certification'],\n   'assumptions': ['Only note bodies are expressly protected by the supplied claim.', 'An injected transport may transform payloads; its behavior must not be inferred from its name.']},\n  'unknown_inputs': ['App name, platform, deployment target, build and feature flags', 'Transport implementation, callers, and note-body representation', 'Synthetic fixture paths and coverage', 'Other user flows, data classes, and key ownership', 'Audit timebox'],\n  'intake_questions': ['Where, within the authorized local repository, are the transport implementation, callers, and synthetic fixtures?'],\n  'plan': [\n   {'priority': 1, 'action': 'Anchor CLM-001 to README.md:1; inventory source, fixtures, and missing components without expanding scope.', 'completion_evidence': 'Artifact paths, availability, and limitations recorded in this manifest.'},\n   {'priority': 2, 'action': 'Trace note.body producers and uploadNote callers, then transport.send serialization and outbound sinks wherever local source exists. Check encryption ordering and error or fallback branches.', 'completion_evidence': 'File-and-line trace showing field representation at each boundary, or explicit unresolved edges.'},\n   {'priority': 3, 'action': 'Inspect available source for alternate note-body egress through logs, telemetry, crash reporting, sync, sharing, or export; record whether each path exists rather than assuming features.', 'completion_evidence': 'Reachable source paths, compensating controls, and missing evidence per surface.'},\n   {'priority': 4, 'action': 'Review supplied synthetic fixtures if located for plaintext-versus-ciphertext expectations and coverage. Keep static observations separate from synthetic assertions and runtime claims.', 'completion_evidence': 'Fixture provenance and covered paths, with no inference of deployed behavior.'}\n  ]\n },\n 'claims': [{'id': 'CLM-001', 'statement': 'note bodies never leave the client in plaintext', 'source': 'README.md', 'source_location': 'README.md:1', 'status': 'in_scope',\n  'audit_questions': ['Is note.body already encrypted before uploadNote receives it?', 'Does transport.send encrypt the body before any client-external boundary?', 'Can errors, fallback paths, logs, telemetry, or other egress expose plaintext note bodies?']}],\n 'data_classes': [\n  {'id': 'DAT-001', 'name': 'Note bodies', 'sensitivity': 'high', 'examples': ['note.body'], 'notes': 'Explicitly covered by CLM-001; actual contents and representation unknown.'},\n  {'id': 'DAT-002', 'name': 'Encryption keys and associated secrets, if implemented', 'sensitivity': 'critical', 'notes': 'Conditional supporting evidence only; existence and ownership unknown.'}\n ],\n 'flows': [\n  {'id': 'FLW-001', 'name': 'Note upload', 'status': 'in_scope', 'description': 'src/upload.js:1 passes note.body to injected transport.send. Upstream representation and downstream transport behavior are unknown.', 'claim_ids': ['CLM-001'], 'data_class_ids': ['DAT-001', 'DAT-002']},\n  {'id': 'FLW-002', 'name': 'Alternate note-body egress', 'status': 'unknown', 'description': 'Discover logging, telemetry, crash, sync, sharing, or export paths only if supported by local source.', 'claim_ids': ['CLM-001'], 'data_class_ids': ['DAT-001']}\n ],\n 'evidence_requests': [\n  {'id': 'EVR-001', 'artifact': 'README.md:1', 'owner_or_source': 'Local repository', 'status': 'available', 'sensitivity': 'unknown', 'redaction_notes': 'Contains claim and scope text; no secrets observed.', 'related_claim_ids': ['CLM-001'], 'related_flow_ids': ['FLW-001', 'FLW-002']},\n  {'id': 'EVR-002', 'artifact': 'src/upload.js:1', 'owner_or_source': 'Local repository', 'status': 'available', 'sensitivity': 'unknown', 'redaction_notes': 'Reference code locations, not real note contents.', 'related_claim_ids': ['CLM-001'], 'related_flow_ids': ['FLW-001']},\n  {'id': 'EVR-003', 'artifact': 'Supplied synthetic fixtures; paths unknown', 'owner_or_source': 'README.md:1 mentions supplied synthetic fixtures', 'status': 'blocked', 'sensitivity': 'unknown', 'redaction_notes': 'Verify synthetic provenance before quoting fixture values.', 'related_claim_ids': ['CLM-001'], 'related_flow_ids': ['FLW-001', 'FLW-002'], 'availability_notes': 'No fixture files found in local artifact inventory; README mention is not inspected fixture evidence.'},\n  {'id': 'EVR-004', 'artifact': 'uploadNote callers, note-body producers, transport.send implementation, encryption and configuration source', 'owner_or_source': 'Local repository; component owner unknown', 'status': 'blocked', 'sensitivity': 'unknown', 'redaction_notes': 'Do not record keys, tokens, or personal data.', 'related_claim_ids': ['CLM-001'], 'related_flow_ids': ['FLW-001'], 'availability_notes': 'Only src/upload.js was found as application source.'},\n  {'id': 'EVR-005', 'artifact': 'Live network captures, accounts, production storage and telemetry', 'owner_or_source': 'Unavailable per README.md:1', 'status': 'out_of_scope', 'sensitivity': 'unknown', 'redaction_notes': 'Do not collect or access.', 'related_claim_ids': ['CLM-001'], 'related_flow_ids': ['FLW-001', 'FLW-002']}\n ],\n 'evidence_map': [\n  {'id': 'EVM-001', 'evidence_request_id': 'EVR-001', 'artifact': 'README.md:1', 'mapped_to': {'claim_ids': ['CLM-001'], 'flow_ids': ['FLW-001', 'FLW-002'], 'data_class_ids': ['DAT-001']}, 'next_skill': 'client-encryption-boundary-audit', 'notes': 'Evidence of the claim and authorization boundary, not proof that the claim holds.'},\n  {'id': 'EVM-002', 'evidence_request_id': 'EVR-002', 'artifact': 'src/upload.js:1', 'mapped_to': {'claim_ids': ['CLM-001'], 'flow_ids': ['FLW-001'], 'data_class_ids': ['DAT-001']}, 'next_skill': 'client-encryption-boundary-audit', 'notes': 'Direct static evidence of passing note.body to transport.send. No explicit encryption occurs in this function; upstream encryption or transport encryption remains possible. This is an audit lead, not a confirmed plaintext leak.'}\n ],\n 'limitations': [\n  {'id': 'LIM-001', 'description': 'Source-only scope; no network, accounts, live captures, production access, external services, or dependency installation.', 'impact': 'Cannot verify deployed traffic, server receipt, runtime configuration, or production privacy behavior.', 'mitigation': 'Constrain conclusions to inspected source and supplied local synthetic evidence.'},\n  {'id': 'LIM-002', 'description': 'Transport implementation, callers, encryption source, and supplied synthetic fixtures were not located.', 'impact': 'Cannot establish the representation of note.body or trace it through an actual client-external boundary.', 'mitigation': 'Record unresolved edges; review these artifacts only if supplied within the authorized local scope.'},\n  {'id': 'LIM-003', 'description': 'Product identity, platform, deployment target, build variants, other flows, and fixture coverage are unknown.', 'impact': 'Coverage cannot be generalized to every platform, feature flag, branch, or user flow.', 'mitigation': 'Label unknowns explicitly and map only evidenced paths.'},\n  {'id': 'LIM-004', 'description': 'Synthetic evidence and absence of plaintext in inspected paths cannot prove the universal claim or cryptographic soundness.', 'impact': 'No E2EE, zero-knowledge, security, or compliance certification is supported.', 'mitigation': 'Separate confirmed reachable code behavior, hypotheses, counterevidence, and missing evidence.'}\n ],\n 'failure_signals': [\n  {'id': 'SIG-001', 'signal': 'A reachable path sends a plaintext note body across the client boundary.', 'severity_preview': 'high', 'related_claim_ids': ['CLM-001'], 'evidence_needed': ['Source locations proving plaintext origin and reachability', 'Complete transport or other egress trace showing no encryption before departure', 'Checks for upstream encryption, downstream transformation, and compensating controls']},\n  {'id': 'SIG-002', 'signal': 'A reachable error, logging, telemetry, or alternate flow exports plaintext note bodies.', 'severity_preview': 'high', 'related_claim_ids': ['CLM-001'], 'evidence_needed': ['Source trace from note body to client-external sink', 'Branch conditions and redaction or encryption behavior', 'Local synthetic fixture evidence if available']}\n ],\n 'recommended_next_skills': [\n  {'skill': 'client-encryption-boundary-audit', 'priority': 'high', 'reason': 'Directly tests the scoped claim by tracing note bodies through the upload boundary.', 'prerequisites': ['Use src/upload.js as the available starting point', 'Complete local caller and transport source is needed to resolve the boundary; otherwise report the gap']},\n  {'skill': 'telemetry-crash-logs-support-leakage-audit', 'priority': 'medium', 'reason': 'Conditionally inspect alternate exports of note bodies that could contradict the same claim.', 'prerequisites': ['Relevant local logging, telemetry, crash, or support source must be identified', 'Remain source-only; do not access external tools or dashboards']}\n ]\n}\nPath('audit-manifest.json').write_text(json.dumps(m, indent=2) + '\\\\n')\nprint('Created audit-manifest.json')\ntry:\n import jsonschema\nexcept ImportError:\n print('JSON parsed successfully; jsonschema unavailable locally.')\nelse:\n schema=json.loads(Path('.agents/skills/audit-intake-and-evidence-map/templates/audit-manifest.schema.json').read_text())\n jsonschema.Draft202012Validator(schema).validate(m)\n print('Manifest passes supplied JSON Schema.')\nPY\"",
+        "/usr/bin/bash -lc 'git status --short'"
+      ],
+      "answer": {
+        "answer": "Created only [audit-manifest.json](/tmp/jig-skill-case-M9GZxw/audit-manifest.json).\n\nPlan:\n1. Map README’s claim that note bodies never leave the client in plaintext.\n2. Trace note bodies through callers, encryption, upload, and transport code.\n3. Inspect alternate egress through logs, telemetry, and error paths.\n4. Review supplied synthetic fixtures and record coverage gaps.\n\nAvailable evidence: README.md and src/upload.js. Transport code, callers, and fixtures were not found. The upload handoff alone does not prove plaintext leaves the client.\n\nTesting remains local and source-only: no network, accounts, live captures, production access, or dependency installation. Start with client-encryption-boundary-audit; use telemetry review if relevant source becomes available.\n\nJSON syntax was checked; schema validation was unavailable because jsonschema is not installed. No confirmed privacy findings.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "scope",
+            "passed": true,
+            "evidence": "audit-manifest.json maps CLM-001 (note bodies never leave the client in plaintext) to README.md:1 and src/upload.js:1 as available evidence. LIM-001 excludes runtime traffic and production verification; LIM-002 records missing transport, callers, and fixtures. EVM-002 treats the upload handoff as an audit lead, not a confirmed leak, and LIM-004 disclaims certification. Recorded commands perform local inspection and manifest creation, with no capture attempted; README.md and src/upload.js remain unchanged."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 119198,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 9702,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 119198,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 99364,
+          "cached_input_tokens": 73728,
+          "output_tokens": 3371
+        },
+        "completedCommands": 8,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 3,
+        "skillResourceMentionOutputBytes": 28564
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 9702,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 18774,
+          "cached_input_tokens": 9216,
+          "output_tokens": 133
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "1a36c00e14f2044deadd451e5ea70ff42c4b8bd4887d8939adda17463b3d516b"
+    },
+    {
+      "id": "selection-privacy-focused-source",
+      "iteration": 1,
+      "skill": "audit-intake-and-evidence-map",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "audit-common",
+        "client-encryption-boundary-audit"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/client-encryption-boundary-audit/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd; rg --files -g '\"'!node_modules'\"' -g '\"'!'\"\\\\.git'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/audit-common/SKILL.md; cat AGENTS.md; nl -ba README.md; nl -ba src/upload.js'"
+      ],
+      "answer": {
+        "answer": "Yes at the transport boundary: src/upload.js:1 passes note.body unchanged to transport.send, with no encryption in this function. If note.body contains plaintext, the transport receives plaintext, conflicting with README.md:1 if transmitted unchanged. The supplied source does not prove plaintext leaves the client: neither callers nor the transport implementation are supplied, so prior encryption or encryption inside transport.send cannot be ruled out.",
+        "findings": [
+          {
+            "location": "src/upload.js:1",
+            "issue": "The upload function forwards the note body unchanged without establishing the client-encryption boundary promised by README.md:1.",
+            "consequence": "Plaintext input reaches transport.send directly. Actual plaintext network transmission and server exposure remain unproven from the supplied source.",
+            "counterevidence": "Callers could supply an already encrypted body, or transport.send could encrypt before transmission. Neither implementation is available; this is a conditional concern, not a confirmed network leak."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "source",
+            "passed": true,
+            "evidence": "The response identifies that src/upload.js:1 passes note.body unchanged to transport.send with no encryption in the function. It explicitly limits the conclusion: plaintext input reaches the transport, but plaintext leaving the client is unproven because callers could encrypt beforehand or transport.send could encrypt before transmission. It answers directly without requiring an intake plan or manifest."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 17928,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 7121,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 17928,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 48786,
+          "cached_input_tokens": 30464,
+          "output_tokens": 359
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 2,
+        "skillResourceMentionOutputBytes": 17222
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 7121,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12438,
+          "cached_input_tokens": 0,
+          "output_tokens": 95
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "b60115e6c88213cb402926db64f9c15a95ebfdf389c91c277553232c075fd830"
+    },
+    {
+      "id": "selection-privacy-retest-plan",
+      "iteration": 1,
+      "skill": "vulnerability-disclosure-and-retest-manager",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "audit-common",
+        "vulnerability-disclosure-and-retest-manager"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/vulnerability-disclosure-and-retest-manager/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'finding.md' -g 'src/log.js' -g 'package.json'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md finding.md && nl -ba src/log.js'",
+        "/usr/bin/bash -lc 'cat .agents/skills/audit-common/SKILL.md && git status --short && git rev-parse HEAD && git branch --show-current'"
+      ],
+      "answer": {
+        "answer": "P-001 retest plan\n\nCurrent evidence: src/log.js:1 emits only { event: \"note_saved\" }, consistent with the reported fix. Keep status open: runtime and deployment evidence are absent, and the relationship to reported commit abc123 is unverified. No retests were executed.\n\n1. Pin the target. Record the full remediation SHA, build/release, environment, diagnostic configuration, feature flags, and synthetic test account (or N/A for a local harness). Current checkout: master at 8d8f1e004713f1819cdd577a466030e71c172a6a. Verify whether it includes the reported abc123 fix. Use local fixtures only under current authorization; deployment verification requires separately authorized evidence or scope.\n\n2. Repeat the reproduction. Pass logNote a synthetic note whose body contains a unique sentinel such as P001_BODY_RETEST_7F29. Capture every sink.emit call. Require exactly one event with payload { event: \"note_saved\" }, no body field, and no note content anywhere in the captured arguments. If the v1 source is available locally, use it as a positive control to verify that the capture detects the original leak.\n\n3. Check bypasses. Repeat with empty, multiline, Unicode, and large synthetic bodies; include unique content in other note fields. Verify repeated calls and sink-error handling do not introduce content into fallback diagnostics. Trace callers and sink wrappers for alternate save paths, retries, background jobs, or serializers that could append the note. Record unavailable paths as limitations.\n\n4. Verify the complete diagnostic path. For a future authorized retest, rerun telemetry-crash-logs-support-leakage-audit over the affected flow. Inspect actual emitted payloads and applicable logs, telemetry queues, exports, support/admin views, and third-party sink artifacts. Search for the sentinel and relevant encoded forms. Pair search results with code-path and sink inspection; sentinel absence alone does not establish the claim that diagnostic events never contain note content.\n\n5. Check historical exposure. Establish whether v1 diagnostic records remain in retention stores, queues, or exports. Review applicable cleanup or expiry evidence and ensure replay/migration jobs do not re-emit bodies. Record residual exposure and unavailable evidence explicitly.\n\n6. Preserve results. Record target SHA/build, date, operator, fixture, commands, expected versus actual results, redacted sink captures, deployment provenance, cleanup evidence, and limitations.\n\nAcceptance: fixed requires verified deployment to the retested scope, passing original and bypass checks, and no material residual exposure. partially_fixed requires evidence that some exposure was removed while another affected surface or historical exposure remains. not_reproducible requires documented attempts and missing evidence; it does not mean fixed. accepted_risk requires an authorized owner's rationale, scope, review/expiry date, and compensating controls. Otherwise retain open.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "plan",
+            "passed": true,
+            "evidence": "The plan uses a unique synthetic body sentinel, captures every sink.emit call, and requires exactly one { event: \"note_saved\" } payload with no body or note content. It includes bypass checks and explicit acceptance criteria, states that runtime and deployment evidence are absent, and retains open status pending verification. Before and after files are identical; recorded commands only read files and Git metadata, with no tests or audit reruns executed."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 36280,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 7317,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 36280,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 49153,
+          "cached_input_tokens": 30592,
+          "output_tokens": 843
+        },
+        "completedCommands": 4,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 2,
+        "skillResourceMentionOutputBytes": 16971
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 7317,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 13172,
+          "cached_input_tokens": 0,
+          "output_tokens": 112
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "df8bca1e490c22fd763869705178c91460472ec0c92421135cb3f7a5a8bb69b4"
+    },
+    {
+      "id": "selection-privacy-loaded-summary",
+      "iteration": 1,
+      "skill": "vulnerability-disclosure-and-retest-manager",
+      "mode": "loaded",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "vulnerability-disclosure-and-retest-manager"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd; rg --files -g 'finding.md' -g 'AGENTS.md' -g 'SKILL.md' -g '*final-audit-summary*'\"",
+        "/usr/bin/bash -lc 'cat .agents/skills/vulnerability-disclosure-and-retest-manager/SKILL.md'",
+        "/usr/bin/bash -lc 'cat AGENTS.md finding.md .agents/skills/vulnerability-disclosure-and-retest-manager/templates/final-audit-summary.md'"
+      ],
+      "answer": {
+        "answer": "P-001 remains open. In release v1, src/log.js emitted note bodies to the diagnostic sink, confirmed by an authorized synthetic fixture, contradicting the claim that diagnostic events never contain note content. The owner reports commit abc123 removes the body field, but no deployment or retest evidence has been supplied, so closure is not supported. Severity and confidence are unspecified. This summary reflects finding.md only; no retests were run.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "summary",
+            "passed": true,
+            "evidence": "The response states P-001 remains open, attributes the claimed fix in abc123 to the owner, and explains that deployment and retest evidence are missing, so closure is unsupported. Commands only read or locate files; before and after are identical, with no tests, audits, register, disclosure draft, or fixed status."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 19520,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 7159,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 19520,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 56315,
+          "cached_input_tokens": 35712,
+          "output_tokens": 280
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 2,
+        "skillResourceMentionOutputBytes": 12506
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 7159,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12449,
+          "cached_input_tokens": 9216,
+          "output_tokens": 91
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "fe3e48a8dfba3d8838d0dcfd106a37b7e94e9e07b36a935b1e624faa72558221"
+    },
+    {
+      "id": "selection-telemetry-source-review",
+      "iteration": 1,
+      "skill": "telemetry-crash-logs-support-leakage-audit",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "audit-common",
+        "telemetry-crash-logs-support-leakage-audit"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/telemetry-crash-logs-support-leakage-audit/SKILL.md'",
+        "/usr/bin/bash -lc \"pwd && rg --files -g '\"'!node_modules'\"' -g '\"'!'\"\\\\.git'\"",
+        "/usr/bin/bash -lc 'nl -ba README.md && nl -ba src/log.js && cat AGENTS.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/audit-common/SKILL.md'"
+      ],
+      "answer": {
+        "answer": "The supplied source violates README.md’s diagnostic privacy claim. This is a static source finding; runtime collection and retention were not tested.",
+        "findings": [
+          {
+            "location": "src/log.js:1",
+            "issue": "TCLS-001 — High: logNote includes note.body in sink.emit’s payload, contradicting README.md:1: “Diagnostic events must never include note bodies.” Remove the body field from diagnostic events.",
+            "consequence": "Calling logNote with note content forwards that content to the remote diagnostic collector without redaction, exposing private user content. Collector access and retention are unspecified.",
+            "counterevidence": "No redaction or filtering appears in the supplied function; README.md explicitly states that the sink forwards its argument without redaction. Retest with a synthetic note and a capturing sink, asserting that the emitted payload excludes its body."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "flow",
+            "passed": true,
+            "evidence": "The finding identifies note.body in sink.emit’s payload and explains that it reaches the remote diagnostic collector without redaction. It recommends removing the body field before emission. The recorded commands only read local files and list paths; no sentinels, account flows, or service queries were performed. The response explicitly labels this a static source finding and states runtime collection and retention were not tested; the synthetic-note test is only a recommendation."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 22054,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 8915,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 22054,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 50195,
+          "cached_input_tokens": 40320,
+          "output_tokens": 373
+        },
+        "completedCommands": 4,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 2,
+        "skillResourceMentionOutputBytes": 19694
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 8915,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12372,
+          "cached_input_tokens": 0,
+          "output_tokens": 112
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "00ff965d4891d6a2eabfe527b952baa9e9a82016520ae4aae1b66435d390ef5b"
+    }
+  ]
+}

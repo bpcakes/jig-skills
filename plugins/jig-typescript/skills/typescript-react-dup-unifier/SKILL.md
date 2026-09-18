@@ -1,9 +1,11 @@
 ---
 name: typescript-react-dup-unifier
-description: Audit similar TypeScript/React abstractions and recommend unification, shared behavior, or intentional separation.
+description: Assess whether similar TypeScript/React abstractions should be unified when the user requests duplication or consolidation analysis. Excludes routine coding and general code review.
 ---
 
 # TypeScript/React Dup Unifier
+
+Select for a named invocation or a consolidation question, such as "should these two form hooks share a core?" Similar code discovered during another task does not start a duplication scan. Follow that task within its requested scope.
 
 Apply this skill when it serves the user's requested task and target. Discovery or a code change does not authorize an additional review, refactor, or broader scan. For review-only requests, report findings without editing; implement changes only when they are part of the user's request.
 
