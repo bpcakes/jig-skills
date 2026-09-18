@@ -345,7 +345,7 @@ for (const role of ["triage", "repair"]) for (const change of ["ignored-cache", 
       const fixed = readFileSync(path.join(a.repository, "value.cjs"), "utf8").includes("= 2;");
       if (a.role === role && !exercised) {
         exercised = true;
-        assert.match(a.instructions, /source files and the Git index read-only/);
+        assert.match(a.instructions, role === "repair" ? /Edit source files directly in assignment.repository/ : /source files and the Git index read-only/);
         if (change === "ignored-cache") put(a.repository, ".cache/output", "diagnostic cache");
         else if (change === "source") put(a.repository, "value.cjs", "unapproved mutation");
         else execFileSync("git", ["add", "value.cjs"], { cwd: a.repository });
@@ -363,6 +363,189 @@ for (const role of ["triage", "repair"]) for (const change of ["ignored-cache", 
   });
 }
 
+for (const mask of [0o002, 0o022, 0o077]) test(`workspace additions normalize editor umask ${mask.toString(8)}`, async t => {
+  const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
+  const run = await drive(await f.start(), (a, run) => {
+    if (a.role !== "repair") return repairResponse(a, run);
+    put(a.repository, "value.cjs", "module.exports = 2;\n");
+    const originalMask = process.umask(mask);
+    try {
+      writeFileSync(path.join(a.repository, "added.txt"), "ordinary editor creation\n");
+      writeFileSync(path.join(a.repository, "added.sh"), "#!/bin/sh\nexit 0\n", { mode: 0o777 });
+    } finally { process.umask(originalMask); }
+    assert.equal(statSync(path.join(a.repository, "added.txt")).mode & 0o777, 0o666 & ~mask);
+    assert.equal(statSync(path.join(a.repository, "added.sh")).mode & 0o777, 0o777 & ~mask);
+    return { workspaceEdits: ["value.cjs", "added.txt", "added.sh"].map(name => ({
+      path: name, reason: "Correct export and add required supporting files", findingIds: a.findings.map(f => f.id),
+    })) };
+  });
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(statSync(path.join(f.root, "added.txt")).mode & 0o777, 0o644);
+  assert.equal(statSync(path.join(f.root, "added.sh")).mode & 0o777, 0o755);
+  assert.equal(readFileSync(path.join(f.root, "added.txt"), "utf8"), "ordinary editor creation\n");
+  assert.equal(existsSync(path.join(f.root, ".git/index")), false);
+});
+
+test("workspace editor replacements preserve all existing permissions and script execution", async t => {
+  const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
+  f.contract.requiredValidation.push({ id: "script", argv: ["./shared.sh"] });
+  for (const [name, mode] of [["private.txt", 0o600], ["private.sh", 0o600], ["shared.sh", 0o775]]) {
+    put(f.root, name, "before\n"); fs.chmodSync(path.join(f.root, name), mode);
+  }
+  const run = await drive(await f.start(), (a, run) => {
+    if (a.role !== "repair") return repairResponse(a, run);
+    put(a.repository, "value.cjs", "module.exports = 2;\n");
+    for (const [name, mode] of [["private.txt", 0o644], ["private.sh", 0o777], ["shared.sh", 0o600]]) {
+      const temporary = path.join(a.repository, name + ".tmp");
+      writeFileSync(temporary, "#!/bin/sh\nexit 0\n"); fs.chmodSync(temporary, mode);
+      renameSync(temporary, path.join(a.repository, name));
+    }
+    return { workspaceEdits: ["value.cjs", "private.txt", "private.sh", "shared.sh"].map(name => ({
+      path: name, reason: "Correct export and supporting source permissions", findingIds: a.findings.map(f => f.id),
+    })) };
+  });
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  for (const [name, mode] of [["private.txt", 0o600], ["private.sh", 0o600], ["shared.sh", 0o775]]) {
+    assert.equal(statSync(path.join(f.root, name)).mode & 0o777, mode);
+    assert.equal(readFileSync(path.join(f.root, name), "utf8"), "#!/bin/sh\nexit 0\n");
+  }
+});
+
+test("workspace edits explicitly set modes on existing and new files without chmod or file images", async t => {
+  const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
+  const script = "#!/bin/sh\nexit 0\n";
+  for (const [name, mode] of [["enable.sh", 0o600], ["disable.sh", 0o755]]) {
+    put(f.root, name, script); fs.chmodSync(path.join(f.root, name), mode);
+  }
+  f.contract.requiredValidation.push({ id: "script", argv: ["./enable.sh"] });
+  const run = await drive(await f.start(), (a, run) => {
+    if (a.role !== "repair") return repairResponse(a, run);
+    put(a.repository, "value.cjs", "module.exports = 2;\n");
+    put(a.repository, "new.sh", script);
+    return { workspaceEdits: [["value.cjs"], ["enable.sh", "0755"], ["disable.sh", "0644"], ["new.sh", "0755"]].map(([name, mode]) => ({
+      path: name, ...(mode ? { mode } : {}), reason: "Correct export and script permissions", findingIds: a.findings.map(f => f.id),
+    })) };
+  });
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  for (const [name, mode] of [["enable.sh", 0o755], ["disable.sh", 0o644], ["new.sh", 0o755]]) {
+    assert.equal(statSync(path.join(f.root, name)).mode & 0o777, mode);
+    assert.equal(readFileSync(path.join(f.root, name), "utf8"), script);
+  }
+  assert.equal(existsSync(path.join(f.root, ".git/index")), false);
+});
+
+for (const damage of ["source", "index", "filter"]) for (const execution of ["completed", "uncertain"]) test(`partial workspace repair preserves a ${execution} provider error after ${damage} changes`, async t => {
+  const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
+  const run = await drive(await f.start(), (a, run) => {
+    if (a.role !== "repair") return repairResponse(a, run);
+    put(a.repository, "value.cjs", "module.exports = 2;\n");
+    if (damage === "index") execFileSync("git", ["add", "value.cjs"], { cwd: a.repository });
+    if (damage === "filter") put(a.repository, ".gitattributes", "value.cjs filter=unsupported\n");
+    return { error: "Provider failed after editing: quota exhausted", execution };
+  });
+  assert.equal(run.phase, "BLOCKED", JSON.stringify(status(run)));
+  assert.match(run.outcome.reason, /Provider failed after editing: quota exhausted/);
+  assert.equal(run.assignmentAttempts.filter(a => a.role === "repair").length, execution === "uncertain" ? 1 : 3);
+  for (const attempt of run.assignmentAttempts.filter(a => a.role === "repair")) {
+    assert.equal(attempt.error, "Provider failed after editing: quota exhausted");
+    assert.equal(attempt.execution, execution); assert.equal(attempt.code, undefined);
+  }
+  if (execution === "uncertain") assert.equal(run.outcome.code, "EXECUTION_UNCERTAIN");
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n");
+  assert.equal(run.mutations.length, 0); assert.equal(run.validation.length, 0);
+  assert.equal(existsSync(path.join(f.root, ".git/index")), false);
+  assert.equal((await advance(run.directory)).assignmentAttempts.length, run.assignmentAttempts.length);
+});
+
+for (const scenario of ["tracked", "untracked", "attempt-limit"]) test(`workspace file-to-directory rejection supports ${scenario} retries without publication`, async t => {
+  const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n"); put(f.root, "tool", "original tool\n");
+  execFileSync("git", ["add", "value.cjs", ...(scenario === "untracked" ? [] : ["tool"])], { cwd: f.root });
+  const index = readFileSync(path.join(f.root, ".git/index"));
+  let attempts = 0;
+  const run = await drive(await f.start({ options: parseArgs(["--max-provider-attempts", "2"]) }), (a, run) => {
+    if (a.role !== "repair") return repairResponse(a, run);
+    attempts++;
+    assert.equal(readFileSync(path.join(a.repository, "tool"), "utf8"), "original tool\n", "Retries start from a fresh copy");
+    assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n", "Rejected candidates never publish partial edits");
+    put(a.repository, "value.cjs", "module.exports = 2;\n");
+    const names = ["value.cjs"];
+    if (attempts === 1 || scenario === "attempt-limit") {
+      rmSync(path.join(a.repository, "tool")); put(a.repository, "tool/check.cjs", "module.exports = 2;\n");
+      names.push("tool", "tool/check.cjs");
+    }
+    return { workspaceEdits: names.map(name => ({ path: name, reason: "Correct export and tool layout", findingIds: a.findings.map(f => f.id) })) };
+  });
+  assert.equal(run.phase, scenario === "attempt-limit" ? "BLOCKED" : "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(attempts, 2); assert.equal(run.round, 1);
+  const failures = readJSON(path.join(run.directory, "run.json")).assignmentAttempts.filter(a => a.role === "repair" && a.error);
+  assert.equal(failures.length, scenario === "attempt-limit" ? 2 : 1);
+  for (const attempt of failures) {
+    assert.match(attempt.error, /Repair replaces a file with a directory: tool/);
+    assert.equal(attempt.code, undefined); assert.equal(attempt.execution, "completed");
+  }
+  assert.equal(run.mutations.length, scenario === "attempt-limit" ? 0 : 1);
+  assert.equal(readFileSync(path.join(f.root, "tool"), "utf8"), "original tool\n");
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+});
+
+for (const defect of ["unattributed", "unchanged", "both-attribution", "mode-deletion", "mode-unchanged", "duplicate", "excluded", "index", "symlink", "symlink-deletion", "ignored", "ignored-mode", "ignored-and-unchanged", "hidden-source", "special-bits", "unknown-finding", "unsafe-path"]) {
+  test(`workspace repairs reject ${defect} before publication`, async t => {
+    const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
+    put(f.root, ".gitignore", ".cache/\n"); put(f.root, "preserved.txt", "user work\n");
+    fs.chmodSync(path.join(f.root, ".gitignore"), 0o644);
+    if (defect === "symlink-deletion") symlinkSync("preserved.txt", path.join(f.root, "link.txt"));
+    const options = parseArgs(["--max-provider-attempts", "1", "--exclude-path", "preserved.txt"]);
+    const run = await drive(await f.start({ options }), (a, run) => {
+      if (a.role !== "repair") return repairResponse(a, run);
+      put(a.repository, "value.cjs", "module.exports = 2;\n");
+      const item = name => ({ path: name, reason: "Correct the demonstrated defect", findingIds: a.findings.map(f => f.id) });
+      const workspaceEdits = [item("value.cjs")];
+      if (["unattributed", "both-attribution"].includes(defect)) put(a.repository, "surprise.txt", "unreported\n");
+      if (["unchanged", "both-attribution", "ignored-and-unchanged"].includes(defect)) workspaceEdits.push(item(".gitignore"));
+      if (defect === "mode-deletion") { rmSync(path.join(a.repository, "value.cjs")); workspaceEdits[0].mode = "0755"; }
+      if (defect === "mode-unchanged") workspaceEdits.push({ ...item(".gitignore"), mode: "0644" });
+      if (defect === "duplicate") workspaceEdits.push(item("value.cjs"));
+      if (defect === "excluded") { put(a.repository, "preserved.txt", "changed\n"); workspaceEdits.push(item("preserved.txt")); }
+      if (defect === "index") execFileSync("git", ["add", "value.cjs"], { cwd: a.repository });
+      if (defect === "symlink") { symlinkSync("value.cjs", path.join(a.repository, "link.txt")); workspaceEdits.push(item("link.txt")); }
+      if (defect === "symlink-deletion") { rmSync(path.join(a.repository, "link.txt")); workspaceEdits.push(item("link.txt")); }
+      if (["ignored", "ignored-mode", "ignored-and-unchanged"].includes(defect)) {
+        put(a.repository, ".cache/output", "ignored\n");
+        workspaceEdits.push({ ...item(".cache/output"), ...(defect === "ignored-mode" ? { mode: "0644" } : {}) });
+      }
+      if (defect === "hidden-source") {
+        put(a.repository, ".gitignore", ".cache/\nvalue.cjs\n"); workspaceEdits.push(item(".gitignore"));
+      }
+      if (defect === "special-bits") fs.chmodSync(path.join(a.repository, "value.cjs"), 0o4755);
+      if (defect === "unknown-finding") workspaceEdits[0].findingIds = ["invented"];
+      if (defect === "unsafe-path") workspaceEdits[0].path = "../outside";
+      return { workspaceEdits };
+    });
+    assert.equal(run.phase, "BLOCKED", JSON.stringify(status(run)));
+    const expected = {
+      unattributed: /every changed source path/, unchanged: /every changed source path/, duplicate: /unique, included/,
+      "both-attribution": /every changed source path/, "mode-deletion": /workspace mode requires a regular file/, "mode-unchanged": /every changed source path/,
+      excluded: /unique, included/, index: /Assignment changed/, symlink: /Symlink repair/, "symlink-deletion": /Symlink repair/,
+      ignored: /Ignored or unmanaged paths/, "ignored-mode": /Ignored or unmanaged paths/, "ignored-and-unchanged": /Ignored or unmanaged paths/, "hidden-source": /Ignored or unmanaged paths/,
+      "special-bits": /Unsupported repair permissions/, "unknown-finding": /Malformed repair result/, "unsafe-path": /Unsafe repository path/,
+    };
+    assert.match(run.outcome.reason, expected[defect]);
+    const attempt = readJSON(path.join(run.directory, "run.json")).assignmentAttempts.find(a => a.role === "repair");
+    if (["unattributed", "both-attribution"].includes(defect)) assert.match(attempt.error, /Changed but unlisted: \["surprise\.txt"\]/);
+    if (["unchanged", "both-attribution", "mode-unchanged", "ignored-and-unchanged"].includes(defect)) assert.match(attempt.error, /listed but unchanged: \["\.gitignore"\]/);
+    if (["ignored", "ignored-mode", "ignored-and-unchanged"].includes(defect)) {
+      assert.match(attempt.error, /Ignored or unmanaged paths: \["\.cache\/output"\]/);
+      assert.doesNotMatch(attempt.error, /listed but unchanged: \[[^\]]*\.cache/);
+      assert.match(attempt.error, /Keep generated outputs in validation or make source paths Git-visible/);
+    }
+    assert.equal(run.assignmentAttempts.filter(a => a.role === "repair").length, 1);
+    assert.equal(run.mutations.length, 0); assert.equal(run.validation.length, 0);
+    assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n");
+    assert.equal(readFileSync(path.join(f.root, "preserved.txt"), "utf8"), "user work\n");
+    assert.equal(existsSync(path.join(f.root, ".git/index")), false);
+  });
+}
+
 test("settlement receipts survive archived records and do not release another active run", async t => {
   const f = fixture(t), run = await drive(await f.start()), active = path.join(run.runsRoot, "active.json");
   assert.deepEqual(readJSON(active), { version: 2, state: "settled", directory: run.directory, backups: [] });
@@ -374,10 +557,21 @@ test("settlement receipts survive archived records and do not release another ac
   assert.equal(readJSON(active).directory, next.directory);
 });
 
-for (const version of [4, 5, 6, 7]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
+test("workspace repair runs pin version 9 and cannot resume version-8 records", async t => {
+  const f = fixture(t), run = await f.start(), file = path.join(run.directory, "run.json");
+  assert.equal(run.version, 9, "The workspace contract must not be admitted by a version-8 controller");
+  assert.equal(loadRun(run.directory).version, 9);
+  const record = readJSON(file); record.version = 8;
+  writeFileSync(file, JSON.stringify(record));
+  const before = readFileSync(file);
+  await assert.rejects(advance(run.directory), /older runs require their original controller/);
+  assert.deepEqual(readFileSync(file), before, "An incompatible run is not migrated or consumed");
+});
+
+for (const version of [4, 5, 6, 7, 8]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
   const f = fixture(t), run = await drive(await f.start()), file = path.join(run.directory, "run.json"), active = path.join(run.runsRoot, "active.json");
   const record = readJSON(file); record.version = version;
-  delete record.fixPolicy; delete record.options.fixMode;
+  if (version < 8) { delete record.fixPolicy; delete record.options.fixMode; }
   writeFileSync(file, JSON.stringify(record)); writeFileSync(active, JSON.stringify({ directory: run.directory }));
   const before = readFileSync(file);
   await assert.rejects(advance(run.directory), /older runs require their original controller/);

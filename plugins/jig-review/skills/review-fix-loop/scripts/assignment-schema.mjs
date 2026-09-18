@@ -25,11 +25,12 @@ export function resultSchema(assignment) {
   } else if (assignment.role === "repair") {
     const attribution = { path: text, reason: text, findingIds: array(choice(assignment.findings.map(f => f.id)), { minItems: 1, uniqueItems: true }) };
     const mode = { type: "string", enum: ["0644", "0755"] };
-    success = object({ ...envelope, edits: array({ oneOf: [
+    success = { oneOf: [object({ ...envelope, workspaceEdits: array(object({ ...attribution, mode }, Object.keys(attribution)), { minItems: 1, maxItems: 128 }) }),
+      object({ ...envelope, edits: array({ oneOf: [
       object({ ...attribution, content: { type: "string" }, mode }, [...Object.keys(attribution), "content"]),
       object({ ...attribution, delete: { const: true } }),
       object({ ...attribution, mode }),
-    ] }, { minItems: 1, maxItems: 128 }) });
+    ] }, { minItems: 1, maxItems: 128 }) })] };
   } else throw new Error(`No result schema for assignment role: ${assignment.role}`);
   return { $schema: "https://json-schema.org/draft/2020-12/schema", oneOf: [success,
     object({ error: text, execution: { type: "string", enum: ["completed", "uncertain"] } }, ["error"])] };

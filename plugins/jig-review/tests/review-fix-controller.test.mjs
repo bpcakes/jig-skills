@@ -118,6 +118,75 @@ test("complete CLI-backed review -> repair -> validation -> terminal quorum with
   }
 });
 
+test("direct workspace repairs survive capture and cleanup with bytes, modes, and user index preserved", async t => {
+  const f = fixture(t);
+  writeFileSync(path.join(f.root, "obsolete.txt"), "remove me\n");
+  writeFileSync(path.join(f.root, "tool.sh"), "#!/bin/sh\nexit 0\n", { mode: 0o644 });
+  writeFileSync(path.join(f.root, "user.txt"), "staged user work\n");
+  writeFileSync(path.join(f.root, ".gitignore"), ".cache/\n");
+  git(f.root, "add", "obsolete.txt", "tool.sh", "user.txt");
+  writeFileSync(path.join(f.root, "user.txt"), "unstaged user work\n");
+  const index = readFileSync(path.join(f.root, ".git/index"));
+  const binary = Buffer.from([0, 255, 128, 10]);
+  let run = await drive(await createRun({ cwd: f.root, contract: f.contract }), r => r.pending?.role === "review");
+  while (run.pending?.role !== "repair") {
+    await nativeSubmit(run, run.pending.role === "review" ? { ...nativeResult(run), findings: [{
+      key: "value", path: "value.cjs", severity: "medium", title: "Wrong export", evidence: "Must export 2",
+    }] } : nativeResult(run));
+    run = await drive(run, r => Boolean(r.pending));
+  }
+  const { repository, findings } = run.pending.assignment;
+  assert.match(run.pending.assignment.instructions, /apply_patch/);
+  writeFileSync(path.join(repository, "value.cjs"), "module.exports = 2;\n");
+  writeFileSync(path.join(repository, "binary.dat"), binary, { mode: 0o644 });
+  writeFileSync(path.join(repository, "empty.txt"), "", { mode: 0o644 });
+  chmodSync(path.join(repository, "tool.sh"), 0o755);
+  rmSync(path.join(repository, "obsolete.txt"));
+  mkdirSync(path.join(repository, ".cache"));
+  writeFileSync(path.join(repository, ".cache/diagnostic"), "ignored output\n");
+  const workspaceEdits = ["value.cjs", "binary.dat", "empty.txt", "tool.sh", "obsolete.txt"].map(name => ({
+    path: name, reason: "Implement the required export and supporting files", findingIds: findings.map(f => f.id),
+    ...(name === "tool.sh" ? { mode: "0755" } : {}),
+  }));
+  await nativeSubmit(run, { workspaceEdits });
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n", "Submission does not directly publish files");
+  run = await advance(run.directory);
+  assert.equal(run.phase, "VALIDATE", JSON.stringify(status(run)));
+  writeFileSync(path.join(repository, "value.cjs"), "module.exports = 99;\n", "utf8");
+  run = await driveNative(loadRun(run.directory));
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(existsSync(repository), false, "The captured candidate survives cleanup of the editable copy");
+  assert.equal(existsSync(path.join(f.root, ".cache")), false);
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
+  assert.deepEqual(readFileSync(path.join(f.root, "binary.dat")), binary);
+  assert.equal(readFileSync(path.join(f.root, "empty.txt"), "utf8"), "");
+  assert.equal(statSync(path.join(f.root, "tool.sh")).mode & 0o777, 0o755);
+  assert.equal(existsSync(path.join(f.root, "obsolete.txt")), false);
+  assert.equal(readFileSync(path.join(f.root, "user.txt"), "utf8"), "unstaged user work\n");
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+  assert.deepEqual(run.mutations[0].attributions, workspaceEdits);
+});
+
+test("external repair adapters can edit their assigned workspace and return attribution only", async t => {
+  const f = fixture(t), index = readFileSync(path.join(f.root, ".git/index"));
+  const run = await drive(await f.start("workspace"));
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+});
+
+test("external repair adapter errors retain their cause after partial workspace edits", async t => {
+  const f = fixture(t), index = readFileSync(path.join(f.root, ".git/index"));
+  const run = await drive(await f.start("workspace-error"));
+  assert.equal(run.phase, "BLOCKED", JSON.stringify(status(run)));
+  assert.equal(run.outcome.reason, "Repair adapter failed after editing");
+  const attempts = run.assignmentAttempts.filter(a => a.role === "repair");
+  assert.equal(attempts.length, 3);
+  assert.ok(attempts.every(a => a.error === "Repair adapter failed after editing" && a.code !== "ASSIGNMENT_CHANGED"));
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n");
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+});
+
 for (const mode of ["minimal", "balanced", "comprehensive"]) test(`CLI ${mode} repair policy survives native assignment boundaries and resume`, async t => {
   const f = fixture(t), contractFile = path.join(f.directory, "contract.json");
   writeFileSync(contractFile, JSON.stringify(f.contract));

@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
@@ -38,5 +38,13 @@ if (a.role === "review") {
   const next = scenario === "oscillation" ? (correct ? 1 : 2) : scenario === "recovery" && count === 0 ? 3 : 2;
   result.edits = [{ path: "value.cjs", content: `module.exports = ${next};\n`, findingIds: a.findings.map(f => f.id), reason: "Restore the required exported value." }];
   if (scenario === "journal") result.edits.push({ path: "support.txt", content: "ready\n", findingIds: a.findings.map(f => f.id), reason: "Supply the required support artifact." });
+  if (scenario === "workspace") {
+    result.workspaceEdits = result.edits.map(({ content, ...edit }) => { writeFileSync(edit.path, content); return edit; });
+    delete result.edits;
+  }
+  if (scenario === "workspace-error") {
+    writeFileSync("value.cjs", `module.exports = ${next};\n`);
+    result = { error: "Repair adapter failed after editing" };
+  }
 }
 process.stdout.write(JSON.stringify(result));

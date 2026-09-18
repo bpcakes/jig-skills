@@ -272,7 +272,10 @@ function completeIssue(run) {
   const assignment = { id, role, fingerprint: run.fingerprint.fingerprint, scope: { ...run.fingerprint, repoRoot: overlay },
     repository: overlay, contract: contractOf(run), ...extra, fixMode: run.options.fixMode };
   assignment.instructions += `\n\nRepair policy (${run.options.fixMode}): ${run.fixPolicy}`;
-  assignment.instructions += " Keep source files and the Git index read-only. Diagnostic commands may write ignored build/cache outputs in this copy; put other scratch files outside it. Only controller validation can supply required validation evidence.";
+  assignment.instructions += role === "repair"
+    ? " Edit source files directly in assignment.repository using the normal editing tool (apply_patch when available). Return workspaceEdits containing path, reason, and findingIds for every changed file, including additions and deletions. The controller captures file contents and preserves existing permissions; request intentional permission changes with an optional mode of 0644 or 0755 on the workspace edit. New files default to 0644 or 0755 based on executability, regardless of umask. Do not build replacement scripts or embed entire files in JSON for ordinary repairs. Stop editing before submitting. Keep the Git index and the original checkout read-only. Legacy inline edits are also accepted if you leave the assignment copy unchanged."
+    : " Keep source files and the Git index read-only.";
+  assignment.instructions += " Diagnostic commands may write ignored build/cache outputs in this copy; put other scratch files outside it. Only controller validation can supply required validation evidence.";
   if (run.answers.length) assignment.contractAnswers = run.answers;
   assignment.resultSchema = resultSchema(assignment);
   const baseline = snapshotFor(run, overlay);
@@ -388,27 +391,70 @@ function triageResult(run, result) {
     finding.history.push({ pass: run.pass, round: run.round, ...decision });
   }
 }
-function repairResult(run, result) {
-  if (!Array.isArray(result.edits) || !result.edits.length || result.edits.length > 128) throw new Error("Repair requires 1–128 explicit edits.");
+function repairResult(run, result, current) {
+  const workspace = result.workspaceEdits !== undefined;
+  const edits = workspace ? result.workspaceEdits : result.edits;
+  if (!Array.isArray(edits) || !edits.length || edits.length > 128) throw new Error("Repair requires 1–128 explicit edits.");
   const allowed = new Set(eligible(run).map(f => f.id));
   const ids = new Set();
-  for (const edit of result.edits) {
+  for (const edit of edits) {
     safePath(edit.path);
     if (isExcludedPath(edit.path, run.fingerprint.excludePaths) || ids.has(edit.path) || !nonempty(edit.reason)
         || !Array.isArray(edit.findingIds) || !edit.findingIds.length || edit.findingIds.some(id => !allowed.has(id))) throw new Error("Each repair path needs a unique, included, verified causal attribution.");
-    if (edit.delete !== true && typeof edit.content !== "string" && edit.mode === undefined) throw new Error("An edit requires content, mode, or delete:true.");
-    const previous = entry(run.pending.overlay, edit.path);
+    if (!workspace && edit.delete !== true && typeof edit.content !== "string" && edit.mode === undefined) throw new Error("An edit requires content, mode, or delete:true.");
+    const previous = workspace ? run.pending.before[edit.path] : entry(run.pending.overlay, edit.path);
     if (previous?.type === "symlink") throw new Error("Symlink repair requires a separate explicit workflow.");
-    if (edit.mode !== undefined && edit.content === undefined && run.pending.before[edit.path]?.type !== "file") throw new Error("A mode-only edit requires an existing included regular file.");
+    if (!workspace && edit.mode !== undefined && edit.content === undefined && run.pending.before[edit.path]?.type !== "file") throw new Error("A mode-only edit requires an existing included regular file.");
     ids.add(edit.path);
   }
   const candidate = dictionary(run.pending.before);
-  assertStorage(run, result.edits.reduce((sum, edit) => sum + Buffer.byteLength(edit.content ?? ""), 0) + 32 * 1024 * 1024);
-  for (const edit of result.edits) {
-    if (edit.delete === true) delete candidate[edit.path];
-    else candidate[edit.path] = { type: "file",
-      blob: edit.content === undefined ? candidate[edit.path].blob : storeBlob(run.directory, Buffer.from(edit.content)),
-      mode: edit.mode === undefined ? candidate[edit.path]?.mode ?? 0o644 : parseInt(edit.mode, 8) };
+  if (workspace) {
+    const changed = new Set(changes(run.pending.before, current.files, run.fingerprint.excludePaths).map(edit => edit.path));
+    const unmanaged = new Set();
+    for (const edit of edits) {
+      let stat;
+      try { stat = lstatSync(path.join(run.pending.overlay, edit.path)); }
+      catch (error) { if (!["ENOENT", "ENOTDIR"].includes(error.code)) throw error; }
+      // Snapshots can represent this layout, but the application journal
+      // requires regular-file destinations. Reject the assignment for retry
+      // before entry() turns the directory into a terminal repository error.
+      if (run.pending.before[edit.path]?.type === "file" && stat?.isDirectory()) {
+        throw new Error(`Repair replaces a file with a directory: ${edit.path}. File-to-directory conversions are not supported in repair candidates; preserve the existing path kind.`);
+      }
+      if (!current.files[edit.path] && stat) { unmanaged.add(edit.path); continue; }
+      if (edit.mode === undefined) continue;
+      if (current.files[edit.path]?.type !== "file") throw new Error(`A workspace mode requires a regular file, not a deletion: ${edit.path}`);
+      if (parseInt(edit.mode, 8) !== run.pending.before[edit.path]?.mode) changed.add(edit.path);
+    }
+    const unlisted = [...changed].filter(name => !ids.has(name));
+    const unchanged = [...ids].filter(name => !changed.has(name) && !unmanaged.has(name));
+    if (unlisted.length || unchanged.length || unmanaged.size) throw new Error(`workspaceEdits must attribute every changed source path exactly once, with no unchanged paths. Changed but unlisted: ${JSON.stringify(unlisted)}; listed but unchanged: ${JSON.stringify(unchanged)}.`
+      + (unmanaged.size ? ` Ignored or unmanaged paths: ${JSON.stringify([...unmanaged])}. Keep generated outputs in validation or make source paths Git-visible.` : ""));
+    assertStorage(run, current.sourceBytes + 32 * 1024 * 1024);
+    for (const edit of edits) {
+      // Re-read with the existing bounded, no-symlink file reader and pin the
+      // bytes in the blob store before the editable workspace is discarded.
+      const actual = entry(run.pending.overlay, edit.path, run.directory);
+      if (hash(actual) !== hash(current.files[edit.path] ?? null)) throw new Error(`Workspace path changed during capture or is ignored/unmanaged: ${edit.path}`);
+      if (actual?.type === "symlink") throw new Error("Symlink repair requires a separate explicit workflow.");
+      if (actual) {
+        if (lstatSync(path.join(run.pending.overlay, edit.path)).mode & 0o7000) throw new Error(`Unsupported repair permissions: ${edit.path}`);
+        const previous = run.pending.before[edit.path];
+        // Atomic editor replacements can change any permission bit. Existing
+        // modes change only through an explicit request in the result.
+        const mode = edit.mode !== undefined ? parseInt(edit.mode, 8)
+          : previous?.mode ?? (actual.mode & 0o111 ? 0o755 : 0o644);
+        candidate[edit.path] = { ...actual, mode };
+      } else delete candidate[edit.path];
+    }
+  } else {
+    assertStorage(run, edits.reduce((sum, edit) => sum + Buffer.byteLength(edit.content ?? ""), 0) + 32 * 1024 * 1024);
+    for (const edit of edits) {
+      if (edit.delete === true) delete candidate[edit.path];
+      else candidate[edit.path] = { type: "file",
+        blob: edit.content === undefined ? candidate[edit.path].blob : storeBlob(run.directory, Buffer.from(edit.content)),
+        mode: edit.mode === undefined ? candidate[edit.path]?.mode ?? 0o644 : parseInt(edit.mode, 8) };
+    }
   }
   // Evaluate the complete candidate under Git's actual index and ignore rules,
   // including ignore-file changes in this batch. Never publish unmanaged files.
@@ -423,7 +469,7 @@ function repairResult(run, result) {
   if (!patch.length || (!restoreOriginal && run.seenContents.includes(candidateHash))) {
     transition(run, "BLOCKED", patch.length ? "Oscillating repair revisited an earlier file state." : "Repair made no progress."); return;
   }
-  run.candidate = { files: candidate, patch, attributions: result.edits.map(({ content, ...edit }) => edit), ...(restoreOriginal ? { restoreOriginal: true } : {}) };
+  run.candidate = { files: candidate, patch, attributions: edits.map(({ content, ...edit }) => edit), ...(restoreOriginal ? { restoreOriginal: true } : {}) };
   run.seenContents.push(candidateHash);
   json(path.join(run.directory, "patches", `round-${run.round}.json`), run.candidate);
   run.validationCycle = null;
@@ -465,16 +511,22 @@ async function consume(run) {
     if (run.cleanupBlocked) assignmentStopped(run, run.cleanupBlocked, "CLEANUP_BLOCKED");
     return false;
   }
+  let result;
   try {
-    const current = snapshotFor(run, pending.overlay);
-    if (!sameContent(pending.before, current.files) || hash(current.repositories) !== hash(pending.metadata)) {
-      const result = resultEnvelope(readJSON(resultFile(run, pending.id)));
+    result = resultEnvelope(readJSON(resultFile(run, pending.id)));
+    if (result.error || result.execution === "uncertain") { failed(run, result.error ?? "Execution outcome is uncertain", result); return true; }
+  } catch (error) { failed(run, error.message); return true; }
+  let current;
+  try {
+    current = snapshotFor(run, pending.overlay);
+    if ((pending.role !== "repair" && !sameContent(pending.before, current.files)) || hash(current.repositories) !== hash(pending.metadata)) {
       failed(run, "Assignment changed source inputs or the Git index in its private copy; original checkout unchanged.", { ...result, code: "ASSIGNMENT_CHANGED" }); return true;
     }
   } catch (error) { inspectionFailed(run, error, "Cannot inspect the assignment copy"); return true; }
   try {
-    const result = resultEnvelope(readJSON(resultFile(run, pending.id)));
-    if (result.error || result.execution === "uncertain") { failed(run, result.error ?? "Execution outcome is uncertain", result); return true; }
+    if (pending.role === "repair" && !result.workspaceEdits && !sameContent(pending.before, current.files)) {
+      failed(run, "Assignment changed source inputs without a workspaceEdits result; original checkout unchanged.", { ...result, code: "ASSIGNMENT_CHANGED" }); return true;
+    }
     if (result.assignmentId !== pending.id || result.fingerprint !== run.fingerprint.fingerprint) throw new Error("Result assignment or fingerprint mismatch.");
     // Worker exit facts are transport metadata, not fields in the agent's wire
     // result. Validate the same schema we publish, before any role can mutate.
@@ -482,7 +534,7 @@ async function consume(run) {
     assertResult(pending.assignment, pending.command ? payload : result);
     if (pending.role === "review") reviewResult(run, result);
     if (pending.role === "triage") triageResult(run, result);
-    if (pending.role === "repair") repairResult(run, result);
+    if (pending.role === "repair") repairResult(run, result, current);
   } catch (error) {
     if (["STORAGE_LIMIT", "UNSUPPORTED_REPOSITORY"].includes(error.code)) transition(run, "BLOCKED", error.message, { code: error.code });
     else failed(run, error.message);
@@ -758,7 +810,7 @@ async function advanceLocked(run) {
     } else if (run.phase === "REPAIR") {
       issue(run, "repair", { findings: eligible(run).sort((a,b) => severity[a.severity] - severity[b.severity]),
         validation: run.validation, failedCandidate: run.failedCandidate?.patch ?? null,
-        instructions: "Return explicit file edits implementing the evidenced causal repair at the responsible layer, including necessary callers, tests, and generated outputs. Use each edit's reason to explain its causal role and evidence; include relevant validation and prevention coverage. If an earlier attempt failed, use the findings and validation history to explain what new evidence changes the diagnosis or repair. Preserve supported behavior and all user work. Do not edit the repository directly." }, run.config.repairCommand);
+        instructions: "Implement the evidenced causal repair at the responsible layer in the assignment copy, including necessary callers, tests, and generated outputs. Use each edit's reason to explain its causal role and evidence; include relevant validation and prevention coverage. If an earlier attempt failed, use the findings and validation history to explain what new evidence changes the diagnosis or repair. Preserve supported behavior and all user work." }, run.config.repairCommand);
     } else if (run.phase === "VALIDATE") await validate(run);
     launch(run); return run;
 }

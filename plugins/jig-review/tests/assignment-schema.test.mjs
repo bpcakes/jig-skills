@@ -37,7 +37,7 @@ test("triage schema binds decisions to the complete ledger and supports one stru
 });
 
 test("repair schema distinguishes replacement and deletion and requires causal attribution", () => {
-  const edits = resultSchema({ ...base, role: "repair" }).oneOf[0].properties.edits;
+  const edits = resultSchema({ ...base, role: "repair" }).oneOf[0].oneOf[1].properties.edits;
   assert.equal(edits.minItems, 1); assert.equal(edits.maxItems, 128);
   const [replace, remove] = edits.items.oneOf;
   assert.deepEqual(replace.required, ["path", "reason", "findingIds", "content"]);
@@ -45,6 +45,18 @@ test("repair schema distinguishes replacement and deletion and requires causal a
   assert.equal(remove.properties.delete.const, true);
   assert.deepEqual(replace.properties.findingIds.items.enum, ["f-1"]);
   assert.equal(replace.properties.content.minLength, undefined, "An empty replacement file is permitted");
+});
+
+test("workspace repairs carry attribution without replacement contents or mixed result formats", () => {
+  const assignment = { ...base, role: "repair" }, envelope = { assignmentId: base.id, fingerprint: base.fingerprint };
+  const attribution = { path: "value.txt", reason: "Correct the demonstrated defect", findingIds: ["f-1"] };
+  assert.doesNotThrow(() => assertResult(assignment, { ...envelope, workspaceEdits: [attribution] }));
+  for (const mode of ["0644", "0755"]) assert.doesNotThrow(() => assertResult(assignment, { ...envelope, workspaceEdits: [{ ...attribution, mode }] }));
+  for (const fields of [{ workspaceEdits: [] }, { workspaceEdits: [attribution], edits: [{ ...attribution, content: "" }] },
+    ...[{ content: "" }, { delete: true }, ...[null, 493, "755", "04755", "0777"].map(mode => ({ mode })), { findingIds: ["unknown"] }, { reason: "" }]
+      .map(extra => ({ workspaceEdits: [{ ...attribution, ...extra }] }))]) {
+    assert.throws(() => assertResult(assignment, { ...envelope, ...fields }), /Malformed repair/);
+  }
 });
 
 test("runtime executes the published repair variants, including empty replacements and malformed alternatives", () => {
