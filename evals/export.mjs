@@ -200,10 +200,17 @@ export function createReport(runDirectory, sourceRoot = root, { allowPartial = f
     const changed = changedPaths(json(path.join(artifacts, 'before.json')), json(path.join(artifacts, 'after.json')));
     const writes = events.filter(e => e.type === 'item.completed' && e.item?.type === 'file_change').flatMap(e => e.item.changes ?? []);
     const commands = completedCommands(events).map(item => item.command);
+    const fixture = c.reviewHandoff ? json(path.join(artifacts, 'handoff-fixture.json')) : null;
+    if (fixture) {
+      requireEqual(result.handoffFixture, fixture, 'handoff fixture paths');
+      if (!path.isAbsolute(fixture.scratch) || !path.basename(fixture.scratch).startsWith('jig-skill-handoff-')
+          || fixture.scratch === result.workspace || fixture.scratch.startsWith(result.workspace + path.sep)) throw new Error('Invalid handoff scratch directory');
+      requireEqual(fixture.writablePaths, [fixture.scratch, path.join(result.workspace, '.git', 'jig')], 'handoff writable paths');
+    }
     const checks = {
       invocation: checkInvocation(c, readEvidence),
       scope: checkScope({ workspace: result.workspace, beforeGit: json(path.join(artifacts, 'before-git.json')),
-        afterGit: json(path.join(artifacts, 'after-git.json')), changed, writes, ...c }),
+        afterGit: json(path.join(artifacts, 'after-git.json')), changed, writes, ...c, scratchRoots: fixture?.writablePaths }),
       findings: Number.isInteger(answer.findings?.length) && answer.findings.length >= c.findings.min && answer.findings.length <= c.findings.max,
       trace: checkCommands(c, commands),
       outcome: checkGrade(c.criteria, grade),

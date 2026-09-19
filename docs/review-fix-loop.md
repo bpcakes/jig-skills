@@ -4,6 +4,8 @@
 
 Ask **“Review and fix this.”** The skill starts a bounded loop without another authorization question. It pins the task requirements, reviews the code, verifies findings, applies a journaled repair, validates it in the existing checkout, and obtains fresh terminal reviews. Review-only requests stay read-only. Add “once” or “do not re-review” for one repair phase.
 
+After a completed comprehensive review, “ok address” continues this workflow with `init --from-review <handoff.json>`. The first assignment verifies the supplied findings; there is no second discovery pass. Repair, required validation, and fresh terminal reviews retain their usual guards. Resume an active run instead of initializing another one. A missing or stale handoff stops with an explanation and never silently starts discovery. See [completed-review continuation](../plugins/jig-review/skills/review-fix-loop/references/controller.md#continue-a-completed-review).
+
 Unsupported repository capabilities are a hard stop with a precise explanation. The workflow does not continue with review, repair, or a one-pass fallback, and does not bypass preservation checks.
 
 ```text

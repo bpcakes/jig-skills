@@ -13,6 +13,8 @@ If repository capabilities are unsupported, stop and report the precise limitati
 
 Use the executable [controller](scripts/review-fix-loop.mjs), which owns state, round limits, provider attempts, immutable assignments, validation, patch application, and terminal decisions. Read [the normal controller interface](references/controller.md) before running it; follow its conditional links only when that stage or configuration applies. Never reconstruct counters in conversation or declare convergence independently of its result.
 
+When the user says “ok address”, “fix those”, or equivalent after a completed review, continue from that review's [saved handoff](../comprehensive-review/references/review-handoff.md). Resume an existing loop when applicable; otherwise use `init --from-review <handoff.json>`. This enters local triage of the supplied findings, then repair and validation, without launching discovery reviewers again. Fresh review follows the repair. Missing or stale handoff evidence requires an explicit explanation and reconciliation, never a silent restart of discovery.
+
 ## Normal invocation
 
 ```text

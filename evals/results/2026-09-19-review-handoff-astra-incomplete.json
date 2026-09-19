@@ -1,0 +1,374 @@
+{
+  "schemaVersion": 4,
+  "sourceRun": "/tmp/jig-handoff-final-astra-1789822037055",
+  "sourceSummaryHash": "81822bbda69604bc8920301a2aecd97f308c4a9c7b07b159b8e95e9331df49a2",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-test-only-weakened",
+      "rust-test-only-valid-consolidation",
+      "rust-loaded-explain",
+      "rust-implicit-simplify",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-one-from-context-loss",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-test-valid-testid",
+      "react-test-missed-confirmation",
+      "react-test-minor-display-gap",
+      "sqlx-minor-display-defect",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation",
+      "astra-swift-named-clean",
+      "astra-ruby-assessment-no-tests",
+      "astra-component-independent-options",
+      "astra-component-callback-defect",
+      "astra-state-benign-draft",
+      "astra-state-stale-response",
+      "astra-dup-independent-options",
+      "astra-transaction-single-statement",
+      "astra-privacy-expected-control",
+      "astra-privacy-protected-leak",
+      "astra-plan-noop-no-standard",
+      "astra-plan-repair-no-standard",
+      "astra-review-prior-authorized-fix",
+      "review-prior-authorized-stale-finding",
+      "review-intent-omitted",
+      "review-intent-complete",
+      "review-layer-symptom",
+      "review-layer-owner",
+      "review-caller-misuse",
+      "review-caller-valid",
+      "review-coverage-equivalent",
+      "review-coverage-weakened",
+      "selection-rust-boundary-assessment",
+      "selection-rust-general-review",
+      "selection-typescript-consolidation",
+      "selection-typescript-duplicate-explanation",
+      "selection-cursor-generic-implementation",
+      "selection-write-executable-plan",
+      "selection-brief-approach",
+      "selection-privacy-intake-planning",
+      "selection-privacy-focused-source",
+      "selection-privacy-retest-plan",
+      "selection-privacy-loaded-summary",
+      "selection-telemetry-source-review",
+      "review-merge-clean-inventory",
+      "review-merge-dirty-inventory"
+    ],
+    "missingTrials": [],
+    "historicalCases": [
+      "loop-closure-own-fields",
+      "loop-closure-real-defect",
+      "loop-low-support-nonblocking",
+      "loop-closure-exhausted",
+      "loop-third-attempt-new-evidence",
+      "loop-third-attempt-no-evidence",
+      "loop-documentation-closure",
+      "loop-mechanical-stabilization",
+      "loop-equivalent-coverage",
+      "loop-independent-blocked-group",
+      "loop-closure-exposes-substantive",
+      "loop-closure-mixed-failures-unused",
+      "loop-closure-mixed-failures-exhausted",
+      "loop-closure-mixed-failures-at-cap",
+      "loop-third-attempt-at-cap",
+      "loop-new-support-after-closure",
+      "loop-validation-counted-recovery",
+      "loop-validation-recovery-at-cap",
+      "loop-validation-recovery-oscillation",
+      "loop-closure-wrong-expectation",
+      "loop-reviewer-recovery-decisions"
+    ],
+    "plannedTrials": [
+      {
+        "id": "review-followup-address",
+        "iteration": 1
+      },
+      {
+        "id": "loop-followup-address",
+        "iteration": 1
+      }
+    ],
+    "runState": "interrupted",
+    "runComplete": false,
+    "runError": "Interrupted by SIGTERM"
+  },
+  "startedAt": "2026-09-19T12:47:17.256Z",
+  "cli": "codex-cli 0.155.1",
+  "model": "gpt-6-astra",
+  "configuration": {
+    "agent": {
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    },
+    "judge": {
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "sourceCommit": "254e51a3cdfc55b2745a378b384721f57a838ee3",
+  "harnessHash": "85804f0ff30c55c2b82f72671fa7cdafdfad7b53f87c089379dce83d49ca52fa",
+  "suiteHash": "832485f1adf6d7610f2d4d7f9fff7114646a1ba22a0e2f89023e318d2864c8d6",
+  "exporterHash": "cf0e6a651d9fd71aaf9be5a77793723d6e60713654be626fc7a8e7c1d15b821f",
+  "skillHashes": {
+    "audit-common": "3af5ae87447ef43fc138d72c70246949482a38213e0910701636e63b917df360",
+    "audit-intake-and-evidence-map": "88710a66f86548b20ae41a8da54847361bacfe62034bb5dca7ba408efa143ade",
+    "client-encryption-boundary-audit": "093ca63f3d73e7f736a2c5e2829b2dcb6b43787052415c53a3b7529026665aed",
+    "comprehensive-review": "56d03a3f92ab89ccdb5d0e1f0a2ed8d1111196c52be575b37b0889a43947c2c0",
+    "crypto-architecture-review": "9c7beb6e8bdb50e97450d5d5a556d64fe92c978134969bf1001ac6acb0baf62e",
+    "crypto-implementation-static-review": "ba5e53ce4c39f353740137c935008f91384782863a9b0e3c7a2f0a4ac185803c",
+    "cursor-implement-exec-plan": "bd61111606eb387a84db9be8fb38c881b1360e6ec2286466a5b203e04bfecc77",
+    "fowler-ruby-rails-refactoring": "9009d2f8fd453f5a94340f5a3d88f6440a2bb782f0919fbfbbbafaf9ca89e233",
+    "fowler-rust-refactoring": "b91a78c21ddd96b461d57946677a5c9da6df8d9b36a75048648f53c5131e059a",
+    "improve-exec-plan": "f7c47ed75fb673ef282f29e0c2a216f248dabf3e46684d7e5cb2da787a45faae",
+    "metadata-leakage-inventory": "1805a7c7daf8cd1dcc4a75d73d97a77a48dcea2fcc57e14f03583b0aee5d324c",
+    "network-payload-zero-knowledge-test": "0732aee4b933e1b555750c2b6234373d3d93bc6eab11c70eea9e13df5daa8ee5",
+    "privacy-claims-field-classifier": "01bbdd6454f8ca2dbfd5787693daa21d4e04db8b58466987e6dcae9ea1561df1",
+    "react-hooks-component-api-review": "8529b8a8e90b2a8d321b54a2efb62536e7a6b340cb71d6cdb057cf0eac91abf3",
+    "react-hooks-effects-review": "18e41cb77a2f9b6442ca95c64507bc747373fdb5d97d7f012ac6ecbc53a3cbd2",
+    "react-render-performance-review": "6146651d8f70c72052058720e31a0d189a35e37b2e7bd1b799138b12c567bba5",
+    "react-state-data-flow-review": "c602d657e93ab60753dcff08039be9e2c0699f5277ab75923fb141c08e9d45f4",
+    "react-test-quality-review": "b8f8185a36c704500f41946e55749efc138c7cf344b125516ecf53da9ddd2ed5",
+    "review-fix-loop": "f0752c8b8320418d5f9a6904a0e3f6b4c50ea6d1e2b230f771d36fca28a740db",
+    "rust-abstraction-police": "657f14aee8b74bf9561abd0367c28c6e1b0205c4c85dd3cd9b9a2fa8df3d66f9",
+    "rust-architecture-review": "fabc3f0239d4c0c8d689ad49093830626bd1c371ae1632ffc03508d08101b0c1",
+    "rust-async-concurrency-review": "1ca0c9af1cd292aa0cb914df86b2be87e7d33a5e9abf767d7fca65dc02bc9f11",
+    "rust-dup-unifier": "acdcebdf694f918a4b03392ecf951710cb14c379f6b385e33cf73e35d1100564",
+    "rust-error-handling-review": "baebaa2d2e68736148a0ae82a49ae255ff048cd511da536a7c8f4aa0dc46f791",
+    "rust-security-boundary-review": "7f3b4e08d6651fd27ffa7105e356e718a715c25764ded77df90625ed9caaecdb",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "d953d0331ba499cfff33e386f2932055a4ad8d93bc5ac8b41d3879ef09485525",
+    "rust-test-quality-review": "45b4096320f491ebe88d4ccb6dc6e3788cc2105c1bc08e9987673ef7595ec6c2",
+    "server-decryptability-and-plaintext-path-audit": "5ff024da53f04e2f9fe11ebf20efcf5f7eb1ac725315a1f01a24665a1abe349c",
+    "sql-transaction-consistency-review": "a336fa862d76ff6fcf248ab0e8bb4ed63cc2dd51f4a30e5633f07ee11ec09851",
+    "sqlx-query-safety-review": "af846ba60ecfcb87f104d889061e3a60c29eebd5a84b443ccc1cca05b2c44b06",
+    "swift-simplify": "d8a70e1eb302b6efd501c4da5190ac1ee4e9812b61ea53e4e1c5245785b94562",
+    "telemetry-crash-logs-support-leakage-audit": "fcaa0e712c052464bd3d443fbbcb2035d5b65ec7186e79e7ed77b3ccad11d848",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "00c5523830ed4f36c2e3d08c3aa2c4b303500a37b2920892b7cc1f36cbbba0a5",
+    "typescript-react-dup-unifier": "d6526dffcd9e16f6627b17a4da5c8225d385ab81d5c222a4104c839f49391e6e",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "008bdad0e8a353e7b1a16589608313c0e6ebf779589db57d55dbae9ae3284f80",
+    "vulnerability-disclosure-and-retest-manager": "6d5a97ddc92d313a59641d978f1b0578a781b2c00f78d92bc6b446a18355c8ba",
+    "write-exec-plan": "d49e5ebab05586604fca728be51c8cb11e1b8ca449d065531802b5c0d9f03753"
+  },
+  "passed": 0,
+  "total": 2,
+  "skillsEvaluated": 2,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Requested model/effort are verified against recorded CLI arguments for every attempted phase; a null reported configuration means effective provider selection was not independently exposed. Skill-resource mention and repeated-command metrics are command-text proxies, not judgments of reads or waste.",
+    "Current source verification covers every discovery entrypoint and all files of recorded target skills and skills read or possibly read in completed trials; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "review-followup-address",
+      "iteration": 1,
+      "skill": "comprehensive-review",
+      "mode": "loaded",
+      "passed": false,
+      "checks": {
+        "invocation": true,
+        "scope": false,
+        "findings": true,
+        "trace": true,
+        "outcome": false
+      },
+      "changed": [],
+      "reads": [
+        "review-fix-loop"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/review-fix-loop/SKILL.md'",
+        "/usr/bin/bash -lc 'cat /tmp/jig-skill-handoff-Ha2ZQY/handoff.json'",
+        "/usr/bin/bash -lc 'cat .agents/skills/review-fix-loop/references/controller.md'",
+        "/usr/bin/bash -lc 'cat .agents/skills/comprehensive-review/references/review-handoff.md'",
+        "/usr/bin/bash -lc \"git status --short && rg --files -g '\"'!node_modules'\"' -g '\"'! .git'\"' -g 'AGENTS.md' -g 'README*' -g 'package.json' -g '*.cjs' && ls .git/jig\"",
+        "/usr/bin/bash -lc 'cat README.md value.cjs AGENTS.md && node .agents/skills/review-fix-loop/scripts/review-fix-loop.mjs plan-validation --cwd /tmp/jig-skill-case-qZCHCm && node .agents/skills/review-fix-loop/scripts/loop-options.mjs'",
+        "/usr/bin/bash -lc 'cat .agents/skills/review-fix-loop/references/assignments.md'",
+        "/usr/bin/bash -lc 'node .agents/skills/review-fix-loop/scripts/review-fix-loop.mjs init --cwd /tmp/jig-skill-case-qZCHCm --contract /tmp/jig-skill-handoff-Ha2ZQY/task-contract.json --from-review /tmp/jig-skill-handoff-Ha2ZQY/handoff.json'",
+        "/usr/bin/bash -lc 'cat .agents/skills/review-fix-loop/references/recovery.md && ls -la .git/jig && git status --short'"
+      ],
+      "answer": {
+        "answer": "Repair workflow initialization failed with `review-fix-loop: spawnSync git ETIMEDOUT`. No repair or validation ran; source and staged changes remain unchanged. No reviewers or agents were launched. The requested fresh-review boundary was not reached.",
+        "findings": [
+          {
+            "location": "value.cjs:1",
+            "issue": "Still exports 1 instead of the required 2.",
+            "consequence": "The README’s export requirement remains unsatisfied.",
+            "counterevidence": "None; the current source confirms the frozen finding."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "continue",
+            "passed": false,
+            "evidence": "The init command uses --from-review with the completed-review handoff, but initialization failed. No triage or controller repair is demonstrated; value.cjs remains module.exports = 1."
+          },
+          {
+            "id": "validation",
+            "passed": false,
+            "evidence": "Commands show validation planning but no execution of the required export assertion through controller validation. The first post-repair review assignment was not reached, as the response explicitly reports."
+          },
+          {
+            "id": "evidence",
+            "passed": true,
+            "evidence": "No staging command, contract expansion, or validation waiver is shown. The only listed file addition is task-contract.json; supplied workspace files remain unchanged, and the response acknowledges that repair and validation did not run."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": "gpt-6-astra",
+            "effort": "medium"
+          },
+          "execution": {
+            "requested": {
+              "model": "gpt-6-astra",
+              "effort": "medium"
+            },
+            "reported": null,
+            "elapsedMs": 83720,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": "gpt-6-astra",
+            "effort": "medium"
+          },
+          "execution": {
+            "requested": {
+              "model": "gpt-6-astra",
+              "effort": "medium"
+            },
+            "reported": null,
+            "elapsedMs": 9587,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 83720,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 189483,
+          "cached_input_tokens": 161664,
+          "output_tokens": 1125
+        },
+        "completedCommands": 9,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 5,
+        "skillResourceMentionOutputBytes": 44252
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        "reported": null,
+        "elapsedMs": 9587,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 11874,
+          "cached_input_tokens": 9216,
+          "output_tokens": 163
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "3d2be759b4a507f12d0d01aa1f10bb737c71f336740076ee4792f0f3105e3070"
+    },
+    {
+      "id": "loop-followup-address",
+      "iteration": 1,
+      "skill": "review-fix-loop",
+      "passed": false,
+      "error": "Interrupted by SIGTERM",
+      "phases": {
+        "agent": {
+          "state": "attempted",
+          "requested": {
+            "model": "gpt-6-astra",
+            "effort": "medium"
+          },
+          "execution": {
+            "requested": {
+              "model": "gpt-6-astra",
+              "effort": "medium"
+            },
+            "reported": null,
+            "elapsedMs": 55365,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "timedOut": false,
+            "stopReason": "cancelled"
+          }
+        },
+        "judge": {
+          "state": "not-started",
+          "requested": null,
+          "execution": null
+        }
+      },
+      "artifactHash": "886aa9eabf70712eeb9623357ac8d40531f5f08cefed31165d513be24e3e8f1d"
+    }
+  ]
+}

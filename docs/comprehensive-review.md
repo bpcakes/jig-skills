@@ -64,6 +64,10 @@ Blank lines and `#` comments are ignored; entries use the same literal path sema
 
 This skill reviews diffs. For unchanged code, select a focused skill that supports repository or path assessment.
 
+## Continuing into repairs
+
+After the review, “ok address” or “fix those” continues into the repair loop using the saved review handoff. The controller verifies and repairs the existing findings without repeating discovery; fresh independent reviews follow validation of the repaired files. The report links the handoff stored outside the checkout. Missing or stale evidence is explained rather than silently replaced with another review. See the [handoff format and commands](../plugins/jig-review/skills/comprehensive-review/references/review-handoff.md).
+
 ## Reading the Result
 
 The report leads with findings and identifies which reviewers independently reported each issue. Review notes disclose reviewer failures, intentional path exclusions and their policy source, coverage limitations, Claude file access, and whether the scope fingerprint was verified unchanged. A branch review that includes the working tree also reports exact counts and bounded lists of tracked paths differing from the index, untracked paths absent from it, and submodules with inner working changes. Truncation and capture-issue markers make capped or incomplete staging guidance explicit. Before committing, re-stage intended tracked paths, add intended untracked paths, and commit dirty submodule changes inside each submodule before staging its parent gitlink. Otherwise a commit can record code different from the reviewed files, including defects the reviewers correctly treated as superseded by later working changes. With only one completed review, the result is labeled as a single-reviewer report.

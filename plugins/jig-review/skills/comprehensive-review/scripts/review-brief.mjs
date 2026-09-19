@@ -14,7 +14,11 @@ export function readBrief(file, expectedHash) {
   if (bytes.length > 64 * 1024) throw new Error('Task brief exceeds 64 KiB.');
   const hash = createHash('sha256').update(bytes).digest('hex');
   if (expectedHash != null && expectedHash !== hash) throw new Error('TASK_BRIEF_CHANGED: task brief hash mismatch.');
-  const brief = JSON.parse(bytes);
+  const brief = validateBrief(JSON.parse(bytes));
+  return { hash, brief };
+}
+
+export function validateBrief(brief) {
   const nonblank = value => typeof value === 'string' && value.trim().length > 0;
   if (!brief || Array.isArray(brief) || !nonblank(brief.goal)
       || !Array.isArray(brief.requirements) || !Array.isArray(brief.constraints)
@@ -24,7 +28,7 @@ export function readBrief(file, expectedHash) {
       || new Set(brief.requirements.map(item => item.id)).size !== brief.requirements.length) {
     throw new Error('Invalid task brief: goal, requirements [{id,text,source}], constraints, nonGoals, unknowns required.');
   }
-  return { hash, brief };
+  return brief;
 }
 
 export function reviewGuidance(pinnedBrief = null) {

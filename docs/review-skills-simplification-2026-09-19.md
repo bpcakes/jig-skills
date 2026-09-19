@@ -1,3 +1,5 @@
+This assessment describes jig-review 0.8.1 at commit `254e51a`, including the reading counts labeled “Current source” below. Later controller-handoff work in 0.9.0 is outside these measurements and live results.
+
 The review skills now use one shared contract for Astra and Sol, with references loaded by stage and selected capability. This implements the context-reduction recommendation from the [September 18 assessment](review-skills-astra-sol-evaluation-2026-09-18.md).
 
 `comprehensive-review` keeps routing, shared task context, authority, and orchestration in its entry point. Scope capture, native review assignments, external adapters, controls, and final output each have a linked reference with an explicit reading condition. The external forwarder's executable polling recipe is preserved. Staging advice now has one owner in the output contract: complete zero-count inventories produce no staging warning; nonzero inventories produce the corresponding advice.

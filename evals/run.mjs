@@ -7,6 +7,9 @@ import { tmpdir, homedir, devNull } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setImmediate as yieldToEvents } from 'node:timers/promises';
+import { createHandoff } from '../plugins/jig-review/skills/comprehensive-review/scripts/review-handoff.mjs';
+import { captureFingerprint } from '../plugins/jig-review/skills/comprehensive-review/scripts/scope-fingerprint.mjs';
+import { readBrief } from '../plugins/jig-review/skills/comprehensive-review/scripts/review-brief.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -268,17 +271,21 @@ export function checkInvocation(c, { reads, uncertainReads }) {
   return uncertainReads.includes(c.skill) ? null : true;
 }
 
-export function checkScope({ workspace, beforeGit, afterGit, changed, writes, allowedChanges = [], requiredChanges = [] }) {
+export function checkScope({ workspace, beforeGit, afterGit, changed, writes, allowedChanges = [], requiredChanges = [], scratchRoots = [] }) {
   const allowed = new Set(allowedChanges.map(p => path.resolve(workspace, p)));
   const permitted = p => typeof p === 'string' && p.length > 0 && allowed.has(path.resolve(workspace, p));
+  const permittedWrite = p => permitted(p) || (typeof p === 'string' && p.length > 0 && scratchRoots.some(root => {
+    const relative = path.relative(root, path.resolve(workspace, p));
+    return relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+  }));
   return JSON.stringify(beforeGit) === JSON.stringify(afterGit) &&
     changed.every(permitted) && writes.every(change => {
       // Current CLI traces represent moves as delete/add. Also check explicit
       // move destinations if supplied by a trace producer. Malformed paths fail.
-      if (!permitted(change.path)) return false;
-      return ['move_path', 'new_path', 'destination'].every(key => change[key] == null || permitted(change[key])) &&
+      if (!permittedWrite(change.path)) return false;
+      return ['move_path', 'new_path', 'destination'].every(key => change[key] == null || permittedWrite(change[key])) &&
         (typeof change.kind !== 'object' || change.kind === null ||
-          ['move_path', 'new_path', 'destination'].every(key => change.kind[key] == null || permitted(change.kind[key])));
+          ['move_path', 'new_path', 'destination'].every(key => change.kind[key] == null || permittedWrite(change.kind[key])));
     }) && requiredChanges.every(p => changed.includes(p));
 }
 
@@ -358,7 +365,24 @@ export function collectOutput(stream, byteLimit, onLimit) {
   return () => value;
 }
 
-async function runCodex({ cwd, prompt, artifactDir, label, schema, model, effort, timeout, disabledSkills, signal, onAttempt }) {
+export async function prepareReviewHandoff(workspace, evidence) {
+  const scratch = realpathSync(mkdtempSync(path.join(tmpdir(), 'jig-skill-handoff-')));
+  const controllerState = path.join(workspace, '.git', 'jig');
+  mkdirSync(controllerState, { recursive: true });
+  // Codex protects metadata below every additional writable root. Precreate
+  // these empty mount points so its sandbox need not mkdir inside a read-only
+  // parent .git while constructing the controller-state exception.
+  for (const directory of [scratch, controllerState]) for (const name of ['.git', '.agents', '.codex']) {
+    mkdirSync(path.join(directory, name), { recursive: true });
+  }
+  write(scratch, 'brief.json', JSON.stringify(evidence.brief));
+  const handoff = createHandoff({ capture: await captureFingerprint({ cwd: workspace, scope: 'working-tree' }),
+    brief: readBrief(path.join(scratch, 'brief.json')), reviewers: evidence.reviewers, findings: evidence.findings });
+  write(scratch, 'handoff.json', JSON.stringify(handoff));
+  return { scratch, writablePaths: [scratch, controllerState], handoff: path.join(scratch, 'handoff.json') };
+}
+
+async function runCodex({ cwd, prompt, artifactDir, label, schema, model, effort, timeout, disabledSkills, signal, onAttempt, writablePaths = [], taskTempDir }) {
   await yieldToEvents(); // Deliver signals queued while synchronous setup ran.
   signal?.throwIfAborted();
   const args = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--ignore-rules',
@@ -372,13 +396,14 @@ async function runCodex({ cwd, prompt, artifactDir, label, schema, model, effort
     '--cd', cwd];
   if (model) args.push('--model', model);
   if (effort) args.push('-c', `model_reasoning_effort=${JSON.stringify(effort)}`);
+  if (label === 'agent') for (const directory of writablePaths) args.push('--add-dir', directory);
   args.push('-');
   write(artifactDir, `${label}.prompt.txt`, prompt);
   // argv contains no credentials. Preserve the exact CLI and model selection for replay.
   write(artifactDir, `${label}.command.json`, JSON.stringify(args, null, 2));
   onAttempt?.();
   const started = performance.now();
-  const child = spawn('codex', args, { cwd, env: isolatedGitEnv(), stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+  const child = spawn('codex', args, { cwd, env: { ...isolatedGitEnv(), ...(label === 'agent' && taskTempDir ? { TMPDIR: taskTempDir } : {}) }, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
   let stopReason = null;
   const stop = reason => {
     stopReason ??= reason;
@@ -533,6 +558,10 @@ export async function main(argv) {
         for (const dir of catalog) copySkill(dir, path.join(workspace, '.agents/skills', path.basename(dir)));
         write(workspace, 'AGENTS.md', 'This is an isolated code task. Work within this repository. Do not access the network, install dependencies, or use external services. Available skills are in .agents/skills. Read a selected SKILL.md with a file-reading command before applying it. Use only relevant references.\n');
         isolatedGit(workspace, ['init', '-q', '--template=']);
+        // Installed skills are tooling, not reviewed application source. Keep
+        // them readable and snapshot-checked, but outside controller copies and
+        // Git attribute/discovery scans in the real-controller fixtures.
+        if (c.reviewHandoff) write(workspace, '.git/info/exclude', '/.agents/skills/\n');
         isolatedGit(workspace, ['add', '.']);
         isolatedGit(workspace, ['commit', '-qm', 'Fixture']);
         // Dirty fixtures exercise change-triggered behavior. The task still sees
@@ -547,12 +576,22 @@ export async function main(argv) {
         const initialDiff = isolatedGit(workspace, ['diff', '--no-ext-diff', 'HEAD']).toString('utf8');
         write(dir, 'initial.diff', initialDiff);
         let prompt = c.prompt;
+        let handoff;
+        if (c.reviewHandoff) {
+          handoff = await prepareReviewHandoff(workspace, c.reviewHandoff);
+          result.handoffFixture = handoff;
+          write(dir, 'handoff-fixture.json', JSON.stringify(handoff));
+          // These owned paths contain no grading criteria, schemas, or frozen bundle.
+          // The reviewed checkout and Git index remain under normal scope checks.
+          prompt = `Previous completed review: the scope is unchanged and its frozen handoff is ${handoff.handoff}. Only that handoff's reported export defect remains.\nThe fixture permits controller state under ${path.join(workspace, '.git', 'jig')} and scratch work under ${handoff.scratch}; TMPDIR points there. This permission supplements AGENTS.md's repository-only boundary for these two owned locations. Do not write to other external paths.\n\n${prompt}`;
+        }
         if (c.mode === 'loaded') {
           const skill = catalog.find(p => path.basename(p) === c.skill);
           prompt = `The following skill was loaded earlier in the session:\n<loaded-skill>\n${readFileSync(path.join(skill, 'SKILL.md'), 'utf8')}\n</loaded-skill>\n\nCurrent user request: ${prompt}`;
         }
         prompt += '\nReturn the answer and any review findings using the provided response schema.';
         const run = await runCodex({ cwd: workspace, prompt, artifactDir: dir, label: 'agent', schema: path.join(schemas, 'response.schema.json'), ...options, disabledSkills, signal: cancellation.signal,
+          writablePaths: handoff?.writablePaths, taskTempDir: handoff?.scratch,
           onAttempt: () => { result.phases.agent = 'attempted'; } });
         result.phases.agent = 'completed';
         result.agentExecution = run.execution;
@@ -567,7 +606,7 @@ export async function main(argv) {
         const { reads, uncertainReads } = readEvidence;
         const writes = run.events.filter(e => e.type === 'item.completed' && e.item?.type === 'file_change').flatMap(e => e.item.changes ?? []);
         const invocation = checkInvocation(c, readEvidence);
-        const scope = checkScope({ workspace, beforeGit, afterGit, changed, writes, ...c });
+        const scope = checkScope({ workspace, beforeGit, afterGit, changed, writes, ...c, scratchRoots: handoff?.writablePaths });
         const references = completedCommands(run.events).filter(item => item.exit_code === 0 && item.command.includes('/references/')).map(item => item.command);
         const commands = completedCommands(run.events).map(item => item.command);
         const trace = checkCommands(c, commands);

@@ -3,9 +3,9 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// V10 pins declarative repair criteria and role-specific assignment authority.
+// V11 adds a frozen completed-review handoff and a discovery-free entry path.
 // Older runs retain their original frozen instructions and controller.
-export const RUN_VERSION = 10;
+export const RUN_VERSION = 11;
 
 const canonical = value => value && typeof value === "object" && !Array.isArray(value)
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]))
@@ -37,7 +37,7 @@ export function atomic(file, value) {
 export const json = (file, value) => atomic(file, `${JSON.stringify(value, null, 2)}\n`);
 // Large immutable snapshots stay outside hot workflow state. On resume they
 // are lazy: polling a pending job need not read or parse any file inventory.
-const manifestFields = { original: true, expected: true, pending: { before: true, metadata: true },
+const manifestFields = { original: true, expected: true, importedReview: true, pending: { before: true, metadata: true },
   candidate: { files: true }, failedCandidate: { files: true }, appliedCandidate: { files: true },
   validationCycle: { files: true, metadata: true }, apply: { source: true } };
 const references = new WeakMap(), values = new WeakMap();
@@ -126,8 +126,8 @@ function loadVersionedRun(directory, versions) {
   return manifests(run, manifestFields, directory, true);
 }
 export const loadRun = directory => loadVersionedRun(directory, [RUN_VERSION]);
-// V4 through V10 share the readable journal and manifest schema. This reader is
+// V4 through V11 share the readable journal and manifest schema. This reader is
 // exclusively for releasing a settled reference, never resuming old work.
-export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, RUN_VERSION]);
+export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, 10, RUN_VERSION]);
 export function resultFile(run, id) { return path.join(run.directory, "assignments", id, "result.json"); }
 export function hasResult(run, id) { return existsSync(resultFile(run, id)); }
