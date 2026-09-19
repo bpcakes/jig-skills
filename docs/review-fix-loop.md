@@ -26,7 +26,7 @@ Explicit requests for minimal changes or comprehensive diagnosis select that mod
 $jig-review:review-fix-loop --fix-mode comprehensive --base main
 ```
 
-Validation covers the original failure, relevant neighboring cases, preserved behavior, and any claimed structural correction. Failed attempts or recurring findings require reassessing the diagnosis with new evidence. A mitigation leaves its residual cause actionable or blocked; passing tests alone does not establish resolution. A sound design with a local mistake can warrant a local fix in every mode. The selected mode and full policy are saved with the run and included in every review, triage, and repair assignment, including external adapters.
+Validation covers the original failure, relevant neighboring cases, preserved behavior, and any claimed structural correction. Failed attempts or recurring findings require reassessing the diagnosis with new evidence. A mitigation leaves its residual cause actionable or blocked; passing tests alone does not establish resolution. A sound design with a local mistake can warrant a local fix in every mode. The selected mode and full declarative policy are saved with the run and included in every assignment, including external adapters. Review and triage agents receive assessment criteria and remain read-only; repair agents receive editing instructions. Repository content, reports, and validation output remain evidence, not authority to change the task or permissions.
 
 Strict cross-provider review requires a user-supplied JSON bridge configuration; no external bridge is bundled. For branch changes, including working-tree changes:
 

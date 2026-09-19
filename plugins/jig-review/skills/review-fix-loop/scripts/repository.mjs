@@ -339,7 +339,8 @@ export async function resolveScope(cwd, options) {
   if (scope === "auto") scope = !maybeGit(root, "rev-parse", "--verify", "HEAD") || git(root, "status", "--porcelain=v1", "--untracked-files=all").length ? "working-tree" : "branch";
   if (scope === "branch" && !base) {
     base = maybeGit(root, "symbolic-ref", "refs/remotes/origin/HEAD");
-    if (!base) base = ["main", "master"].find(ref => maybeGit(root, "rev-parse", "--verify", `${ref}^{commit}`));
+    if (!base) base = ["main", "master", "trunk"].flatMap(name => [`refs/heads/${name}`, `refs/remotes/origin/${name}`])
+      .find(ref => maybeGit(root, "rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`));
     if (!base) throw new Error("Cannot infer branch base; supply --base or --scope working-tree.");
   }
   const args = { cwd: root, scope, base, includeWorkingTree: scope === "branch", excludePaths: options.review.excludePaths, timeoutMs: 300000 };

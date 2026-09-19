@@ -1,6 +1,6 @@
-# Parallel Review Runtime
+# Parallel review runtime
 
-Use this runtime only for a collected, same-turn comprehensive review. The parent owns reviewer selection, scope resolution, orchestration, and merging. No child receives another child's output or the parent's review conclusions.
+The parent owns selection, scope, orchestration, and merging. Use the parsed `reviewers` array as the only spawn list; never probe or spend tokens on an unselected provider. Resolve scope with [scope.md](scope.md) before using this runtime.
 
 ## Shared task context
 
@@ -8,154 +8,14 @@ Prepare the brief described in SKILL.md before spawning. Run `node "<skill-root>
 
 The guidance requires evidence for requirement coverage, causal ownership, and counterevidence. Native and external reports should include a compact `Requirement coverage` list, with each supplied ID marked satisfied, unmet, or uncertain. No brief is required for adapters called by other workflows; those callers retain their own task-contract protocol.
 
-## Resolve Configuration and Scope
-
-Normalize reviewer controls before checking provider prerequisites:
-
-```text
-node "<skill-root>/scripts/review-options.mjs" [--reviewers <list> | --all-reviewers] [--claude-model <model>] [--claude-effort <level>] [--claude-file-access <restricted|host>] [--claude-config-dir <absolute-path|~/path>] [--codex-model <model>] [--codex-effort <level>] [--cursor-effort <level>] [--cursor-speed <standard|fast>] [--exclude-path <path>]... [--log-to-beads]
-```
-
-Use the returned `reviewers` array as the only spawn list. The parser defaults to Claude and Codex; `--all-reviewers` selects Claude, Codex, and Cursor in canonical order and is mutually exclusive with `--reviewers`. It defaults Claude file access to `restricted`, expands a Claude config directory beginning with `~/`, keeps provider settings separate, and maps Cursor effort plus speed to an exact Grok 4.6 model ID. `--claude-config-dir` requires selecting Claude and accepts only an absolute path, `~`, or `~/...`; do not resolve relative paths against the reviewed repository. Do not probe, spawn, or consume tokens for an unselected reviewer.
-
-Treat `--wait` as a compatibility flag and remove it. Normalize scope arguments before any reviewer starts:
-
-- `--base <ref>` selects branch scope; reject it with `--scope working-tree`.
-- No `--base` and no `--scope` selects working-tree scope.
-- Reject `--scope auto` combined with `--include-working-tree` before inspecting Git state. Explain that inclusion requires an explicit `--scope branch` or `--base`; do not let checkout cleanliness determine whether the same arguments are valid.
-- `--scope auto` selects working-tree scope when staged, unstaged, or untracked changes exist; otherwise it selects branch scope against the detected default branch.
-- `--scope branch` without `--base` uses the detected default branch.
-- Branch scope defaults to a completely clean checkout. With `--include-working-tree`, it includes committed branch changes and all local changes together and permits a dirty checkout. The review-fix loop always uses this flag in branch mode. Without it, retain the full clean-check so repository tools see pinned `HEAD`.
-- Resolve the selected base with `git rev-parse --verify --end-of-options <ref>^{commit}`. On failure, report the invalid ref and stop; never substitute another base.
-- Pass only concrete `--scope working-tree`, or `--scope branch --base <resolved-base-oid> [--include-working-tree]`, to each adapter, fingerprint helper, and reviewer. Reject the inclusion flag outside resolved branch scope. Keep the inclusion mode identical across all captures and providers.
-- Working-tree scope accepts an unborn `HEAD` and uses an explicit sentinel in labels and fingerprints. Branch scope requires `HEAD` to resolve to a commit.
-- Normalize each repeatable `--exclude-path` as a repository-relative literal path. It excludes that exact path and descendants. Reject blank paths, `.`/`..` segments, globs, negation, backslashes, and `.reviewignore` itself.
-
-The root `.reviewignore` provides permanent exclusions with the same literal path syntax; blank lines and lines beginning with `#` are ignored. Working-tree scope reads it from pinned `HEAD`. Branch scope reads it from the resolved base commit, not branch `HEAD`, so a change cannot hide itself by adding a policy entry. If the trusted revision has no `.reviewignore`, no permanent rules apply. The effective exclusions are the sorted union of policy and CLI paths. They filter tracked and untracked evidence but never filter the branch clean-check. A policy change takes effect after it becomes part of the trusted revision; use `--exclude-path` when an immediate explicit override is intended.
-
-Construct Git and adapter invocations as argument vectors. If the available shell tool accepts only a command string, shell-quote every resolved argument independently. Never interpolate raw refs, model names, effort values, or paths into executable shell syntax.
-
-Detect the default branch in this order: `refs/remotes/origin/HEAD`, then `main`, `master`, or `trunk`, preferring a local branch over `origin/<name>`. If detection fails, ask for `--base` or `--scope working-tree` and stop.
-
-Run `scripts/scope-fingerprint.mjs` before spawning, appending every normalized explicit `--exclude-path` argument. Each Git operation has a two-minute deadline and a 16 MiB output ceiling; complete capture defaults to a five-minute deadline, and adapters retain that five-minute cap even when they have more time remaining. File hashing streams content with bounded memory and must finish inside that overall deadline, so very large included files fail explicitly instead of running forever. The normalized effective exclusions and trusted policy revision are returned with the result, and exclusions contribute to the fingerprint so differing reviewer scopes cannot compare equal. For working-tree scope the helper records the resolved `HEAD` OID or unborn sentinel and hashes filtered Git status, index entries, staged paths, and the path/type/mode/content of included unstaged tracked paths and untracked files. From that same captured state it returns `workingTreePathsDifferingFromIndex` for tracked files and changed submodule gitlinks, `workingTreePathsAbsentFromIndex` for untracked paths, and `dirtySubmodulePaths` for initialized submodules with inner working changes. Recursive results are prefixed and propagated so every list includes nested paths. Each returned array is capped at the smaller of 256 entries or 32 KiB of serialized path data, including recursively collected paths; its exact `Count` and `Truncated` fields and the aggregate `pathInventoryComplete` flag disclose omissions. Inventory truncation limits staging guidance but does not make a fully hashed fingerprint incomplete; fingerprint capture issues make both `complete` and `pathInventoryComplete` false because they can prevent path enumeration. Actions on nested paths belong in their owning repository and proceed from innermost submodules outward. Ordinary UTF-8 paths remain literal. A non-UTF-8 path uses `raw-path:<hex>`; a valid UTF-8 path containing a segment that starts with `raw-path:` or `utf8-path:` uses `utf8-path:<hex>`, making display identifiers collision-free. Tagged values are not literal shell paths. The reporting fields add no separate recursive scan. An included untracked directory is hashed as a directory entry and reported as incomplete because Git may be hiding an embedded repository beneath it. Per-path unreadable, vanished, or changed-during-capture files contribute stable omission markers and structured issues instead of aborting the entire capture; deadlines and cancellation still fail hard. The helper recursively fingerprints included initialized tracked submodules while preserving raw path bytes on Linux and comparing each checked-out submodule `HEAD` with its index gitlink. On macOS, a non-UTF-8 submodule path is recorded as unavailable rather than relying on `/dev/fd` spawn behavior. Per-path omissions, unavailable submodules, and untracked directories are recorded in `issues`, set `complete: false`, and conservatively count as possible changes instead of aborting the capture.
-
-For branch scope the helper resolves the base and records pinned `HEAD`, base, and merge-base OIDs. Without `--include-working-tree`, it incorporates a full checkout fingerprint and requires `checkoutClean: true` before spawning. With the flag, require `includeWorkingTree: true`; the fingerprint incorporates local state under the effective exclusions and distinguishes this mode from committed-only branch scope. It omits `checkoutClean`, since this mode permits dirty checkouts. `hasChanges` covers either committed or local included changes: a local reversal of a committed change still requires review of both deltas. Both modes detect mutations with the post-review capture. If capture fails, do not spawn reviewers. If it succeeds with `complete: false`, stop before reviewer invocation with `CAPTURE_INCOMPLETE` and its issues. Do not proceed through partial review or provider fallback.
-
-## Selected Reviewer Prerequisites
-
-The selected external adapters require `node`, `git`, network access, and their authenticated CLI. A missing prerequisite marks only that reviewer `not started`; continue attempting every other selected reviewer.
-
-The external adapters support Linux, macOS, and Windows through WSL. Fail closed on native Windows because Node's native Windows process APIs cannot provide the descendant process-group termination guarantee used by the adapters.
-
-Claude command:
-
-```text
-node "<skill-root>/scripts/claude-review.mjs" --cwd <repository> --scope <working-tree|branch> [--base <resolved-base-oid>] [--include-working-tree] --expected-fingerprint <initial-fingerprint> [--model <claude.model>] [--effort <claude.effort>] --file-access <claude.fileAccess> [--config-dir <claude.configDir>] [--exclude-path <path>]...
-```
-
-Require an authenticated `claude` executable. The adapter defaults to `opus`. When `claude.configDir` is non-null, pass it as `--config-dir` to the adapter; the adapter sets `CLAUDE_CONFIG_DIR` only in the Claude provider process environment and never interpolates it into shell syntax. Otherwise the provider retains its inherited environment. It independently verifies the repository and pinned branch base, supplies bounded Git context over stdin, enables safe mode without session persistence, and exposes only `Read`, `Glob`, and `Grep`. It never exposes Bash, Edit, Write, skills, MCP servers, or subagents. In the default `restricted` mode it passes Claude's `--restricted` flag, confining file tools to the working directory and explicitly added directories. For paged evidence it adds only its private temporary directory with `--add-dir`; this does not require `host` access or changes to the fingerprinted repository. `host` mode deliberately omits the restriction flag; the tools remain read-only but may read outside these directories. Treat `host` as an explicit user-selected trust-boundary expansion and disclose it in the final review notes. Disclose custom/default Claude config selection without printing the config path.
-
-Claude's `-p` mode [skips workspace trust verification](https://code.claude.com/docs/en/security#additional-safeguards); this adapter does not use the `--worktree` exception. No separate trust setup or permission-bypass flag is needed.
-
-Cursor command:
-
-```text
-node "<skill-root>/scripts/cursor-review.mjs" --cwd <repository> --scope <working-tree|branch> [--base <resolved-base-oid>] [--include-working-tree] --expected-fingerprint <initial-fingerprint> --effort <cursor.effort> --speed <cursor.speed> [--exclude-path <path>]...
-```
-
-Require an authenticated `cursor-agent` executable. The adapter maps effort to the `cursor-grok-4.6-low|medium|high|xhigh` model ID and appends `-fast` when `cursor.speed` is `fast`. It runs non-interactively with `--mode ask --sandbox enabled --trust --workspace <repository>`. Cursor's [`--trust` flag](https://cursor.com/docs/cli/reference/parameters) accepts workspace trust without prompting, allowing a selected review to start in a repository that Cursor has not previously trusted. Use it on the initial invocation; no separate interactive trust setup or retry is needed. Workspace trust is separate from tool permissions: retain ask mode and sandboxing, and never enable `--force`, `--yolo`, or automatic MCP approval. It places the bounded assignment in a private temporary directory, adds that directory while Cursor is constrained by ask mode, and removes it after the process exits.
-
-Both adapters include staged, unstaged, untracked, branch, and initialized-submodule-aware Git context. Staged submodule moves include the underlying commit diff when available. Diff capture streams full patches into a private per-reviewer evidence directory. When a diff exceeds the 384 KiB inline limit or assembled context exceeds 768 KiB, the prompt points to a manifest and numbered evidence pages instead of substituting file statistics. Smaller reviews retain inline context. The evidence directory is bounded to 16 MiB of source text and 2,048 pages. Each page holds at most 16 KiB of source bytes encoded as short JSON string fragments, so long diff lines and large files can be read without tool-output line truncation. Concatenating fragments and consecutive section parts restores the patch, including deleted lines and distinct staged/unstaged versions. Section labels identify original repositories and submodules; findings cite original paths.
-
-With `--include-working-tree`, both adapters supply the pinned committed branch diff followed by the working-tree evidence, including initialized submodule changes. Review their cumulative effect in the final working files. A finding in a committed or staged version must still fail after the subsequent local changes to be actionable. Preserve every evidence section when local changes reverse committed ones; an empty net diff alone does not authorize dropping those sections.
-
-The reviewer must read and review pages in order and return a terminal coverage object with each reviewed page's ID and random receipt, found only inside that page. The adapter removes that object and appends an `Evidence coverage` summary. Missing, invalid, or duplicate receipts and capture omissions produce `limited` coverage; valid receipts for all captured pages produce `reviewer-attested` coverage. Receipts demonstrate page access and the reviewer's claim, not substantive review quality. Preserve that distinction and any missing-page list when merging. Fingerprint verification measures scope stability separately. Do not count merely supplying a manifest as complete review coverage.
-
-Included file patches are admitted independently, with a 2 MiB per-file limit. Git output is framed at file-diff headers with bounded buffering even for arbitrarily long source lines. A file exceeding that limit, the remaining 16 MiB total budget, or UTF-8 validation is omitted in full without spending its bytes; capture continues to later files. The manifest identifies each omitted patch by its Git header and reason. No path category is excluded automatically; only the trusted `.reviewignore` policy and explicit `--exclude-path` values filter paths. Retained patches preserve their original order, deleted content, rename headers, and staged/unstaged/submodule sections. An omission always makes coverage limited, even when every retained page has a valid receipt. Intentional exclusions are disclosed separately and do not make capture incomplete for the included scope.
-
-Oversized metadata remains truncated with an explicit marker. Untracked files retain the 64 KiB per-file and 128 KiB aggregate limits: they are opened without following symlinks and with non-blocking semantics, checked before and after their bounded read, and rejected if their identity, type, size, or modification time changes during capture. Oversized, binary, non-UTF-8, unreadable, changed-during-capture, special, or aggregate-limit-exceeding untracked files are individually marked omitted. Evidence byte/page limits and non-UTF-8 patch evidence likewise mark coverage incomplete. Other capture failures and deadlines fail the adapter rather than imply a completed review.
-
-Inline repository evidence is wrapped in a fresh per-run nonce delimiter; markup-significant characters in repository-controlled bodies and path attributes are escaped so evidence cannot forge wrapper boundaries. Page contents are JSON-encoded untrusted evidence, never instructions. External adapters require and match the parent's initial fingerprint before collecting context, then match it again after the provider exits; a mismatch discards the report. The 28-minute deadline covers fingerprinting, context collection, provider execution, final fingerprint verification, and cleanup. Provider time is limited to the remaining budget with a final-verification reserve. Provider processes run in their own process group. At their deadline, or when the adapter receives `SIGINT` or `SIGTERM`, the adapter sends `SIGTERM`, waits a bounded grace period, and sends `SIGKILL` to that process group. Command settlement also has a bounded stdio-drain period, so a descendant that deliberately escapes the group while retaining an inherited pipe cannot keep the adapter alive indefinitely. Both adapters remove their private evidence and prompt files on success, failure, timeout, and handled cancellation before re-raising the parent signal.
-
-To verify real CLI evidence access after adapter changes, run `JIG_REVIEW_LIVE=claude,cursor node --test plugins/jig-review/tests/review-evidence-live.test.mjs` from the repository root. Select only the providers to check in that variable. These opt-in checks use authenticated CLIs and consume provider usage; ordinary tests skip them. They verify retrieval of deleted content and valid receipts from an external temporary directory with production read-only flags, including Claude restricted mode.
-
-The native Codex pass requires the host's context-free subagent facility. When `codex.model` or `codex.effort` is non-null, pass it through the host's model and reasoning-effort spawn fields. If the host rejects the combination, mark Codex `not started`; do not retry with a different configuration.
-
-## Spawn Every Selected Child
+## Spawn every selected child
 
 Attempt one transient, context-free child for each selected reviewer before waiting for any result. Use the host option that disables conversation inheritance (`fork_context: false`, `fork_turns: "none"`, or its exact runtime equivalent). Continue spawn attempts after any earlier failure. Never run a selected reviewer in the parent context and never start a reviewer sequentially after showing it another report.
 
-### External CLI Forwarders
+- When Codex is selected, read [native-reviewer.md](native-reviewer.md) and construct its self-contained assignment.
+- When Claude or Cursor is selected, read [external-reviewers.md](external-reviewers.md) for the selected provider and give its forwarder the resolved command and polling recipe.
 
-The Claude and Cursor children are pure forwarders. Each prompt contains only its fully resolved adapter command and repository working directory. It must:
-
-- start exactly one non-interactive foreground command and execute its assigned adapter once;
-- request only the network access needed for that provider when the host exposes targeted escalation; omit escalation when the host is unrestricted and forbids the parameter; otherwise fail with the policy limitation;
-- not inspect the repository or perform any review itself;
-- not request a terminal proactively, detach, invoke skills, or spawn another agent;
-- run the command in one long-lived tool cell that retains any yielded process handle and polls only that process until `exit_code` is present;
-- treat `yield_time_ms` only as the interval before a running handle is returned, never as a command timeout or evidence that the adapter exited;
-- accumulate output from the initial launch and every poll, and never return `result.output` while `result.session_id` is present or `result.exit_code` is absent;
-- return final stdout exactly, without commentary or progress chatter; and
-- surface command failure without retrying through another provider invocation.
-
-Give each external forwarder the following state-machine recipe with the resolved command and working directory substituted as data. The child must use this shape rather than issuing one `exec_command` call and immediately printing its first `output` field:
-
-```javascript
-// @exec: {"yield_time_ms": 1000, "max_output_tokens": 30000}
-let result = await tools.exec_command({
-  cmd: RESOLVED_SHELL_QUOTED_COMMAND,
-  workdir: RESOLVED_REPOSITORY_DIRECTORY,
-  yield_time_ms: 1000,
-  max_output_tokens: 30000,
-});
-let output = result.output ?? "";
-
-while (result.exit_code == null) {
-  if (result.session_id == null) {
-    throw new Error("adapter yielded without a process handle or terminal exit status");
-  }
-  result = await tools.write_stdin({
-    session_id: result.session_id,
-    chars: "",
-    yield_time_ms: 60000,
-    max_output_tokens: 30000,
-  });
-  output += result.output ?? "";
-}
-
-if (result.exit_code !== 0) {
-  throw new Error(`adapter exited with status ${result.exit_code}: ${output}`);
-}
-if (output.length === 0) {
-  throw new Error("adapter exited successfully without a review report");
-}
-text(output);
-```
-
-The outer tool cell may itself yield a cell handle while this loop is waiting. In that case, wait on that same outer cell until it completes; do not start another cell or adapter. The process is complete only after the loop observes an `exit_code`. A message saying that the outer cell completed means only that its JavaScript finished; it is not sufficient if that JavaScript discarded an inner `session_id`.
-
-### Native Codex Reviewer
-
-The Codex child performs only the native review. Its self-contained prompt includes:
-
-- the repository working directory;
-- the concrete working-tree or pinned base-OID scope and inclusion mode; include initialized tracked-submodule changes for working-tree scope and branch scope with `--include-working-tree`;
-- for combined branch scope, instructions to inspect the committed diff plus staged, unstaged, untracked, and submodule changes, assessing their cumulative effect in final working files;
-- the normalized effective exclusions, their trusted `.reviewignore` source, and an instruction not to inspect or report excluded paths;
-- any initial fingerprint `issues`, with an instruction to disclose the resulting coverage limitation;
-- the initial fingerprint and exact helper command; require the child to capture it before any repository inspection and again after drafting the report, returning `CAPTURE_INCOMPLETE` with issues if either capture is incomplete, or `SCOPE_CHANGED` instead of findings if complete captures differ;
-- the exact shared task guidance and brief, including requirement sources, constraints, non-goals, and unknowns;
-- a requirement to remain read-only;
-- an explicit prohibition on invoking `$comprehensive-review`, another review skill, or an external reviewer;
-- priorities: correctness defects, behavioral regressions, security and data-loss risks, concurrency hazards, performance cliffs, and material missing tests; distinguish substantive defects, supporting obligations, and optional suggestions independently of severity. A test gap must identify the behavior not proved, a plausible surviving regression, and why equivalent coverage is absent;
-- a requirement to ground findings in file and line references where possible; and
-- structured output containing severity, location, root cause, impact, and recommendation for each actionable finding, followed by open questions and test gaps.
-
-Do not include Claude or Cursor output, suspected defects, or findings to confirm.
-
-
-## Collect and Merge
+## Collect and merge
 
 Wait only after all selected spawn attempts. Wait or poll in intervals no longer than 60 seconds so the parent can keep the user informed. Unless the user supplied a different deadline, allow each child up to 30 minutes from launch. Each external adapter enforces a 28-minute deadline so its CLI exits before the parent deadline. On timeout, stop or interrupt that child when the host supports it, record a sanitized failure, and continue with other reports. A spawn failure, timeout, empty child response, or response produced before a yielded adapter reached terminal exit is never a successful report.
 
@@ -165,6 +25,18 @@ Keep completed reports immutable. If a child returns prose around a valid report
 
 When an authorized review-fix loop owns an assignment, its [controller](../../review-fix-loop/references/controller.md) accounts for provider attempts, fallback, and terminal decisions. Return the frozen result to that assignment; do not independently launch a replacement. One-pass reviews retain their invocation limits.
 
-Before merging, stop on any child that returned `CAPTURE_INCOMPLETE` or `SCOPE_CHANGED` (incomplete evidence is not proof of drift), then rerun the fingerprint helper with the same concrete arguments and every explicit exclusion, using the first capture's `baseOid` rather than the user's original base name for branch scope. A changed fingerprint, reviewer mismatch, or failed second capture means the reviewers may have inspected different content; report that condition instead of emitting findings. Compare pinned `HEAD`, base, merge-base, effective exclusions, and policy revision; moving branch names are irrelevant because no reviewer receives them. Label the fingerprint `verified` only when all reviewer checks match and both parent captures have `complete: true`; an incomplete capture stops the workflow with its issues even if its partial hash matches; never merge or use provider fallback in that case. Always disclose the effective exclusions and `.reviewignore` source in final review notes. For combined branch scope, also report the three path inventories and their exact counts from the final matching capture. If any `Truncated` field is true, label the arrays as capped subsets. If `pathInventoryComplete` is false, label staging guidance incomplete and disclose the responsible truncation and fingerprint issues. Warn that committing can record code different from the reviewed final files; tell the user to re-stage tracked paths, add untracked paths, and commit changes inside dirty submodules before staging their parent gitlinks.
+Before merging, stop on any child that returned `CAPTURE_INCOMPLETE` or `SCOPE_CHANGED`. Rerun the fingerprint helper with the same concrete arguments and every explicit exclusion, using the first capture's `baseOid` rather than a moving base name. Require complete matching captures; report incomplete evidence or drift instead of merging. Validate the pinned brief again. Then use [the output contract](review-output.md), including conditional staging advice and evidence-coverage limits.
 
 The parent may discard a demonstrably unsupported finding, but must not turn post-hoc validation into independent discovery. Source attribution comes only from matching root causes across the completed frozen reports. Use the exact matching subset in canonical order (`Claude`, `Codex`, `Cursor`); never use `Both` or `All`.
+
+## Failure handling
+
+- Start and consume tokens only for selected reviewers. Do not require or probe an unselected external CLI.
+- If some selected reviewers fail, continue with completed reports. Call the output merged only when at least two reports completed.
+- If no selected reviewer completes, report each failure and do not claim that a review completed.
+- If a child cannot be started, mark it `not started`; if it exceeds the runtime deadline, stop it when the host supports cancellation and mark it `timed out`.
+- Treat an empty external-forwarder response as a transport failure, not a completed review. Do not retry until the original adapter invocation is known to have exited or has been cancelled and cleaned up; otherwise a retry can duplicate billable provider work.
+- When review-fix-loop owns an assignment, its executable controller accounts for attempts, fallback, and terminal decisions. Return the result to that assignment; do not independently retry a provider. One-pass reviews retain their existing invocation limits.
+- An incomplete fingerprint stops the workflow, including when discovered after a reviewer exits. Report its issues without claiming scope drift or retrying another provider. Evidence-page omissions with a complete fingerprint remain explicitly limited coverage; they are not fingerprint failures.
+- Large external reviews use paged patch evidence. Retain each adapter's `Evidence coverage` summary and missing-page/capture limitations in review notes. `reviewer-attested` means the reviewer supplied valid page receipts and claimed to review those pages; it does not prove review quality. A `limited` report remains limited even with an unchanged fingerprint. An inline preview truncated while complete evidence pages are available is not itself a capture omission.
+- If line numbers are unavailable, use the narrowest stable file or symbol reference available.

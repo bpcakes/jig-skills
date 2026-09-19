@@ -557,18 +557,18 @@ test("settlement receipts survive archived records and do not release another ac
   assert.equal(readJSON(active).directory, next.directory);
 });
 
-test("workspace repair runs pin version 9 and cannot resume version-8 records", async t => {
+test("role-specific policy runs pin version 10 and cannot resume version-9 records", async t => {
   const f = fixture(t), run = await f.start(), file = path.join(run.directory, "run.json");
-  assert.equal(run.version, 9, "The workspace contract must not be admitted by a version-8 controller");
-  assert.equal(loadRun(run.directory).version, 9);
-  const record = readJSON(file); record.version = 8;
+  assert.equal(run.version, 10, "The role-specific contract must not be admitted by a version-9 controller");
+  assert.equal(loadRun(run.directory).version, 10);
+  const record = readJSON(file); record.version = 9;
   writeFileSync(file, JSON.stringify(record));
   const before = readFileSync(file);
   await assert.rejects(advance(run.directory), /older runs require their original controller/);
   assert.deepEqual(readFileSync(file), before, "An incompatible run is not migrated or consumed");
 });
 
-for (const version of [4, 5, 6, 7, 8]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
+for (const version of [4, 5, 6, 7, 8, 9]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
   const f = fixture(t), run = await drive(await f.start()), file = path.join(run.directory, "run.json"), active = path.join(run.runsRoot, "active.json");
   const record = readJSON(file); record.version = version;
   if (version < 8) { delete record.fixPolicy; delete record.options.fixMode; }

@@ -3,9 +3,9 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// V9 permits attributed edits in repair workspaces. Older controllers treat
-// these edits as unauthorized mutations and must not resume these runs.
-export const RUN_VERSION = 9;
+// V10 pins declarative repair criteria and role-specific assignment authority.
+// Older runs retain their original frozen instructions and controller.
+export const RUN_VERSION = 10;
 
 const canonical = value => value && typeof value === "object" && !Array.isArray(value)
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]))
@@ -126,8 +126,8 @@ function loadVersionedRun(directory, versions) {
   return manifests(run, manifestFields, directory, true);
 }
 export const loadRun = directory => loadVersionedRun(directory, [RUN_VERSION]);
-// V4 through V9 share the readable journal and manifest schema. This reader is
+// V4 through V10 share the readable journal and manifest schema. This reader is
 // exclusively for releasing a settled reference, never resuming old work.
-export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, RUN_VERSION]);
+export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, RUN_VERSION]);
 export function resultFile(run, id) { return path.join(run.directory, "assignments", id, "result.json"); }
 export function hasResult(run, id) { return existsSync(resultFile(run, id)); }

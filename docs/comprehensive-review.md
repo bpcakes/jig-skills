@@ -75,7 +75,7 @@ For large external reviews, the adapters supply numbered pages of patch evidence
 
 Fingerprint verification establishes scope stability. It does not prove complete coverage or a bug-free change. If the scope changes during the review, the results cannot be presented as reviews of the same changes.
 
-The runtime switches to pages when a diff exceeds 384 KiB or combined inline context exceeds 768 KiB. Capture is bounded to 16 MiB of source text and 2,048 pages. Each included file patch is limited to 2 MiB. A patch that exceeds that limit or the remaining total budget is omitted in full, with its header and reason recorded; capture continues to later files. No path category is excluded automatically. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) for capture details, deadlines, and cleanup.
+The runtime switches to pages when a diff exceeds 384 KiB or combined inline context exceeds 768 KiB. Capture is bounded to 16 MiB of source text and 2,048 pages. Each included file patch is limited to 2 MiB. A patch that exceeds that limit or the remaining total budget is omitted in full, with its header and reason recorded; capture continues to later files. No path category is excluded automatically. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [external-reviewer reference](../plugins/jig-review/skills/comprehensive-review/references/external-reviewers.md) for capture details, deadlines, and cleanup.
 
 ## File Access and Project Hooks
 
@@ -119,7 +119,7 @@ $jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh 
 | A model, effort, or speed is rejected | Choose a supported value explicitly. The skill does not silently substitute models, effort levels, or Cursor speed. |
 | Cursor still requests interactive workspace trust | Check that the installed `jig-review` includes the `--trust` adapter change; follow the [plugin update steps](../README.md#update-marketplace-plugins). |
 
-The [skill entrypoint](../plugins/jig-review/skills/comprehensive-review/SKILL.md) defines all reviewer controls and the report contract. The [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) documents orchestration and evidence handling for maintainers.
+The [skill entrypoint](../plugins/jig-review/skills/comprehensive-review/SKILL.md) defines routing and the overall workflow. The [reviewer controls](../plugins/jig-review/skills/comprehensive-review/references/reviewer-options.md) and [report contract](../plugins/jig-review/skills/comprehensive-review/references/review-output.md) have dedicated references. The [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) documents orchestration and evidence handling for maintainers.
 
 ## Task intent and causal findings
 
