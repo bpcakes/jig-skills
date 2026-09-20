@@ -24,9 +24,13 @@ export function storedBytes(directory) {
 }
 export function assertStorage(run, additionalBytes) {
   const limits = storageLimits(run.config?.storage);
-  const external = run.workspaceRoot ? storedBytes(run.workspaceRoot) : 0;
-  const current = storedBytes(run.directory) + external;
-  const retained = storedBytes(run.runsRoot ?? path.dirname(run.directory)) + external;
+  // Retention limits cover durable controller records, not disposable build
+  // workspaces. Git-visible source has its own capture limit, and source copies
+  // are estimated before allocation. Walking workspaces here both charged
+  // ignored caches as evidence and repeatedly scanned enormous build trees.
+  // Actual disk availability on both filesystems still bounds new allocations.
+  const current = storedBytes(run.directory);
+  const retained = storedBytes(run.runsRoot ?? path.dirname(run.directory));
   if (current + additionalBytes > limits.maxRunBytes) throw storageLimit(`run needs ${current + additionalBytes} bytes; maxRunBytes=${limits.maxRunBytes}`);
   if (retained + additionalBytes > limits.maxRetainedBytes) throw storageLimit(`retained runs need ${retained + additionalBytes} bytes; maxRetainedBytes=${limits.maxRetainedBytes}`);
   const devices = new Map();

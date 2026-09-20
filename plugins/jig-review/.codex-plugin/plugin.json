@@ -1,6 +1,6 @@
 {
   "name": "jig-review",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Configurable parallel reviews and bounded review-fix loops with Claude Code, Codex, and Cursor/Grok.",
   "author": {
     "name": "Jig"

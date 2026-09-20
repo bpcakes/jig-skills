@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, closeSync, constants, copyFileSync, existsSync, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readlinkSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { contentHash, hash, json, readBlob, readJSON, storeBlob } from "./run-store.mjs";
+import { contentHash, copyBlob, hash, json, readBlob, readJSON, storeBlob, storeFile } from "./run-store.mjs";
+import { sameFile, streamFile, withRegularFile } from "./file-content.mjs";
 import { captureFingerprint } from "../../comprehensive-review/scripts/scope-fingerprint.mjs";
 import { isExcludedPath } from "../../comprehensive-review/scripts/review-exclusions.mjs";
 import { gitEnvironment } from "../../comprehensive-review/scripts/git-environment.mjs";
@@ -75,18 +76,19 @@ export function readRegularFile(root, name, maximum = 32 * 1024 * 1024) {
     return { bytes: Buffer.concat(chunks, length), mode: before.mode & 0o777 };
   } finally { closeSync(fd); }
 }
-export function entry(root, name, store) {
+export function entry(root, name, store, { expectedStat, maxBytes } = {}) {
   safePath(name); noSymlinkParents(root, name);
   const file = path.join(root, name);
   let stat;
-  try { stat = lstatSync(file); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  try { stat = lstatSync(file); } catch (error) { if (error.code === "ENOENT" && !expectedStat) return null; throw error; }
+  if (expectedStat === null || (expectedStat && !sameFile(expectedStat, stat))) throw new Error(`File changed before capture: ${name}`);
   if (stat.isSymbolicLink()) {
     const bytes = readlinkSync(file, { encoding: "buffer" });
     return { type: "symlink", blob: store ? storeBlob(store, bytes) : hash(bytes), mode: 0o777 };
   }
-  if (!stat.isFile() || stat.size > 32 * 1024 * 1024) throw unsupported(`Unsupported or oversized file: ${name} (only regular files up to 32 MiB are supported).`);
-  const { bytes, mode } = readRegularFile(root, name);
-  return { type: "file", blob: store ? storeBlob(store, bytes) : hash(bytes), mode };
+  if (!stat.isFile()) throw unsupported(`Unsupported non-regular file: ${name}.`);
+  const options = { expectedStat: stat, maxBytes };
+  return { type: "file", ...(store ? storeFile(store, file, options) : streamFile(file, options)) };
 }
 export function put(root, name, value, store) {
   safePath(name); noSymlinkParents(root, name);
@@ -97,7 +99,8 @@ export function put(root, name, value, store) {
     if (entry(root, name) !== null) rmSync(file);
     if (value.type === "symlink") { symlinkSync(readBlob(store, value.blob), file); return; }
   }
-  writeFileSync(file, readBlob(store, value.blob), { mode: value.mode });
+  const fd = openSync(file, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, value.mode);
+  try { copyBlob(store, value.blob, fd); } finally { closeSync(fd); }
   chmodSync(file, value.mode);
 }
 function syncDirectory(directory) {
@@ -168,7 +171,7 @@ export function applyFile(root, edit, store) {
   mkdirSync(path.dirname(destination), { recursive: true });
   if (edit.after && !candidate) {
     const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, edit.after.mode);
-    try { writeFileSync(fd, readBlob(store, edit.after.blob)); fchmodSync(fd, edit.after.mode); fsyncSync(fd); } finally { closeSync(fd); }
+    try { copyBlob(store, edit.after.blob, fd); fchmodSync(fd, edit.after.mode); fsyncSync(fd); } finally { closeSync(fd); }
   }
   // Move the displaced inode into the durable journal, then publish with
   // exclusive creation. Never rename a candidate over a live destination.
@@ -213,10 +216,9 @@ export function pathsDifferFromIndex(root, paths, repositories) {
     // and skip-worktree flags. Honor Git's text conversion without writing or
     // refreshing the index, and keep executable filters unsupported.
     assertSupportedAttributes(directory, [relative], {});
-    const actual = execFileSync("git", ["hash-object", `--path=${relative}`, "--stdin"], {
-      cwd: directory, env: gitEnvironment(), input: readRegularFile(directory, relative).bytes,
-      timeout: 30000, stdio: ["pipe", "pipe", "pipe"],
-    }).toString("utf8").trim();
+    const actual = withRegularFile(path.join(directory, relative), fd => execFileSync("git", ["hash-object", `--path=${relative}`, "--stdin"], {
+      cwd: directory, env: gitEnvironment(), timeout: 30000, stdio: [fd, "pipe", "pipe"],
+    }).toString("utf8").trim());
     return actual !== oid;
   });
 }
@@ -326,7 +328,7 @@ export function snapshot(root, store, { maxBytes = DEFAULT_STORAGE.maxSourceByte
       if (tracked.has(name) && stat?.isDirectory()) { checkDirectory(name); files[`${prefix}${name}`] = null; continue; }
       sourceBytes += stat?.size ?? 0;
       if (sourceBytes > maxBytes) throw storageLimit(`included source exceeds maxSourceBytes=${maxBytes} at ${prefix}${name}`);
-      files[`${prefix}${name}`] = entry(directory, name, store);
+      files[`${prefix}${name}`] = entry(directory, name, store, { expectedStat: stat ?? null });
     }
     diffs[prefix] = diffIdentity(directory);
   }

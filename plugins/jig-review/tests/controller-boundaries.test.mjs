@@ -11,7 +11,7 @@ import { discoverValidation } from "../skills/review-fix-loop/scripts/task-contr
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { loadRun, locked, readJSON } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { reservedOverlays } from "../skills/review-fix-loop/scripts/repository.mjs";
-import { storageLimits } from "../skills/review-fix-loop/scripts/storage-budget.mjs";
+import { assertStorage, storageLimits } from "../skills/review-fix-loop/scripts/storage-budget.mjs";
 import { defaultValidationSandbox, validationSandboxCommand } from "../skills/review-fix-loop/scripts/validation-sandbox.mjs";
 
 const cli = fileURLToPath(new URL("../skills/review-fix-loop/scripts/review-fix-loop.mjs", import.meta.url));
@@ -282,6 +282,50 @@ test("source and retained storage limits stop before allocation without pruning 
   await assert.rejects(f.start({ config: { storage: { maxSourceBytes: 1024 * 1024, maxRunBytes: 64 * 1024 * 1024, maxRetainedBytes: 64 * 1024 * 1024 } } }), e => e.code === "STORAGE_LIMIT");
   assert.equal(existsSync(saved), true); assert.equal(existsSync(path.join(f.root, ".git/jig/review-fix/active.json")), false);
   assert.throws(() => storageLimits({ maxSourceBytes: -1 }), /Invalid storage/);
+});
+
+test("ignored Rust-sized build artifacts do not consume retention limits during repair or validation", async t => {
+  if (!sandboxAvailable(t)) return;
+  const f = fixture(t), artifactBytes = 12 * 1024 ** 3;
+  put(f.root, ".gitignore", "target/\n");
+  put(f.root, "target/user-cache", "user build");
+  truncateSync(path.join(f.root, "target/user-cache"), artifactBytes);
+  put(f.root, "value.cjs", "module.exports = 1;\n");
+  f.contract.requiredValidation.unshift({ id: "build", argv: [process.execPath, "-e",
+    `const fs=require('node:fs');fs.mkdirSync('target',{recursive:true});fs.writeFileSync('target/generated','');fs.truncateSync('target/generated',${artifactBytes})`] });
+  let repairs = 0;
+  const run = await drive(await f.start({ config: { validationMode: "isolated" } }), (a, current) => {
+    if (a.role !== "repair") return repairResponse(a, current);
+    repairs++;
+    put(a.repository, "target/diagnostic", "diagnostic build");
+    truncateSync(path.join(a.repository, "target/diagnostic"), artifactBytes);
+    put(a.repository, "value.cjs", "module.exports = 2;\n");
+    return { workspaceEdits: [{ path: "value.cjs", reason: "Correct export", findingIds: a.findings.map(f => f.id) }] };
+  });
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(repairs, 1); assert.equal(run.round, 1);
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
+  assert.equal(statSync(path.join(f.root, "target/user-cache")).size, artifactBytes);
+  assert.equal(existsSync(path.join(f.root, "target/generated")), false);
+  assert.equal(existsSync(path.join(f.root, "target/diagnostic")), false);
+  assert.ok(run.validation.some(v => v.checkId === "build" && v.outcome === "succeeded"));
+  assert.ok(run.validation.some(v => v.checkId === "unit" && v.outcome === "succeeded"));
+  assert.deepEqual(reservedOverlays(run), []);
+});
+
+test("temporary build storage still enforces available disk space on its filesystem", async t => {
+  const f = fixture(t), run = await f.start();
+  mkdirSync(run.workspaceRoot, { recursive: true });
+  const original = fs.statfsSync, inspected = [];
+  fs.statfsSync = location => {
+    inspected.push(location);
+    return { bsize: 4096, bavail: location === run.workspaceRoot ? 0 : 1024 ** 3 };
+  };
+  syncBuiltinESMExports();
+  try {
+    assert.throws(() => assertStorage(run, 1024), e => e.code === "STORAGE_LIMIT" && /free reserve/.test(e.message));
+    assert.ok(inspected.includes(run.directory)); assert.ok(inspected.includes(run.workspaceRoot));
+  } finally { fs.statfsSync = original; syncBuiltinESMExports(); }
 });
 
 test("explicit pruning refuses active runs and removes only the named settled run", async t => {
@@ -557,18 +601,18 @@ test("settlement receipts survive archived records and do not release another ac
   assert.equal(readJSON(active).directory, next.directory);
 });
 
-test("handoff-capable runs pin version 11 and cannot resume version-10 records", async t => {
+test("reconciling runs pin version 12 and cannot resume version-11 records", async t => {
   const f = fixture(t), run = await f.start(), file = path.join(run.directory, "run.json");
-  assert.equal(run.version, 11, "A handoff run must not be admitted by a version-10 controller");
-  assert.equal(loadRun(run.directory).version, 11);
-  const record = readJSON(file); record.version = 10;
+  assert.equal(run.version, 12, "A reconciling run must not be admitted by a version-11 controller");
+  assert.equal(loadRun(run.directory).version, 12);
+  const record = readJSON(file); record.version = 11;
   writeFileSync(file, JSON.stringify(record));
   const before = readFileSync(file);
   await assert.rejects(advance(run.directory), /older runs require their original controller/);
   assert.deepEqual(readFileSync(file), before, "An incompatible run is not migrated or consumed");
 });
 
-for (const version of [4, 5, 6, 7, 8, 9, 10]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
+for (const version of [4, 5, 6, 7, 8, 9, 10, 11]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
   const f = fixture(t), run = await drive(await f.start()), file = path.join(run.directory, "run.json"), active = path.join(run.runsRoot, "active.json");
   const record = readJSON(file); record.version = version;
   if (version < 8) { delete record.fixPolicy; delete record.options.fixMode; }

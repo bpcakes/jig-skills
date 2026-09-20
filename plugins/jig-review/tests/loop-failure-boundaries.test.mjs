@@ -185,9 +185,8 @@ test("resuming an unclaimed launch cannot extend its recorded deadline", t => {
   assert.equal(existsSync(path.join(job, "child.json")), false);
 });
 
-for (const kind of ["oversized", "filter", "nested", "replacement", "grafts"]) test(`unsupported ${kind} repository stops initialization without a fallback or active run`, async t => {
+for (const kind of ["filter", "nested", "replacement", "grafts"]) test(`unsupported ${kind} repository stops initialization without a fallback or active run`, async t => {
   const f = fixture(t), index = readFileSync(path.join(f.root, ".git/index"));
-  if (kind === "oversized") { writeFileSync(path.join(f.root, "large"), ""); truncateSync(path.join(f.root, "large"), 32 * 1024 * 1024 + 1); }
   if (kind === "filter") writeFileSync(path.join(f.root, ".gitattributes"), "value.cjs filter=custom\n");
   if (kind === "nested") { const nested = path.join(f.root, "nested"); mkdirSync(nested); git(nested, "init", "-q"); writeFileSync(path.join(nested, "kept"), "user work"); }
   if (kind === "replacement") git(f.root, "replace", "HEAD", git(f.root, "commit-tree", "HEAD^{tree}", "-m", "replacement"));
@@ -370,7 +369,9 @@ test("interruption during allocation resumes the same prepared assignment and cl
   run = await advance(run.directory); assert.equal(run.pending.id, id); assert.equal(run.attempts.length, 1);
   // A copy reserved outside an assignment must also be reconciled after loss.
   const orphan = makeOverlay(run, run.expected, "abandoned-inspection");
-  writeFileSync(path.join(f.root, "user-change"), "preserve\n"); run = await drive(run);
+  writeFileSync(path.join(f.root, "user-change"), "preserve\n");
+  git(f.root, "add", "user-change"); // Index drift cancels the outstanding native assignment.
+  run = await drive(run);
   assert.equal(run.phase, "SCOPE_CHANGED"); assert.equal(existsSync(orphan), false);
   assert.deepEqual(reservedOverlays(run), []); assert.deepEqual(readdirSync(run.workspaceRoot), []);
   assert.equal(readFileSync(path.join(f.root, "user-change"), "utf8"), "preserve\n");
@@ -647,7 +648,7 @@ test("lost group anchor cannot release a run while a verified test child remains
   assert.equal((await f.start()).phase, "INIT");
 });
 
-test("fresh-process polling reads neither source files nor immutable inventories; result consumption still guards drift", async t => {
+test("fresh-process polling reads neither source files nor immutable inventories; result consumption reconciles drift", async t => {
   const f = fixture(t), releaseFile = path.join(f.directory, "release"), marker = path.join(f.directory, "started");
   for (let i = 0; i < 400; i++) writeFileSync(path.join(f.root, `kept-${i}`), `kept ${i}\n`);
   const code = `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(marker)},'started');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(releaseFile)})){clearInterval(timer);process.stdout.write(JSON.stringify({error:'Finished test invocation'}))}},20);setTimeout(()=>process.exit(),20000).unref()`;
@@ -669,8 +670,11 @@ test("fresh-process polling reads neither source files nor immutable inventories
     assert.equal(readFileSync(path.join(f.directory, "started"), "utf8"), "started");
     writeFileSync(path.join(f.root, "kept-0"), "concurrent edit\n");
   } finally { writeFileSync(releaseFile, "finish"); }
-  run = await drive(run);
-  assert.equal(run.phase, "SCOPE_CHANGED"); assert.equal(run.attempts.length, 1); assert.equal(run.reports.length, 0);
+  run = await drive(run, r => r.sourceReconciliations?.length === 1);
+  assert.equal(run.phase, "VALIDATE"); assert.equal(run.pending, null);
+  assert.equal(run.attempts.length, 1); assert.equal(run.reports.length, 0);
+  assert.deepEqual(run.sourceReconciliations[0].paths, ["kept-0"]);
+  assert.equal(run.attempts[0].error, "Finished test invocation");
   assert.equal(readFileSync(path.join(f.root, "kept-0"), "utf8"), "concurrent edit\n");
 });
 

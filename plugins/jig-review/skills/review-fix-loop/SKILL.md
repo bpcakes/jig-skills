@@ -15,6 +15,8 @@ Use the executable [controller](scripts/review-fix-loop.mjs), which owns state, 
 
 When the user says “ok address”, “fix those”, or equivalent after a completed review, continue from that review's [saved handoff](../comprehensive-review/references/review-handoff.md). Resume an existing loop when applicable; otherwise use `init --from-review <handoff.json>`. This enters local triage of the supplied findings, then repair and validation, without launching discovery reviewers again. Fresh review follows the repair. Missing or stale handoff evidence requires an explicit explanation and reconciliation, never a silent restart of discovery.
 
+Source changes do not automatically end the turn. The controller preserves results from pinned assignment copies, records checkout changes, and sends affected findings back to local triage against the latest source without restarting discovery. When `sourceChanges` is supplied, use `needs-validation` for findings that newer edits appear to fix but which lack matching required checks. Those findings remain provisional until validation passes. Respect unresolved application/validation mutations and the controller's reconciliation limit; inspect the retained evidence and explain the specific remaining conflict rather than blindly restarting a run. See [source reconciliation](references/recovery.md#source-reconciliation).
+
 ## Normal invocation
 
 ```text

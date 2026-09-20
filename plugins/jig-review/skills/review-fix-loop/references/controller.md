@@ -69,6 +69,8 @@ When `waiting` is true, poll the same run. Do not launch replacement work. Stop 
 
 ## Artifacts and handoff
 
-Version-11 `run.json` is authoritative; it references immutable manifests, source blobs, assignments, reports, patches, logs, and backups. `events.jsonl` and `validation.json` are projections. Keep the run for resume and diagnosis. Read [storage.md](storage.md) only for capacity, archival, or explicitly requested pruning; cleanup of settled workspaces does not authorize deleting the retained run.
+When checkout source changes, continue the same run: at safe checkpoints it retains findings from completed assignments, reconciles file changes, and returns affected findings to local triage on current source. A triage assignment with `sourceChanges` accepts `needs-validation` for apparent fixes awaiting required checks. Historical reports never count as fresh acceptance. Read [source reconciliation](recovery.md#source-reconciliation) for overlapping repairs, limits, and cases that still stop publication.
+
+Version-12 `run.json` is authoritative; it references immutable manifests, source blobs, assignments, reports, patches, logs, and backups. `events.jsonl` and `validation.json` are projections. Keep the run for resume and diagnosis. Read [storage.md](storage.md) only for capacity, archival, or explicitly requested pruning; cleanup of settled workspaces does not authorize deleting the retained run.
 
 Report the outcome succinctly and link the run directory. Re-staging guidance describes final working files; it does not authorize staging. For dirty submodules, perform any separately authorized staging in the owning repository, from the innermost submodule outward. A skipped optional check remains visible. A failed or skipped required check, a missing acceptance criterion, an incomplete reviewer quorum, or an unmatched fingerprint prevents `CONVERGED`.

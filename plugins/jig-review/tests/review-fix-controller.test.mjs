@@ -346,14 +346,16 @@ test("checkout validation consumes a recovery round and retains the actual faile
   assert.ok(repairs[1].validation.some(v => v.exitCode !== 0));
 });
 
-test("concurrent unrelated repository mutation ends the run before patch application", async t => {
+test("concurrent unrelated repository mutation is reconciled before patch application", async t => {
   const f = fixture(t);
   let run = await drive(await f.start(), r => r.phase === "REPAIR");
   writeFileSync(path.join(f.root, "user-note"), "keep this\n");
   run = await advance(run.directory);
-  assert.equal(run.phase, "SCOPE_CHANGED");
+  assert.equal(run.phase, "REPAIR"); assert.equal(run.sourceReconciliations.length, 1);
   assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n");
   assert.equal(readFileSync(path.join(f.root, "user-note"), "utf8"), "keep this\n");
+  run = await drive(run);
+  assert.equal(run.phase, "CONVERGED"); assert.equal(readFileSync(path.join(f.root, "user-note"), "utf8"), "keep this\n");
 });
 
 test("staged, unstaged, untracked, and dirty submodule contents and indices survive", async t => {
@@ -615,14 +617,16 @@ test("loss of a claimed worker is an honest incomplete outcome, never a duplicat
   assert.equal(ownedAlive(childOwner), false);
 });
 
-test("source drift rejects the completed provider result and accounts for its processes", async t => {
+test("source drift retains completed provider findings and accounts for its processes", async t => {
   const f = fixture(t); let run = await drive(await f.start("slow"), r => Boolean(r.pending?.command));
   const jobDir = path.join(run.directory, "assignments", run.pending.id);
   for (let i = 0; i < 100 && !existsSync(path.join(jobDir, "child.json")); i++) await sleep(20);
   const childOwner = readJSON(path.join(jobDir, "child.json"));
   writeFileSync(path.join(f.root, "new-user-work"), "preserve");
   run = await drive(run);
-  assert.equal(run.phase, "SCOPE_CHANGED"); assert.deepEqual(run.cleanup, []);
+  assert.equal(run.phase, "CONVERGED"); assert.deepEqual(run.cleanup, []);
+  assert.equal(run.sourceReconciliations.length, 1);
+  assert.equal(readFileSync(path.join(f.root, "new-user-work"), "utf8"), "preserve");
   assert.equal(ownedAlive(childOwner), false);
 });
 
@@ -738,6 +742,7 @@ test("interruption before worker claim can be cancelled and a late worker does n
   assert.equal(existsSync(path.join(job, "claimed")), false);
   await released(run);
   writeFileSync(path.join(f.root, "new-user-work"), "preserve");
+  git(f.root, "add", "new-user-work");
   run = await drive(run); assert.equal(run.phase, "SCOPE_CHANGED"); assert.deepEqual(run.cleanup, []);
   const worker = fileURLToPath(new URL("../skills/review-fix-loop/scripts/assignment-worker.mjs", import.meta.url));
   const late = spawnSync(process.execPath, [worker, job], { encoding: "utf8", timeout: 10000 });
