@@ -48,6 +48,42 @@ async function drive(run, stop = () => false) {
 }
 
 const observationFault = fileURLToPath(new URL("./fixtures/controller-observation-fault.mjs", import.meta.url));
+for (const role of ["review", "triage", "repair", "validate"]) for (const drift of ["none", "source", "index"]) {
+  test(`resumed unstarted ${role} checks ${drift} drift before dispatch`, async t => {
+    const f = fixture(t), marker = path.join(f.directory, "validation-ran");
+    f.contract.requiredValidation[0].argv[2] += `;require('node:fs').appendFileSync(${JSON.stringify(marker)},'executed\\n')`;
+    let run = await drive(await f.start("workspace"), r => r.phase === role.toUpperCase() && !r.pending);
+    t.after(() => rmSync(path.dirname(run.workspaceRoot), { recursive: true, force: true }));
+    const interrupt = fileURLToPath(new URL("./fixtures/interrupt-settlement.mjs", import.meta.url));
+    const stopped = spawnSync(process.execPath, ["--import", interrupt, cli, "advance", "--run", run.directory], {
+      env: { ...process.env, JIG_TEST_SETTLEMENT_POINT: role === "validate" ? "validation-command" : "assignment" }, encoding: "utf8", timeout: 15000,
+    });
+    assert.equal(stopped.signal, "SIGKILL", stopped.stderr);
+    run = loadRun(run.directory);
+    const id = run.pending?.id ?? run.validationCycle.job, job = path.join(run.directory, "assignments", id);
+    assert.equal(existsSync(path.join(job, "launch.json")), false);
+    assert.equal(existsSync(path.join(job, "claimed")), false);
+    const calls = existsSync(f.log) ? readFileSync(f.log, "utf8") : "";
+    if (drift !== "none") writeFileSync(path.join(f.root, "new-note"), "concurrent work\n");
+    if (drift === "index") git(f.root, "add", "new-note");
+    const index = readFileSync(path.join(f.root, ".git/index"));
+    run = await drive(run);
+    if (drift === "none") {
+      assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+      const executions = role === "validate" ? readFileSync(marker, "utf8").trim().split("\n")
+        : readFileSync(f.log, "utf8").trim().split("\n").filter(call => call === id);
+      assert.equal(executions.length, 1, "unchanged input resumes the original command exactly once");
+    } else {
+      assert.equal(run.phase, "SCOPE_CHANGED", JSON.stringify(status(run)));
+      assert.equal(existsSync(path.join(job, "launch.json")), false, "changed inputs never reach dispatch");
+      assert.equal(readJSON(path.join(job, "result.json")).execution, "not_started");
+      assert.equal(existsSync(marker), false);
+      assert.equal(existsSync(f.log) ? readFileSync(f.log, "utf8") : "", calls);
+      assert.equal(readFileSync(path.join(f.root, "new-note"), "utf8"), "concurrent work\n");
+    }
+    assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+  });
+}
 const faultyAdvance = (run, fault, action = "advance") => spawnSync(process.execPath, ["--import", observationFault, cli, action, "--run", run.directory], {
   env: { ...process.env, JIG_TEST_OBSERVATION_FAULT: fault }, encoding: "utf8", timeout: 15000,
 });
@@ -58,7 +94,7 @@ async function liveObservationFixture(t, role) {
   const command = [process.execPath, "-e", `require('node:fs').appendFileSync(${JSON.stringify(started)},'started\\n');setInterval(()=>{},1000);setTimeout(()=>process.exit(),30000)`];
   writeFileSync(path.join(f.root, "value.cjs"), "module.exports = 2;\n");
   if (role === "validate") f.contract.requiredValidation[0].argv = command;
-  let run = await f.start("success", role === "review" ? { config: { reviewers: [{ id: "codex", command }] } } : {});
+  let run = await f.start("success", role === "review" ? { config: { validationMode: "isolated", reviewers: [{ id: "codex", command }] } } : {});
   t.after(() => rmSync(path.dirname(run.workspaceRoot), { recursive: true, force: true }));
   run = await drive(run, () => existsSync(started));
   const id = role === "review" ? run.pending.id : run.validationCycle.job;
@@ -113,7 +149,7 @@ test("controller observation failure survives interruption before cancellation",
 });
 
 test("controller observation failure before dispatch retains resources until inspection recovers", async t => {
-  const f = fixture(t); let run = await f.start("success", { config: {} });
+  const f = fixture(t); let run = await f.start("success", { config: { validationMode: "isolated" } });
   for (let i = 0; i < 3; i++) run = await advance(run.directory);
   const overlay = run.pending.overlay, attempts = run.attempts.length;
   const failed = faultyAdvance(run, "resources"); assert.equal(failed.status, 0, failed.stderr);
@@ -360,7 +396,7 @@ test("relative commands use the assignment cwd and require executable files", as
 });
 
 test("interruption during allocation resumes the same prepared assignment and cleans every owned copy", async t => {
-  const f = fixture(t); let run = await f.start("success", { config: {} });
+  const f = fixture(t); let run = await f.start("success", { config: { validationMode: "isolated" } });
   run = await advance(run.directory); run = await advance(run.directory);
   const killed = spawnSync(process.execPath, ["--import", inject, cli, "advance", "--run", run.directory], { env: { ...process.env, JIG_TEST_COPY_FAULT: "kill" }, encoding: "utf8", timeout: 15000 });
   assert.equal(killed.signal, "SIGKILL", killed.stderr); await release(run);
@@ -378,7 +414,7 @@ test("interruption during allocation resumes the same prepared assignment and cl
 });
 
 test("preparation errors settle durably and do not strand the active run", async t => {
-  const f = fixture(t); let run = await f.start();
+  const f = fixture(t); let run = await f.start("success", { config: { validationMode: "isolated" } });
   run = await advance(run.directory); run = await advance(run.directory);
   const failed = spawnSync(process.execPath, ["--import", inject, cli, "advance", "--run", run.directory], { env: { ...process.env, JIG_TEST_COPY_FAULT: "throw" }, encoding: "utf8", timeout: 15000 });
   assert.equal(failed.status, 0, failed.stderr);

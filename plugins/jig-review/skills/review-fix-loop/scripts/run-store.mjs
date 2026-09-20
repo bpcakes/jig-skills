@@ -4,9 +4,9 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { streamFile } from "./file-content.mjs";
-// V12 reconciles source changes and validates provisional finding resolutions.
+// V13 records direct checkout repairs without candidate publication by default.
 // Older runs retain their original frozen instructions and controller.
-export const RUN_VERSION = 12;
+export const RUN_VERSION = 13;
 
 const canonical = value => value && typeof value === "object" && !Array.isArray(value)
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]))
@@ -60,7 +60,8 @@ export function atomic(file, value) {
 export const json = (file, value) => atomic(file, `${JSON.stringify(value, null, 2)}\n`);
 // Large immutable snapshots stay outside hot workflow state. On resume they
 // are lazy: polling a pending job need not read or parse any file inventory.
-const manifestFields = { original: true, expected: true, preservationBaseline: true, sourceChanges: true, importedReview: true, pending: { before: true, metadata: true },
+const manifestFields = { original: true, expected: true, preservationBaseline: true, sourceChanges: true, reconciledPaths: true, importedReview: true, pending: { before: true, metadata: true },
+  retainedCheckout: { before: true, metadata: true },
   candidate: { files: true }, failedCandidate: { files: true }, appliedCandidate: { files: true },
   validationCycle: { files: true, metadata: true }, apply: { source: true } };
 const references = new WeakMap(), values = new WeakMap();
@@ -149,8 +150,8 @@ function loadVersionedRun(directory, versions) {
   return manifests(run, manifestFields, directory, true);
 }
 export const loadRun = directory => loadVersionedRun(directory, [RUN_VERSION]);
-// V4 through V11 share the readable journal and manifest schema. This reader is
+// V4 through V12 share the readable journal and manifest schema. This reader is
 // exclusively for releasing a settled reference, never resuming old work.
-export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, 10, 11, RUN_VERSION]);
+export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, 10, 11, 12, RUN_VERSION]);
 export function resultFile(run, id) { return path.join(run.directory, "assignments", id, "result.json"); }
 export function hasResult(run, id) { return existsSync(resultFile(run, id)); }

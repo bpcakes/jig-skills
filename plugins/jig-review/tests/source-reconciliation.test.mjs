@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { advance, createRun, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
 import { git } from "../skills/review-fix-loop/scripts/repository.mjs";
-import { loadRun, readJSON } from "../skills/review-fix-loop/scripts/run-store.mjs";
+import { loadRun, readJSON, save } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 
 function fixture(t) {
@@ -34,8 +34,10 @@ function result(a, run) {
     acceptance: [{ criterionId: "value", status: correct ? "satisfied" : "unsatisfied", evidence: "Read export", validationIds: ["unit"] }] };
   if (a.role === "triage") return { decisions: a.findings.map(f => ({ id: f.id, status: correct && run.validation.some(v => v.outcome === "succeeded" && v.fingerprint === run.fingerprint.fingerprint) ? "fixed" : correct && a.sourceChanges ? "needs-validation" : "actionable", evidence: "Checked source and matching validation" })) };
   const file = path.join(a.repository, "value.cjs");
-  writeFileSync(file, readFileSync(file, "utf8").replace(/= \d+;/, "= 2;"));
-  return { workspaceEdits: [{ path: "value.cjs", findingIds: a.findings.map(f => f.id), reason: "Correct export" }] };
+  // These cases exercise reconciliation of unapplied proposals. Direct edits
+  // are already published and have their own tests in direct-checkout.test.mjs.
+  return { edits: [{ path: "value.cjs", content: readFileSync(file, "utf8").replace(/= \d+;/, "= 2;"),
+    findingIds: a.findings.map(f => f.id), reason: "Correct export" }] };
 }
 async function drive(run, observe = () => false, respond = result) {
   for (let n = 0; n < 700; n++) {
@@ -79,6 +81,67 @@ for (const change of ["add", "edit", "delete", "rename"]) test(`unrelated ${chan
   if (change === "delete" || change === "rename") assert.equal(existsSync(note), false);
   if (change === "rename") assert.equal(readFileSync(path.join(f.root, "renamed-note"), "utf8"), "original note\n");
   assert.ok(readJSON(run.sourceReconciliations[0].evidence).reports.length > 0);
+});
+
+for (const role of ["review", "triage", "repair"]) test(`late source edits during ${role} result consumption reconcile without rejecting completed work`, async t => {
+  const f = fixture(t);
+  let run = await drive(await f.start({ options: parseArgs(["--max-provider-attempts", "1"]) }), r => r.pending?.role === role);
+  const a = run.pending.assignment;
+  await submit(run.directory, a.id, { assignmentId: a.id, fingerprint: a.fingerprint, ...result(a, run) });
+  const file = path.join(run.directory, "assignments", a.id, "result.json"), read = fs.readFileSync;
+  let changed = false;
+  fs.readFileSync = function(name, ...args) {
+    const bytes = read.call(this, name, ...args);
+    // The first read for inline repair occurs in guard(); consume's read is
+    // the boundary after the guard accepted the old checkout snapshot.
+    if (!changed && name === file && new Error().stack.includes("at consume")) {
+      changed = true;
+      writeFileSync(path.join(f.root, "notes.txt"), "late concurrent note\n");
+    }
+    return bytes;
+  };
+  syncBuiltinESMExports();
+  try { run = await advance(run.directory); }
+  finally { fs.readFileSync = read; syncBuiltinESMExports(); }
+  assert.ok(changed, "edit lands after guard and before assignment snapshot");
+  assert.equal(run.sourceReconciliations?.length, 1, JSON.stringify(status(run)));
+  assert.equal(run.pending, null);
+  assert.ok([...run.attempts, ...(run.assignmentAttempts ?? [])].every(attempt => !attempt.error));
+  if (role === "review") {
+    assert.equal(run.reports.length, 0, "old acceptance does not count for changed source");
+    assert.equal(readJSON(run.sourceReconciliations[0].evidence).reports[0].assignmentId, a.id);
+  }
+  run = await drive(run);
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(run.round, 1);
+  assert.equal(run.assignmentAttempts.filter(attempt => attempt.role === "repair").length, 1);
+  assert.equal(readFileSync(path.join(f.root, "notes.txt"), "utf8"), "late concurrent note\n");
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), f.index);
+});
+
+test("late staged changes still stop result consumption and preserve the index", async t => {
+  const f = fixture(t);
+  let run = await drive(await f.start(), r => r.pending?.role === "triage");
+  const a = run.pending.assignment;
+  await submit(run.directory, a.id, { assignmentId: a.id, fingerprint: a.fingerprint, ...result(a, run) });
+  const file = path.join(run.directory, "assignments", a.id, "result.json"), read = fs.readFileSync;
+  let staged;
+  fs.readFileSync = function(name, ...args) {
+    const bytes = read.call(this, name, ...args);
+    if (!staged && name === file && new Error().stack.includes("at consume")) {
+      git(f.root, "add", "value.cjs");
+      staged = read(path.join(f.root, ".git/index"));
+    }
+    return bytes;
+  };
+  syncBuiltinESMExports();
+  try { run = await advance(run.directory); }
+  finally { fs.readFileSync = read; syncBuiltinESMExports(); }
+  assert.ok(staged);
+  assert.equal(run.phase, "SCOPE_CHANGED");
+  assert.match(run.outcome.reason, /Git index/);
+  assert.equal(run.sourceReconciliations?.length ?? 0, 0);
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), staged);
 });
 
 test("a review of the old snapshot contributes findings but never fresh acceptance", async t => {
@@ -208,8 +271,9 @@ for (const prematureFixed of [false, true]) test(`retained candidate needs its o
 });
 
 for (const triageFailures of [1, 3]) test(`reassessment has its own retry budget after two repair failures: ${triageFailures} triage failures`, async t => {
+  if (triageFailures === 1 && process.platform === "linux" && spawnSync("bwrap", ["--unshare-net", "--ro-bind", "/", "/", "--", "true"]).status !== 0) { t.skip("Bubblewrap/user namespaces unavailable"); return; }
   const f = fixture(t);
-  let run = await drive(await f.start(), r => r.pending?.role === "repair");
+  let run = await drive(await f.start({ config: { validationMode: "isolated" } }), r => r.pending?.role === "repair");
   for (let n = 1; n <= 2; n++) {
     const a = run.pending.assignment;
     if (n === 2) writeFileSync(path.join(f.root, "value.cjs"), "module.exports = 1;\n// external edit\n");
@@ -363,8 +427,7 @@ for (const disposition of ["all-rejected", "mixed-edits", "shared-attribution"])
     }
     repairs++;
     const paths = [...new Set(a.findings.map(f => f.path))];
-    for (const name of paths) writeFileSync(path.join(a.repository, name), "module.exports = 2;\n");
-    return { workspaceEdits: paths.map(name => ({ path: name, reason: "Proposed correction", findingIds: a.findings.filter(f => f.path === name).map(f => f.id) })) };
+    return { edits: paths.map(name => ({ path: name, content: "module.exports = 2;\n", reason: "Proposed correction", findingIds: a.findings.filter(f => f.path === name).map(f => f.id) })) };
   };
   let run = await drive(await f.start(), r => r.pending?.role === "repair", respond);
   const a = run.pending.assignment;
@@ -424,6 +487,8 @@ test("provisional fixes cannot waive or repeatedly rerun a failed required check
 for (const conflict of ["index", "visibility"]) test(`${conflict} changes still stop with specific drift evidence`, async t => {
   const f = fixture(t);
   let run = await drive(await f.start(), r => r.pending?.role === "repair");
+  const a = run.pending.assignment;
+  await submit(run.directory, a.id, { assignmentId: a.id, fingerprint: a.fingerprint, ...result(a, run) });
   if (conflict === "index") git(f.root, "add", "value.cjs");
   if (conflict === "visibility") writeFileSync(path.join(f.root, ".gitignore"), "notes.txt\n");
   run = await advance(run.directory);
@@ -460,4 +525,20 @@ test("large reconciliation inventories stay complete on disk and bounded in assi
   assert.equal(readJSON(run.sourceReconciliations[0].evidence).paths.length, 300);
   assert.equal(Object.keys(run.expected.files).length, 302);
   assert.equal(run.sourceReconciliations[0].pathCount, 300); assert.equal(run.sourceReconciliations[0].pathsTruncated, true);
+  assert.equal(status(run).filesChanged.length, 300, "status must not inherit assignment-context truncation");
+  assert.ok(status(run).filesChanged.includes("note-299"));
+  const raw = readJSON(path.join(run.directory, "run.json"));
+  assert.ok(raw.reconciledPaths.$manifest, "exact path inventory must stay out of hot workflow JSON");
+  const inventory = path.join(run.directory, "manifests", `${raw.reconciledPaths.$manifest}.json`);
+  const read = fs.readFileSync;
+  let reads = 0;
+  fs.readFileSync = function(file, ...args) { if (String(file) === inventory) reads++; return read(file, ...args); };
+  syncBuiltinESMExports();
+  try {
+    const resumed = loadRun(run.directory);
+    save(resumed, "test-lazy-path-inventory");
+    assert.equal(reads, 0, "ordinary load/save must not parse the path inventory");
+    assert.equal(status(resumed).filesChanged.length, 300);
+    assert.equal(reads, 1, "rendering exact status loads the inventory on demand");
+  } finally { fs.readFileSync = read; syncBuiltinESMExports(); }
 });

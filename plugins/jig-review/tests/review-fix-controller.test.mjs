@@ -94,7 +94,7 @@ test("complete CLI-backed review -> repair -> validation -> terminal quorum with
   assert.equal(run.reports.length, 2);
   assert.equal(run.attempts.length, 4);
   const assignments = run.attempts.map(a => readJSON(path.join(run.directory, "assignments", a.id, "request.json")).assignment);
-  assert.equal(new Set(assignments.map(a => a.repository)).size, 4);
+  assert.deepEqual([...new Set(assignments.map(a => a.repository))], [f.root]);
   for (const a of assignments) {
     assert.equal(a.findings, undefined); assert.equal(a.reports, undefined);
     assert.equal(hash(a.contract), run.contractHash);
@@ -118,7 +118,7 @@ test("complete CLI-backed review -> repair -> validation -> terminal quorum with
   }
 });
 
-test("direct workspace repairs survive capture and cleanup with bytes, modes, and user index preserved", async t => {
+test("direct checkout repairs preserve bytes, modes, build caches, and user index", async t => {
   const f = fixture(t);
   writeFileSync(path.join(f.root, "obsolete.txt"), "remove me\n");
   writeFileSync(path.join(f.root, "tool.sh"), "#!/bin/sh\nexit 0\n", { mode: 0o644 });
@@ -136,6 +136,7 @@ test("direct workspace repairs survive capture and cleanup with bytes, modes, an
     run = await drive(run, r => Boolean(r.pending));
   }
   const { repository, findings } = run.pending.assignment;
+  assert.equal(repository, f.root);
   assert.match(run.pending.assignment.instructions, /apply_patch/);
   writeFileSync(path.join(repository, "value.cjs"), "module.exports = 2;\n");
   writeFileSync(path.join(repository, "binary.dat"), binary, { mode: 0o644 });
@@ -149,14 +150,14 @@ test("direct workspace repairs survive capture and cleanup with bytes, modes, an
     ...(name === "tool.sh" ? { mode: "0755" } : {}),
   }));
   await nativeSubmit(run, { workspaceEdits });
-  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n", "Submission does not directly publish files");
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n", "Edits are visible before controller consumption");
   run = await advance(run.directory);
   assert.equal(run.phase, "VALIDATE", JSON.stringify(status(run)));
-  writeFileSync(path.join(repository, "value.cjs"), "module.exports = 99;\n", "utf8");
   run = await driveNative(loadRun(run.directory));
   assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
-  assert.equal(existsSync(repository), false, "The captured candidate survives cleanup of the editable copy");
-  assert.equal(existsSync(path.join(f.root, ".cache")), false);
+  assert.equal(existsSync(repository), true, "Cleanup never removes the actual checkout");
+  assert.equal(readFileSync(path.join(f.root, ".cache/diagnostic"), "utf8"), "ignored output\n");
+  assert.equal(run.completedApplications.length, 0, "Direct edits need no publication journal");
   assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
   assert.deepEqual(readFileSync(path.join(f.root, "binary.dat")), binary);
   assert.equal(readFileSync(path.join(f.root, "empty.txt"), "utf8"), "");
@@ -179,11 +180,11 @@ test("external repair adapter errors retain their cause after partial workspace 
   const f = fixture(t), index = readFileSync(path.join(f.root, ".git/index"));
   const run = await drive(await f.start("workspace-error"));
   assert.equal(run.phase, "BLOCKED", JSON.stringify(status(run)));
-  assert.equal(run.outcome.reason, "Repair adapter failed after editing");
+  assert.match(run.outcome.reason, /Repair adapter failed after editing.*Checkout edits were retained/);
   const attempts = run.assignmentAttempts.filter(a => a.role === "repair");
-  assert.equal(attempts.length, 3);
+  assert.equal(attempts.length, 1);
   assert.ok(attempts.every(a => a.error === "Repair adapter failed after editing" && a.code !== "ASSIGNMENT_CHANGED"));
-  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n");
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
   assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
 });
 
@@ -1040,7 +1041,7 @@ test("an unsupported nested repository appearing mid-run stops explicitly and pr
   });
 });
 
-test("checkout validation source drift has one outcome and a retained job record at either timing boundary", async t => {
+test("checkout validation source drift reaches reassessment with its original result at either timing boundary", async t => {
   for (const timing of ["running", "completed", "external-writer"]) await t.test(timing, async t => {
     const f = fixture(t); writeFileSync(path.join(f.root, "value.cjs"), "module.exports = 2;\n");
     const code = timing === "external-writer" ? "" : "require('node:fs').writeFileSync('junit.xml','preserved evidence');";
@@ -1053,12 +1054,13 @@ test("checkout validation source drift has one outcome and a retained job record
     }
     if (timing === "completed") assert.equal(readJSON(path.join(job, "result.json")).outcome, "succeeded");
     if (timing === "external-writer") writeFileSync(path.join(f.root, "junit.xml"), "preserved evidence");
-    run = await drive(run);
-    assert.equal(run.phase, "SCOPE_CHANGED"); assert.match(run.outcome.reason, /during checkout validation unit; writer unverified/);
+    run = await drive(run, r => Boolean(r.validationAssessment));
+    assert.equal(run.phase, "TRIAGE");
     assert.equal(run.validation.length, 1); assert.equal(run.validation[0].assignmentId, id);
-    assert.equal(run.validationInterruption.checkId, "unit"); assert.ok(run.validation[0].scopeChange);
+    assert.equal(run.validationAssessment.checks[0].assignmentId, id);
+    assert.equal(run.validation[0].scopeChange, undefined);
     assert.equal(readFileSync(path.join(f.root, "junit.xml"), "utf8"), "preserved evidence");
-    assert.equal((await advance(run.directory)).validation.length, 1);
+    assert.equal(loadRun(run.directory).validation.length, 1);
   });
 });
 

@@ -20,6 +20,15 @@ function fixture(t) {
 }
 const diff = root => [git(root, "diff", "--no-ext-diff", "--no-textconv", "--binary").toString(), git(root, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary").toString()];
 
+for (const bit of [0o4000, 0o2000, 0o1000]) test(`source capture rejects special permission bit ${bit.toString(8)} instead of dropping it`, t => {
+  const run = fixture(t);
+  chmodSync(path.join(run.root, "value"), 0o755 | bit);
+  for (const store of [undefined, run.directory]) {
+    assert.throws(() => snapshot(run.root, store), error => error.code === "UNSUPPORTED_REPOSITORY"
+      && /Unsupported source permissions: value/.test(error.message));
+  }
+});
+
 for (const nested of [false, true]) test(`snapshots and copies preserve tracked files replaced by directories${nested ? " in submodules" : ""}`, t => {
   const run = fixture(t), prefix = nested ? "module/" : "", root = path.join(run.root, prefix);
   if (nested) {

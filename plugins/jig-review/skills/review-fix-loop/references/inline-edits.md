@@ -2,7 +2,7 @@
 
 Read only when a configured adapter supplies inline file images instead of workspace edits. For ordinary repairs, use the assignment schema and [workspace edits](assignments.md).
 
-Legacy inline `edits` results remain supported for adapters that supply file images without modifying their assignment copy. These results cannot be combined with `workspaceEdits`. Each inline edit has `path`, `reason`, `findingIds`, and complete replacement `content`, or `delete: true`. Regular-file edits accept an optional `mode` string of `"0644"` or `"0755"`. Include it with `content` to create an executable script or change contents and permissions together. For a permission-only repair of an existing included regular file, omit `content` and supply `mode`; its bytes are preserved. For example:
+Legacy inline `edits` results remain supported for adapters that supply file images without modifying their assignment repository. These results cannot be combined with `workspaceEdits`. Each inline edit has `path`, `reason`, `findingIds`, and complete replacement `content`, or `delete: true`. Regular-file edits accept an optional `mode` string of `"0644"` or `"0755"`. Include it with `content` to create an executable script or change contents and permissions together. For a permission-only repair of an existing included regular file, omit `content` and supply `mode`; its bytes are preserved. For example:
 
 ```json
 {"assignmentId":"<id>","fingerprint":"<hash>","edits":[{"path":"scripts/check.sh","mode":"0755","reason":"The required validation directly executes this script","findingIds":["<finding-id>"]}]}

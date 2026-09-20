@@ -382,10 +382,11 @@ for (const optional of [false, true]) test(`uncertain ${optional ? "optional" : 
 });
 
 for (const role of ["triage", "repair"]) for (const change of ["ignored-cache", "source", "index"]) {
-  test(`${role} allows ${change === "ignored-cache" ? "ignored caches" : `a bounded retry after ${change} mutation`} without checkout drift`, async t => {
+  test(`isolated ${role} allows ${change === "ignored-cache" ? "ignored caches" : `a bounded retry after ${change} mutation`} without checkout drift`, async t => {
+    if (!sandboxAvailable(t)) return;
     const f = fixture(t); put(f.root, ".gitignore", ".cache/\n"); put(f.root, "value.cjs", "module.exports = 1;\n");
     let exercised = false;
-    const run = await drive(await f.start(), (a, run) => {
+    const run = await drive(await f.start({ config: { validationMode: "isolated", validationSandbox: defaultValidationSandbox() } }), (a, run) => {
       const fixed = readFileSync(path.join(a.repository, "value.cjs"), "utf8").includes("= 2;");
       if (a.role === role && !exercised) {
         exercised = true;
@@ -407,7 +408,7 @@ for (const role of ["triage", "repair"]) for (const change of ["ignored-cache", 
   });
 }
 
-for (const mask of [0o002, 0o022, 0o077]) test(`workspace additions normalize editor umask ${mask.toString(8)}`, async t => {
+for (const mask of [0o002, 0o022, 0o077]) test(`direct checkout additions retain editor umask ${mask.toString(8)}`, async t => {
   const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
   const run = await drive(await f.start(), (a, run) => {
     if (a.role !== "repair") return repairResponse(a, run);
@@ -424,19 +425,20 @@ for (const mask of [0o002, 0o022, 0o077]) test(`workspace additions normalize ed
     })) };
   });
   assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
-  assert.equal(statSync(path.join(f.root, "added.txt")).mode & 0o777, 0o644);
-  assert.equal(statSync(path.join(f.root, "added.sh")).mode & 0o777, 0o755);
+  assert.equal(statSync(path.join(f.root, "added.txt")).mode & 0o777, 0o666 & ~mask);
+  assert.equal(statSync(path.join(f.root, "added.sh")).mode & 0o777, 0o777 & ~mask);
   assert.equal(readFileSync(path.join(f.root, "added.txt"), "utf8"), "ordinary editor creation\n");
   assert.equal(existsSync(path.join(f.root, ".git/index")), false);
 });
 
-test("workspace editor replacements preserve all existing permissions and script execution", async t => {
+test("isolated workspace editor replacements preserve all existing permissions and script execution", async t => {
+  if (!sandboxAvailable(t)) return;
   const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
   f.contract.requiredValidation.push({ id: "script", argv: ["./shared.sh"] });
   for (const [name, mode] of [["private.txt", 0o600], ["private.sh", 0o600], ["shared.sh", 0o775]]) {
     put(f.root, name, "before\n"); fs.chmodSync(path.join(f.root, name), mode);
   }
-  const run = await drive(await f.start(), (a, run) => {
+  const run = await drive(await f.start({ config: { validationMode: "isolated", validationSandbox: defaultValidationSandbox() } }), (a, run) => {
     if (a.role !== "repair") return repairResponse(a, run);
     put(a.repository, "value.cjs", "module.exports = 2;\n");
     for (const [name, mode] of [["private.txt", 0o644], ["private.sh", 0o777], ["shared.sh", 0o600]]) {
@@ -455,14 +457,15 @@ test("workspace editor replacements preserve all existing permissions and script
   }
 });
 
-test("workspace edits explicitly set modes on existing and new files without chmod or file images", async t => {
+test("isolated workspace edits explicitly set modes on existing and new files without chmod or file images", async t => {
+  if (!sandboxAvailable(t)) return;
   const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
   const script = "#!/bin/sh\nexit 0\n";
   for (const [name, mode] of [["enable.sh", 0o600], ["disable.sh", 0o755]]) {
     put(f.root, name, script); fs.chmodSync(path.join(f.root, name), mode);
   }
   f.contract.requiredValidation.push({ id: "script", argv: ["./enable.sh"] });
-  const run = await drive(await f.start(), (a, run) => {
+  const run = await drive(await f.start({ config: { validationMode: "isolated", validationSandbox: defaultValidationSandbox() } }), (a, run) => {
     if (a.role !== "repair") return repairResponse(a, run);
     put(a.repository, "value.cjs", "module.exports = 2;\n");
     put(a.repository, "new.sh", script);
@@ -489,24 +492,25 @@ for (const damage of ["source", "index", "filter"]) for (const execution of ["co
   });
   assert.equal(run.phase, "BLOCKED", JSON.stringify(status(run)));
   assert.match(run.outcome.reason, /Provider failed after editing: quota exhausted/);
-  assert.equal(run.assignmentAttempts.filter(a => a.role === "repair").length, execution === "uncertain" ? 1 : 3);
+  assert.equal(run.assignmentAttempts.filter(a => a.role === "repair").length, 1);
   for (const attempt of run.assignmentAttempts.filter(a => a.role === "repair")) {
     assert.equal(attempt.error, "Provider failed after editing: quota exhausted");
     assert.equal(attempt.execution, execution); assert.equal(attempt.code, undefined);
   }
   if (execution === "uncertain") assert.equal(run.outcome.code, "EXECUTION_UNCERTAIN");
-  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 1;\n");
+  assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
   assert.equal(run.mutations.length, 0); assert.equal(run.validation.length, 0);
-  assert.equal(existsSync(path.join(f.root, ".git/index")), false);
+  assert.equal(existsSync(path.join(f.root, ".git/index")), damage === "index");
   assert.equal((await advance(run.directory)).assignmentAttempts.length, run.assignmentAttempts.length);
 });
 
-for (const scenario of ["tracked", "untracked", "attempt-limit"]) test(`workspace file-to-directory rejection supports ${scenario} retries without publication`, async t => {
+for (const scenario of ["tracked", "untracked", "attempt-limit"]) test(`isolated workspace file-to-directory rejection supports ${scenario} retries without publication`, async t => {
+  if (scenario !== "attempt-limit" && !sandboxAvailable(t)) return;
   const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n"); put(f.root, "tool", "original tool\n");
   execFileSync("git", ["add", "value.cjs", ...(scenario === "untracked" ? [] : ["tool"])], { cwd: f.root });
   const index = readFileSync(path.join(f.root, ".git/index"));
   let attempts = 0;
-  const run = await drive(await f.start({ options: parseArgs(["--max-provider-attempts", "2"]) }), (a, run) => {
+  const run = await drive(await f.start({ options: parseArgs(["--max-provider-attempts", "2"]), config: { validationMode: "isolated", validationSandbox: defaultValidationSandbox() } }), (a, run) => {
     if (a.role !== "repair") return repairResponse(a, run);
     attempts++;
     assert.equal(readFileSync(path.join(a.repository, "tool"), "utf8"), "original tool\n", "Retries start from a fresh copy");
@@ -533,13 +537,13 @@ for (const scenario of ["tracked", "untracked", "attempt-limit"]) test(`workspac
 });
 
 for (const defect of ["unattributed", "unchanged", "both-attribution", "mode-deletion", "mode-unchanged", "duplicate", "excluded", "index", "symlink", "symlink-deletion", "ignored", "ignored-mode", "ignored-and-unchanged", "hidden-source", "special-bits", "unknown-finding", "unsafe-path"]) {
-  test(`workspace repairs reject ${defect} before publication`, async t => {
+  test(`isolated workspace repairs reject ${defect} before publication`, async t => {
     const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
     put(f.root, ".gitignore", ".cache/\n"); put(f.root, "preserved.txt", "user work\n");
     fs.chmodSync(path.join(f.root, ".gitignore"), 0o644);
     if (defect === "symlink-deletion") symlinkSync("preserved.txt", path.join(f.root, "link.txt"));
     const options = parseArgs(["--max-provider-attempts", "1", "--exclude-path", "preserved.txt"]);
-    const run = await drive(await f.start({ options }), (a, run) => {
+    const run = await drive(await f.start({ options, config: { validationMode: "isolated", validationSandbox: defaultValidationSandbox() } }), (a, run) => {
       if (a.role !== "repair") return repairResponse(a, run);
       put(a.repository, "value.cjs", "module.exports = 2;\n");
       const item = name => ({ path: name, reason: "Correct the demonstrated defect", findingIds: a.findings.map(f => f.id) });
@@ -571,7 +575,7 @@ for (const defect of ["unattributed", "unchanged", "both-attribution", "mode-del
       "both-attribution": /every changed source path/, "mode-deletion": /workspace mode requires a regular file/, "mode-unchanged": /every changed source path/,
       excluded: /unique, included/, index: /Assignment changed/, symlink: /Symlink repair/, "symlink-deletion": /Symlink repair/,
       ignored: /Ignored or unmanaged paths/, "ignored-mode": /Ignored or unmanaged paths/, "ignored-and-unchanged": /Ignored or unmanaged paths/, "hidden-source": /Ignored or unmanaged paths/,
-      "special-bits": /Unsupported repair permissions/, "unknown-finding": /Malformed repair result/, "unsafe-path": /Unsafe repository path/,
+      "special-bits": /Unsupported source permissions/, "unknown-finding": /Malformed repair result/, "unsafe-path": /Unsafe repository path/,
     };
     assert.match(run.outcome.reason, expected[defect]);
     const attempt = readJSON(path.join(run.directory, "run.json")).assignmentAttempts.find(a => a.role === "repair");
@@ -601,18 +605,18 @@ test("settlement receipts survive archived records and do not release another ac
   assert.equal(readJSON(active).directory, next.directory);
 });
 
-test("reconciling runs pin version 12 and cannot resume version-11 records", async t => {
+test("direct-checkout runs pin version 13 and cannot resume version-12 records", async t => {
   const f = fixture(t), run = await f.start(), file = path.join(run.directory, "run.json");
-  assert.equal(run.version, 12, "A reconciling run must not be admitted by a version-11 controller");
-  assert.equal(loadRun(run.directory).version, 12);
-  const record = readJSON(file); record.version = 11;
+  assert.equal(run.version, 13, "Direct assignments must not be resumed by a copy-based controller");
+  assert.equal(loadRun(run.directory).version, 13);
+  const record = readJSON(file); record.version = 12;
   writeFileSync(file, JSON.stringify(record));
   const before = readFileSync(file);
   await assert.rejects(advance(run.directory), /older runs require their original controller/);
   assert.deepEqual(readFileSync(file), before, "An incompatible run is not migrated or consumed");
 });
 
-for (const version of [4, 5, 6, 7, 8, 9, 10, 11]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
+for (const version of [4, 5, 6, 7, 8, 9, 10, 11, 12]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
   const f = fixture(t), run = await drive(await f.start()), file = path.join(run.directory, "run.json"), active = path.join(run.runsRoot, "active.json");
   const record = readJSON(file); record.version = version;
   if (version < 8) { delete record.fixPolicy; delete record.options.fixMode; }
@@ -624,6 +628,25 @@ for (const version of [4, 5, 6, 7, 8, 9, 10, 11]) test(`explicit release inspect
   assert.equal(result.phase, "RELEASED"); assert.deepEqual(readFileSync(file), before);
   assert.equal((await release(run.directory, f.root)).phase, "RELEASED");
   assert.equal((await f.start()).phase, "INIT");
+});
+
+for (const bit of [0o4000, 0o2000, 0o1000]) test(`legacy release preserves backups carrying special permission bit ${bit.toString(8)}`, async t => {
+  const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
+  const run = await drive(await f.start(), repairResponse);
+  assert.equal(run.phase, "CONVERGED");
+  const backup = run.completedApplications[0].changes[0].backup;
+  const bytes = readFileSync(backup), mode = statSync(backup).mode & 0o777;
+  fs.chmodSync(backup, mode | bit);
+  const file = path.join(run.directory, "run.json"), record = readJSON(file);
+  record.version = 12;
+  writeFileSync(file, JSON.stringify(record));
+  writeFileSync(path.join(run.runsRoot, "active.json"), JSON.stringify({ directory: run.directory }));
+  const journal = readFileSync(file);
+  assert.equal((await release(run.directory, f.root)).phase, "RELEASED");
+  assert.equal((await f.start()).phase, "INIT", "retained legacy receipt remains valid for new-run admission");
+  assert.deepEqual(readFileSync(file), journal);
+  assert.deepEqual(readFileSync(backup), bytes);
+  assert.equal(statSync(backup).mode & 0o7777, mode | bit);
 });
 
 test("missing unreceipted run records stop precisely until restored, without clearing recovery", async t => {

@@ -19,6 +19,10 @@ export function resultSchema(assignment) {
       { minItems: assignment.contract.acceptanceCriteria.length, maxItems: assignment.contract.acceptanceCriteria.length }) });
   } else if (assignment.role === "triage") {
     success = { oneOf: [object({ ...envelope,
+      ...(assignment.validationAssessment ? { validationImpact: array(object({
+        assignmentId: choice(assignment.validationAssessment.checks.map(c => c.assignmentId)),
+        status: choice(["unaffected", "rerun"]), evidence: text,
+      }), { minItems: assignment.validationAssessment.checks.length, maxItems: assignment.validationAssessment.checks.length }) } : {}),
       decisions: array(object({ id: choice(assignment.findings.map(f => f.id)), status: choice(["actionable", "rejected", "fixed", "blocked", ...(assignment.sourceChanges ? ["needs-validation"] : [])]), evidence: text }),
         { minItems: assignment.findings.length, maxItems: assignment.findings.length }) }),
     object({ ...envelope, question: object({ text, recommended: text, evidence: text }) })] };

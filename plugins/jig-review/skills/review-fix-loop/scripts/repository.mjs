@@ -326,6 +326,10 @@ export function snapshot(root, store, { maxBytes = DEFAULT_STORAGE.maxSourceByte
       // files. Only the snapshot represents that file as absent: entry() must
       // still reject directories at mutation destinations to preserve them.
       if (tracked.has(name) && stat?.isDirectory()) { checkDirectory(name); files[`${prefix}${name}`] = null; continue; }
+      // New source snapshots cannot represent special permission bits. Keep
+      // this admission rule separate from entry(), which also verifies legacy
+      // backup journals using their original ordinary-permission semantics.
+      if (stat?.isFile() && (stat.mode & 0o7000)) throw unsupported(`Unsupported source permissions: ${prefix}${name}; setuid, setgid, and sticky bits cannot be captured.`);
       sourceBytes += stat?.size ?? 0;
       if (sourceBytes > maxBytes) throw storageLimit(`included source exceeds maxSourceBytes=${maxBytes} at ${prefix}${name}`);
       files[`${prefix}${name}`] = entry(directory, name, store, { expectedStat: stat ?? null });
