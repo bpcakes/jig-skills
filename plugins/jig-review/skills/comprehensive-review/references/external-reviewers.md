@@ -40,7 +40,7 @@ To verify real CLI evidence access after adapter changes, run `JIG_REVIEW_LIVE=c
 
 ## External CLI Forwarders
 
-The Claude and Cursor children are pure forwarders. Each prompt contains only its fully resolved adapter command and repository working directory. It must:
+The Claude and Cursor children are pure forwarders. Give each only its fully resolved adapter command, repository working directory, the recipe below, and the shared [waiting policy](waiting.md). It must:
 
 - start exactly one non-interactive foreground command and execute its assigned adapter once;
 - request only the network access needed for that provider when the host exposes targeted escalation; omit escalation when the host is unrestricted and forbids the parameter; otherwise fail with the policy limitation;
@@ -52,10 +52,10 @@ The Claude and Cursor children are pure forwarders. Each prompt contains only it
 - return final stdout exactly, without commentary or progress chatter; and
 - surface command failure without retrying through another provider invocation.
 
-Give each external forwarder the following state-machine recipe with the resolved command and working directory substituted as data. The child must use this shape rather than issuing one `exec_command` call and immediately printing its first `output` field:
+Give each external forwarder the following state-machine recipe with the resolved command and working directory substituted as data. The child must use this shape rather than issuing one `exec_command` call and immediately printing its first `output` field. The outer yield below allows up to 60 seconds before returning control to the model; choose its value and subsequent outer waits under the shared waiting policy. The inner process polls remain in code and emit no intermediate output:
 
 ```javascript
-// @exec: {"yield_time_ms": 1000, "max_output_tokens": 30000}
+// @exec: {"yield_time_ms": 60000, "max_output_tokens": 30000}
 let result = await tools.exec_command({
   cmd: RESOLVED_SHELL_QUOTED_COMMAND,
   workdir: RESOLVED_REPOSITORY_DIRECTORY,

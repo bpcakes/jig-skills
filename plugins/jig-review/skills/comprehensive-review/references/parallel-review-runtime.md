@@ -17,7 +17,7 @@ Attempt one transient, context-free child for each selected reviewer before wait
 
 ## Collect and merge
 
-Wait only after all selected spawn attempts. Wait or poll in intervals no longer than 60 seconds so the parent can keep the user informed. Unless the user supplied a different deadline, allow each child up to 30 minutes from launch. Each external adapter enforces a 28-minute deadline so its CLI exits before the parent deadline. On timeout, stop or interrupt that child when the host supports it, record a sanitized failure, and continue with other reports. A spawn failure, timeout, empty child response, or response produced before a yielded adapter reached terminal exit is never a successful report.
+Wait only after all selected spawn attempts, following the shared [waiting policy](waiting.md). Unless the user supplied a different deadline, allow each child up to 30 minutes from launch. Each external adapter enforces a 28-minute deadline so its CLI exits before the parent deadline. On timeout, stop or interrupt that child when the host supports it, record a sanitized failure, and continue with other reports. A spawn failure, timeout, empty child response, or response produced before a yielded adapter reached terminal exit is never a successful report.
 
 Never retry an external reviewer merely because its forwarder returned empty or lost its process handle. First establish that the original adapter and provider process group reached terminal exit, or cancel the original forwarder/adapter and wait for its bounded cleanup. If the original invocation cannot be accounted for, mark that reviewer failed and do not risk a duplicate billable provider run.
 
