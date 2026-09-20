@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust Security Boundary Review"
+  short_description: "Review Rust security boundaries"
+  default_prompt: "Use $rust-security-boundary-review to review Rust auth, secrets, and untrusted-input boundaries."
+
+policy:
+  allow_implicit_invocation: false

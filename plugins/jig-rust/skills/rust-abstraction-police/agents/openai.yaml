@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust Abstraction Police"
+  short_description: "Review Rust abstraction boundaries"
+  default_prompt: "Use $rust-abstraction-police to assess Rust abstraction boundaries and caller burden."
+
+policy:
+  allow_implicit_invocation: false

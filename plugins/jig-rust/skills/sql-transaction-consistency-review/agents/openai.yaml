@@ -1,0 +1,7 @@
+interface:
+  display_name: "SQL Transaction Consistency Review"
+  short_description: "Review Rust SQL transaction consistency"
+  default_prompt: "Use $sql-transaction-consistency-review to review SQL-backed Rust transaction consistency."
+
+policy:
+  allow_implicit_invocation: false

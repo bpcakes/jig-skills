@@ -1,0 +1,7 @@
+interface:
+  display_name: "React State Data Flow Review"
+  short_description: "Review React state and data flow"
+  default_prompt: "Use $react-state-data-flow-review to review React state ownership and data flow."
+
+policy:
+  allow_implicit_invocation: false

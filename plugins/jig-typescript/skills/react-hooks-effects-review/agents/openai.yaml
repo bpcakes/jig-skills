@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Hooks Effects Review"
+  short_description: "Review React hooks and effects"
+  default_prompt: "Use $react-hooks-effects-review to review React hooks, effects, refs, and lifecycle behavior."
+
+policy:
+  allow_implicit_invocation: false

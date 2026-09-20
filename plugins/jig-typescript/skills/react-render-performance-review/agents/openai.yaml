@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Render Performance Review"
+  short_description: "Review React render performance"
+  default_prompt: "Use $react-render-performance-review to review React render costs and performance."
+
+policy:
+  allow_implicit_invocation: false

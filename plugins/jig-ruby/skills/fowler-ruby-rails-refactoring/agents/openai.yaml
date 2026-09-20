@@ -1,0 +1,7 @@
+interface:
+  display_name: "Fowler Ruby Rails Refactoring"
+  short_description: "Find and plan safe Ruby refactorings"
+  default_prompt: "Use $fowler-ruby-rails-refactoring to assess Ruby and Rails refactoring opportunities."
+
+policy:
+  allow_implicit_invocation: false

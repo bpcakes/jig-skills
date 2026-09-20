@@ -1,6 +1,6 @@
 {
   "name": "jig-typescript",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "TypeScript and React abstraction-boundary audits, duplicate-abstraction analysis, hooks, state/data flow, render performance, test quality, component API, and type-system review skills.",
   "author": {
     "name": "Jig"

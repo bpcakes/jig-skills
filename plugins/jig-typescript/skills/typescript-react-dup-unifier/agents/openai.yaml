@@ -1,0 +1,7 @@
+interface:
+  display_name: "TypeScript React Duplication Unifier"
+  short_description: "Assess TypeScript and React consolidation"
+  default_prompt: "Use $typescript-react-dup-unifier to assess whether similar TypeScript and React abstractions should be unified."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust Error Handling Review"
+  short_description: "Review Rust error handling"
+  default_prompt: "Use $rust-error-handling-review to review Rust error propagation and recovery."
+
+policy:
+  allow_implicit_invocation: false

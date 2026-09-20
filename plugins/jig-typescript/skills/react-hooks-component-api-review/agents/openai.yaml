@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Hooks Component API Review"
+  short_description: "Review React component and hook APIs"
+  default_prompt: "Use $react-hooks-component-api-review to review React component and hook API design."
+
+policy:
+  allow_implicit_invocation: false

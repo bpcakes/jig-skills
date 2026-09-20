@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust Test Quality Review"
+  short_description: "Review Rust test quality"
+  default_prompt: "Use $rust-test-quality-review to assess whether Rust tests prove the requested behavior."
+
+policy:
+  allow_implicit_invocation: false

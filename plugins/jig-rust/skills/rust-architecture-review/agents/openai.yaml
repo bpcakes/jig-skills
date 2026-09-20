@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust Architecture Review"
+  short_description: "Review Rust architecture and structural design"
+  default_prompt: "Use $rust-architecture-review to assess Rust architecture and structural design."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust Duplication Unifier"
+  short_description: "Assess Rust abstraction consolidation"
+  default_prompt: "Use $rust-dup-unifier to assess whether similar Rust abstractions should be unified."
+
+policy:
+  allow_implicit_invocation: false

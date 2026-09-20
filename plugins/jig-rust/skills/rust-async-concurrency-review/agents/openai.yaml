@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust Async Concurrency Review"
+  short_description: "Review Rust async and concurrency correctness"
+  default_prompt: "Use $rust-async-concurrency-review to review Rust async and concurrency correctness."
+
+policy:
+  allow_implicit_invocation: false

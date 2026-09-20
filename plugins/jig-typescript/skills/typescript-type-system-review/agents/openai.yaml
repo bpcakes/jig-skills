@@ -1,0 +1,7 @@
+interface:
+  display_name: "TypeScript Type System Review"
+  short_description: "Review TypeScript type safety"
+  default_prompt: "Use $typescript-type-system-review to review TypeScript type safety and API contracts."
+
+policy:
+  allow_implicit_invocation: false

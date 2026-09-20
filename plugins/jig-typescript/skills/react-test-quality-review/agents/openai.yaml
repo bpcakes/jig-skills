@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Test Quality Review"
+  short_description: "Review React test quality"
+  default_prompt: "Use $react-test-quality-review to review React test behavior and assertion strength."
+
+policy:
+  allow_implicit_invocation: false

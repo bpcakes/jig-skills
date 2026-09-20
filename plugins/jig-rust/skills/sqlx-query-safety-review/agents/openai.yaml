@@ -1,0 +1,7 @@
+interface:
+  display_name: "SQLx Query Safety Review"
+  short_description: "Review Rust SQL query safety"
+  default_prompt: "Use $sqlx-query-safety-review to review Rust SQL construction and query safety."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,6 +1,6 @@
 {
   "name": "jig-ruby",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Ruby and Rails refactoring assessments and behavior-preserving plans grounded in Fowler's principles.",
   "author": {
     "name": "Jig"
