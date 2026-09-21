@@ -9,12 +9,23 @@ import { hash, readBlob, save, storeBlob } from "./run-store.mjs";
 const textGit = (root, ...args) => git(root, ...args).toString().trim();
 const names = bytes => bytes.toString().split("\0").filter(Boolean);
 const fileHash = file => existsSync(file) ? hash(readFileSync(file)) : null;
-export const checkoutDirty = root => git(root, "status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none").length > 0;
+// The reviewed snapshot includes executable bits even when the user's normal
+// Git commands ignore them. Publication must detect and record that same tree.
+export const checkoutDirty = root => git(root, "-c", "core.filemode=true", "status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none").length > 0;
+
+export function assertNoGitOperation(root) {
+  const markers = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "sequencer"];
+  const paths = textGit(root, "rev-parse", "--path-format=absolute", ...markers.flatMap(marker => ["--git-path", marker])).split("\n");
+  for (let i = 0; i < markers.length; i++) if (existsSync(paths[i])) {
+    throw unsupported(`Unfinished Git operation (${markers[i]}); finish or abort it before per-round commits.`);
+  }
+}
 
 export function assertCommitScope(root, current, exclusions) {
+  assertNoGitOperation(root);
   if (!current.repositories[""].head) throw unsupported("Per-round commits require an existing HEAD; use --commit-mode none for an unborn repository.");
-  const dirty = new Set([...names(git(root, "diff", "HEAD", "--ignore-submodules=none", "--name-only", "--no-renames", "-z")),
-    ...names(git(root, "diff", "--cached", "HEAD", "--ignore-submodules=none", "--name-only", "--no-renames", "-z")),
+  const dirty = new Set([...names(git(root, "-c", "core.filemode=true", "diff", "HEAD", "--ignore-submodules=none", "--name-only", "--no-renames", "-z")),
+    ...names(git(root, "-c", "core.filemode=true", "diff", "--cached", "HEAD", "--ignore-submodules=none", "--name-only", "--no-renames", "-z")),
     ...names(git(root, "ls-files", "--others", "--exclude-standard", "-z"))]);
   // The commit must describe all included checkout inputs. Never sweep an
   // excluded edit or nested working tree into a parent repository's commit.
@@ -55,7 +66,7 @@ export function prepareRoundCommit(run, message) {
     // same-size edits. A zero-stat index forces add to read the actual files.
     privateGit(run, index, ["read-tree", "--empty"]);
     privateGit(run, index, ["update-index", "-z", "--index-info"], git(run.root, "ls-files", "--stage", "-z"));
-    privateGit(run, index, ["add", "-A", "--", "."]);
+    privateGit(run, index, ["-c", "core.filemode=true", "add", "-A", "--", "."]);
     for (const name of names(privateGit(run, index, ["diff", "--cached", "HEAD", "--name-only", "--no-renames", "-z"]))) {
       if (isExcludedPath(name, run.fingerprint.excludePaths)) throw new Error(`Commit would include excluded path ${name}; HEAD and source index were not changed.`);
     }
@@ -91,6 +102,7 @@ function sameIdentity(file, identity) {
 export function publishRoundCommit(run) {
   const j = run.commitJournal;
   if (!j) return;
+  assertNoGitOperation(run.root);
   const current = snapshot(run.root, undefined, { maxBytes: run.config.storage.maxSourceBytes });
   const repository = current.repositories[""];
   const normalized = structuredClone(current.repositories);
@@ -112,6 +124,7 @@ export function publishRoundCommit(run) {
   }
   // Recheck after acquiring the index lock, before updating the branch ref.
   if (fileHash(j.indexPath) !== actualIndex) throw new Error("Git index changed while locking round publication; journal retained.");
+  assertNoGitOperation(run.root);
   const head = textGit(run.root, "rev-parse", "HEAD");
   if (head === j.parent && j.parent !== j.oid) git(run.root, "update-ref", "-m", j.message.split("\n")[0], j.branch ?? "HEAD", j.oid, j.parent);
   else if (head !== j.oid) throw new Error("HEAD changed during round commit publication; journal retained.");

@@ -18,7 +18,7 @@ import { cancelJob, commandSucceeded, executableCommand, launchJob, recoverSettl
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
-import { assertCommitScope, checkoutDirty, prepareRoundCommit, publishRoundCommit } from "./round-commits.mjs";
+import { assertCommitScope, assertNoGitOperation, checkoutDirty, prepareRoundCommit, publishRoundCommit } from "./round-commits.mjs";
 
 export const TERMINAL = new Set(["CONVERGED", "THRESHOLD_MET", "ROUND_LIMIT", "BLOCKED", "VALIDATION_FAILED", "REVIEW_INCOMPLETE", "SCOPE_CHANGED"]);
 const transitions = {
@@ -447,6 +447,7 @@ async function guard(run) {
   }
   let current, fingerprint;
   try {
+    if (run.options.commitMode === "per-round") assertNoGitOperation(run.root);
     current = snapshotFor(run);
     assertBackupFilesystem(run.root, Object.keys(current.files), run.directory);
     fingerprint = await captureFingerprint(run.args);

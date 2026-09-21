@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import fs, { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import fs, { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -26,13 +26,14 @@ function fixture(t, { dirty = true, value = 0 } = {}) {
       "require('node:assert/strict').equal(require('./value.cjs'),2);require('node:assert/strict').equal(require('node:child_process').execFileSync('git',['status','--porcelain'],{encoding:'utf8'}),'')"] }] };
   return { root, base, contract, start: extra => createRun({ cwd: root, contract, ...extra }) };
 }
-async function drive(run, { secondRepair = false, failFirst = false, reviewRanges = [] } = {}) {
+async function drive(run, { secondRepair = false, failFirst = false, modeRepair = false, contentRepair = false, reviewRanges = [] } = {}) {
   for (let i = 0; i < 350; i++) {
     run = await advance(run.directory);
     if (TERMINAL.has(run.phase) && !run.cleanup?.length && !run.cleanupOverlays?.length) return run;
     if (run.pending && !run.pending.command) {
       const a = run.pending.assignment;
       const correct = readFileSync(path.join(a.repository, "value.cjs"), "utf8").includes("= 2;");
+      const modeMissing = modeRepair && !(statSync(path.join(a.repository, "tool.sh")).mode & 0o100);
       let result;
       if (a.role === "review") {
         assert.equal(a.commitMode, "per-round");
@@ -40,17 +41,22 @@ async function drive(run, { secondRepair = false, failFirst = false, reviewRange
         assert.equal(a.scope.includeWorkingTree, false);
         assert.equal(a.commitRange.tip, git(run.root, "rev-parse", "HEAD"));
         reviewRanges.push(a.commitRange);
-        const findings = !correct ? [{ key: "value", path: "value.cjs", severity: "medium", title: "Wrong export", evidence: "Export must equal 2" }]
+        const findings = modeMissing ? [{ key: "executable", path: "tool.sh", severity: "medium", title: "Script is not executable", evidence: "The script must be directly executable" }]
+          : !correct ? [{ key: "value", path: "value.cjs", severity: "medium", title: "Wrong export", evidence: "Export must equal 2" }]
           : secondRepair && !existsSync(path.join(run.root, "support.txt")) ? [{ key: "support", path: "support.txt", severity: "low", title: "Missing support", evidence: "Required neighboring path is absent" }] : [];
         result = { complete: true, findings, acceptance: [{ criterionId: "value", status: correct ? "satisfied" : "unsatisfied", evidence: "Inspected export and pinned validation command", validationIds: ["unit"] }] };
       } else if (a.role === "triage") {
         result = { decisions: a.findings.map(f => ({ id: f.id,
-          status: f.key === "support" ? existsSync(path.join(run.root, "support.txt")) ? "fixed" : "actionable" : correct ? "fixed" : "actionable",
+          status: f.key === "executable" ? modeMissing ? "actionable" : "fixed"
+            : f.key === "support" ? existsSync(path.join(run.root, "support.txt")) ? "fixed" : "actionable" : correct ? "fixed" : "actionable",
           evidence: "Checked current source and matching validation" })) };
       } else {
-        const name = correct ? "support.txt" : "value.cjs";
-        writeFileSync(path.join(a.repository, name), correct ? "ready\n" : `module.exports = ${failFirst && run.round === 1 ? 3 : 2};\n`);
-        result = { workspaceEdits: [{ path: name, reason: "Repair the supported failure", findingIds: a.findings.map(f => f.id) }] };
+        const name = modeRepair ? "tool.sh" : correct ? "support.txt" : "value.cjs";
+        if (modeRepair) {
+          if (contentRepair) writeFileSync(path.join(a.repository, name), "#!/bin/sh\necho ready\n");
+          chmodSync(path.join(a.repository, name), 0o755);
+        } else writeFileSync(path.join(a.repository, name), correct ? "ready\n" : `module.exports = ${failFirst && run.round === 1 ? 3 : 2};\n`);
+        result = { workspaceEdits: [{ path: name, ...(modeRepair ? { mode: "0755" } : {}), reason: "Repair the supported failure", findingIds: a.findings.map(f => f.id) }] };
       }
       await submit(run.directory, a.id, { assignmentId: a.id, fingerprint: a.fingerprint, ...result });
     }
@@ -169,6 +175,51 @@ test("dirty excluded paths are rejected before committing or allocating a run", 
   assert.equal(git(f.root, "rev-parse", "HEAD"), f.base);
   assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
   assert.equal(existsSync(path.join(f.root, ".git/jig/review-fix")), false);
+});
+
+test("a resolved but unfinished merge is rejected before allocation or publication", async t => {
+  const f = fixture(t, { dirty: false, value: 2 });
+  git(f.root, "checkout", "-qb", "topic");
+  writeFileSync(path.join(f.root, "topic.txt"), "topic\n");
+  git(f.root, "add", "."); git(f.root, "commit", "-qm", "topic");
+  git(f.root, "checkout", "-q", "main");
+  writeFileSync(path.join(f.root, "main.txt"), "main\n");
+  git(f.root, "add", "."); git(f.root, "commit", "-qm", "main");
+  git(f.root, "merge", "--no-commit", "--no-ff", "topic");
+  const head = git(f.root, "rev-parse", "HEAD"), mergeHead = git(f.root, "rev-parse", "MERGE_HEAD");
+  const index = readFileSync(path.join(f.root, ".git/index"));
+  await assert.rejects(f.start(), /Unfinished Git operation.*MERGE_HEAD/);
+  assert.equal(git(f.root, "rev-parse", "HEAD"), head);
+  assert.equal(git(f.root, "rev-parse", "MERGE_HEAD"), mergeHead);
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+  assert.equal(existsSync(path.join(f.root, ".git/jig/review-fix")), false);
+});
+
+test("a merge started after preparation blocks resumed publication", async t => {
+  const f = fixture(t), run = await f.start();
+  prepareRoundCommit(run, "Checkpoint");
+  const index = readFileSync(path.join(f.root, ".git/index"));
+  writeFileSync(path.join(f.root, ".git/MERGE_HEAD"), `${f.base}\n`);
+  const stopped = await advance(run.directory);
+  assert.equal(stopped.phase, "BLOCKED");
+  assert.match(stopped.outcome.reason, /Unfinished Git operation.*MERGE_HEAD/);
+  assert.equal(git(f.root, "rev-parse", "HEAD"), f.base);
+  assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+});
+
+for (const contentRepair of [false, true]) test(`core.filemode=false publishes executable repairs with contentRepair=${contentRepair}`, async t => {
+  const f = fixture(t, { dirty: false, value: 2 });
+  writeFileSync(path.join(f.root, "tool.sh"), `#!/bin/sh\necho ${contentRepair ? "before" : "ready"}\n`, { mode: 0o644 });
+  git(f.root, "add", "."); git(f.root, "commit", "-qm", "nonexecutable script");
+  git(f.root, "config", "core.filemode", "false");
+  f.contract.requiredValidation[0].argv = [process.execPath, "-e",
+    "const a=require('node:assert/strict'),c=require('node:child_process');a.match(c.execFileSync('git',['ls-tree','HEAD','--','tool.sh'],{encoding:'utf8'}),/^100755 /);a.equal(c.execFileSync('./tool.sh',{encoding:'utf8'}),'ready\\n')"];
+  const run = await drive(await f.start(), { modeRepair: true, contentRepair });
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(run.round, 1);
+  assert.deepEqual(run.commits.map(c => c.round), [1]);
+  assert.match(git(f.root, "ls-tree", "HEAD", "--", "tool.sh"), /^100755 /);
+  assert.equal(git(f.root, "config", "--bool", "core.filemode"), "false");
 });
 
 test("index publication resumes after HEAD update without duplicating a commit", async t => {
