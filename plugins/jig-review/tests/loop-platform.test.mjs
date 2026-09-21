@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 import { identity, ownedAlive, killOwned, groupRunning } from "../skills/review-fix-loop/scripts/process-ownership.mjs";
 import { locked } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { alternateObjectDirectories, makeOverlay, safePath } from "../skills/review-fix-loop/scripts/repository.mjs";
-import { createRun } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { defaultValidationSandbox, validationSandboxCommand } from "../skills/review-fix-loop/scripts/validation-sandbox.mjs";
 
 const exec = promisify(execFile);

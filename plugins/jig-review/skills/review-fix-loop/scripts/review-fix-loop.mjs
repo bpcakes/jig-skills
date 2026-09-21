@@ -18,6 +18,7 @@ import { cancelJob, commandSucceeded, executableCommand, launchJob, recoverSettl
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
+import { assertCommitScope, checkoutDirty, prepareRoundCommit, publishRoundCommit } from "./round-commits.mjs";
 
 export const TERMINAL = new Set(["CONVERGED", "THRESHOLD_MET", "ROUND_LIMIT", "BLOCKED", "VALIDATION_FAILED", "REVIEW_INCOMPLETE", "SCOPE_CHANGED"]);
 const transitions = {
@@ -108,7 +109,9 @@ function retainedBackups(run) {
 function applicationRecovery(run, options = {}) {
   const backups = reconcileBackups(run.directory, retainedBackups(run));
   const active = run.apply ? reconcileApplication(run.root, run.apply, options) : { retainedTemporaries: [], unresolvedPaths: [], resolved: true };
-  return { retainedTemporaries: active.retainedTemporaries, unresolvedPaths: [...active.unresolvedPaths, ...backups.unresolvedPaths], resolved: active.resolved && backups.resolved };
+  return { retainedTemporaries: active.retainedTemporaries, unresolvedPaths: [...active.unresolvedPaths, ...backups.unresolvedPaths,
+    ...(run.commitJournal ? [{ path: run.commitJournal.indexPath, reason: "Round commit publication requires recovery." }] : [])],
+    resolved: active.resolved && backups.resolved && !run.commitJournal };
 }
 function cleanApplication(run) {
   if (!run.apply && !run.completedApplications?.length && !existsSync(path.join(run.directory, "backups")) && !run.applicationRecovery) return;
@@ -183,7 +186,8 @@ function configure(options, config) {
 }
 
 export async function createRun({ cwd = process.cwd(), contract, options = parseArgs([]), config = {}, fromReview = null }) {
-  options = { ...options, fixMode: options.fixMode ?? DEFAULT_FIX_MODE };
+  options = { ...options, fixMode: options.fixMode ?? DEFAULT_FIX_MODE, commitMode: options.commitMode ?? "per-round" };
+  if (!["per-round", "none"].includes(options.commitMode)) throw new Error("--commit-mode must be per-round or none.");
   const importedReview = fromReview === null ? null : validateHandoff(structuredClone(fromReview));
   if (importedReview) {
     const c = importedReview.payload.capture;
@@ -210,6 +214,14 @@ export async function createRun({ cwd = process.cwd(), contract, options = parse
     const current = await captureFingerprint(scope.args);
     assertCompleteFingerprint(current);
     if (current.fingerprint !== scope.fingerprint.fingerprint) throw new Error("REVIEW_HANDOFF_STALE: scope changed during admission; no discovery review was started.");
+  }
+  if (options.commitMode === "per-round") {
+    assertCommitScope(root, inspected, scope.fingerprint.excludePaths);
+    // A working-tree request becomes HEAD-at-start..tip. A branch request
+    // keeps its original merge base, including all pre-existing branch work.
+    scope.args = { ...scope.args, scope: "branch", base: scope.fingerprint.baseOid ?? scope.fingerprint.headOid, includeWorkingTree: false };
+    scope.fingerprint = await captureFingerprint(scope.args);
+    assertCompleteFingerprint(scope.fingerprint);
   }
   assertValidationSandbox(config.validationSandbox, scope.root);
   for (const role of ["triage", "repair"]) {
@@ -252,6 +264,7 @@ export async function createRun({ cwd = process.cwd(), contract, options = parse
       args: scope.args, fingerprint: scope.fingerprint, initialFingerprint: scope.fingerprint,
       contractHash: hash(contract), original: initial, expected: initial,
       ledger: {}, reports: [], slots: [], attempts: [], validation: [], mutations: [], completedApplications: [],
+      commits: [],
       ...(importedReview ? { importedReview } : {}),
       seenContents: [initial.contentHash], questions: [], answers: [], validationCycle: null, validationFailure: null };
     for (const finding of importedReview?.payload.findings ?? []) {
@@ -509,7 +522,12 @@ function completeIssue(run) {
   const retainedCandidate = role === "triage" && run.candidate;
   if (!checkout) makeOverlay(run, retainedCandidate ? { ...run.expected, files: retainedCandidate.files } : run.expected, label, { verify: !retainedCandidate });
   const assignment = { id, role, fingerprint: run.fingerprint.fingerprint, scope: { ...run.fingerprint, repoRoot: overlay },
-    repository: overlay, contract: contractOf(run), ...extra, fixMode: run.options.fixMode };
+    repository: overlay, contract: contractOf(run), ...extra, fixMode: run.options.fixMode, commitMode: run.options.commitMode };
+  if (run.options.commitMode === "per-round" && run.fingerprint.checkoutClean) {
+    const base = run.initialFingerprint.mergeBaseOid;
+    assignment.commitRange = { base, tip: run.fingerprint.headOid, range: `${base}..${run.fingerprint.headOid}` };
+    if (role === "review") assignment.instructions += " Review the entire commitRange.range, including earlier round commits, against the pinned base. Both terminal reviews must cover this same exact range. Inspect the accumulated behavior for actionable defects; do not limit review to the last commit. Assess the final tip: a defect corrected by a later commit in this range is not a residual finding.";
+  }
   if (!argv) assignment.instructions += `\n\n${readFileSync(new URL("../../comprehensive-review/references/native-tool-output.md", import.meta.url), "utf8").trim()}`;
   assignment.instructions += role === "repair"
     ? `\n\nApply these repair requirements (${run.options.fixMode}): ${run.fixPolicy}`
@@ -969,6 +987,7 @@ function validationsPass(run, candidateHash = run.expected.contentHash) {
   });
 }
 function terminalReady(run) {
+  if (run.options.commitMode === "per-round" && (run.commitJournal || !run.fingerprint.checkoutClean || run.fingerprint.includeWorkingTree)) return false;
   if (!validationsPass(run) || !validationPlanComplete(run) || run.reports.length < 2 || blockers(run) || eligible(run).length) return false;
   if (run.options.reviewPolicy === "strict" && new Set(run.reports.map(r => r.provider)).size < 2) return false;
   return run.reports.every(r => r.fingerprint === run.fingerprint.fingerprint && r.contentHash === run.expected.contentHash && r.complete
@@ -1012,7 +1031,7 @@ function markValidatedFindingsFixed(run, results) {
 async function validate(run) {
   if (discardUnsupportedCandidate(run)) return;
   const commands = contractOf(run).requiredValidation;
-  if (run.candidate && run.config.validationMode === "checkout") {
+  if (run.candidate && (run.config.validationMode === "checkout" || run.options.commitMode === "per-round")) {
     prepareApply(run, false); await applyCandidate(run); return;
   }
   if (!run.validationCycle) {
@@ -1097,7 +1116,8 @@ async function validate(run) {
   markValidatedFindingsFixed(run, cycle.results);
   queueValidationWorkspace(run);
   run.validationCycle = null;
-  if (run.appliedCandidate) {
+  if (run.appliedCandidate || run.commitNeedsReview) {
+    run.commitNeedsReview = false;
     run.appliedCandidate = null; run.failedCandidate = null;
     nextPass(run); transition(run, "REVIEW", "Applied candidate passed required validation; obtain fresh review."); return;
   }
@@ -1148,7 +1168,7 @@ async function applyCandidate(run) {
   let fingerprint;
   try { fingerprint = await captureFingerprint(run.args); assertCompleteFingerprint(fingerprint); }
   catch (error) { inspectionFailed(run, error, "Cannot capture scope after patch application"); return; }
-  if (fingerprint.headOid !== run.initialFingerprint.headOid || fingerprint.mergeBaseOid !== run.initialFingerprint.mergeBaseOid) { transition(run, "SCOPE_CHANGED", "Pinned scope changed while applying patch."); return; }
+  if (fingerprint.headOid !== run.fingerprint.headOid || fingerprint.mergeBaseOid !== run.initialFingerprint.mergeBaseOid) { transition(run, "SCOPE_CHANGED", "Pinned scope changed while applying patch."); return; }
   run.expected = after; run.fingerprint = fingerprint; run.seenContents.push(contentHash(run.candidate.files));
   for (const record of journal.validation) run.validation.push({ ...record, fingerprint: fingerprint.fingerprint, candidateHash: after.contentHash, applied: true });
   // Isolated checks establish candidate behavior, not checkout publication.
@@ -1162,6 +1182,7 @@ async function applyCandidate(run) {
   run.apply = null; run.candidate = null; run.failedCandidate = null; run.validationCycle = null;
   if (journal.restoreOriginal) transition(run, "BLOCKED", "Original contents restored after failed checkout validation; stopped without convergence or fresh validation of the restored state.",
     { code: "RESTORED_ORIGINAL", restoredPaths: journal.changes.map(edit => edit.path) });
+  else if (journal.reviewedAfterValidation && run.options.commitMode === "per-round") { run.commitNeedsReview = true; save(run, "candidate-applied", { reason: "Commit the candidate and validate its exact commit before fresh review." }); }
   else if (journal.reviewedAfterValidation) { nextPass(run); transition(run, "REVIEW", "Validated repair applied; staged content preserved."); }
   else save(run, "candidate-applied", { reason: "Validate in the existing checkout environment before another review." });
 }
@@ -1200,8 +1221,40 @@ function failedAdvance(directory, error) {
   if (changed) save(durable, "cleanup-blocked", { reason });
   return durable;
 }
+async function commitRound(run) {
+  const titles = [...new Set(Object.values(run.ledger).filter(f => f.status === "needs-validation" || f.status === "actionable").map(f => f.title))];
+  const goal = contractOf(run).goal;
+  const summary = (titles[0] ?? goal).replace(/\s+/g, " ").slice(0, 120);
+  const message = `${run.round ? `Repair round ${run.round}` : "Review baseline"}: ${summary}\n\n${goal}${titles.length ? `\n\n${titles.join("\n")}` : ""}`;
+  prepareRoundCommit(run, message);
+  if (!run.commitJournal) return;
+  publishRoundCommit(run);
+  const journal = run.commitJournal;
+  const after = snapshot(run.root, run.directory, { maxBytes: run.config.storage.maxSourceBytes });
+  const fingerprint = await captureFingerprint(run.args);
+  assertCompleteFingerprint(fingerprint);
+  if (!sameContent(after.files, run.expected.files) || !fingerprint.checkoutClean
+      || fingerprint.headOid !== journal.oid || fingerprint.baseOid !== run.args.base
+      || fingerprint.mergeBaseOid !== run.initialFingerprint.mergeBaseOid) throw new Error("Published round commit does not match the pinned source and range; journal retained.");
+  if (journal.oid !== journal.parent) run.commits.push({ oid: journal.oid, parent: journal.parent, round: journal.round, message: journal.message });
+  run.expected = after; run.fingerprint = fingerprint;
+  run.commitJournal = null;
+  // Git-aware checks must execute on the new commit. Earlier receipts/reviews
+  // remain historical evidence, never re-labelled for a different tip.
+  run.validationCycle = null;
+  if (run.phase === "VALIDATE") run.commitNeedsReview = true;
+  if (run.reports.length) nextPass(run);
+  save(run, "round-committed", { oid: journal.oid, parent: journal.parent, round: journal.round });
+}
 async function advanceLocked(run) {
     const directory = run.directory;
+    if (run.commitJournal) {
+      try { await commitRound(run); }
+      catch (error) {
+        if (!TERMINAL.has(run.phase)) transition(run, "BLOCKED", `Round commit recovery stopped: ${error.message}`, { code: "COMMIT_RECOVERY" });
+        return run;
+      }
+    }
     if (TERMINAL.has(run.phase)) {
       prepareTerminalCleanup(run);
       const cycle = run.validationCycle;
@@ -1227,6 +1280,12 @@ async function advanceLocked(run) {
     if (run.waitingForAnswer) return run;
     if (run.pending?.preparing) { completeIssue(run); launch(run); return run; }
     if (run.pending) { await consume(run); return run; }
+    if (run.options.commitMode === "per-round" && ["REVIEW", "VALIDATE"].includes(run.phase)
+        && !run.candidate && !run.validationCycle && checkoutDirty(run.root)) {
+      try { await commitRound(run); }
+      catch (error) { transition(run, "BLOCKED", `Round commit stopped: ${error.message}`, { code: "COMMIT_FAILED" }); }
+      return run;
+    }
     if (run.phase === "INIT") transition(run, "PREFLIGHT", "Contract and scope pinned.");
     else if (run.phase === "PREFLIGHT") {
       run.capabilities = run.config.reviewers.map(p => ({ ...p, available: p.command
@@ -1319,7 +1378,11 @@ export function status(run) {
   }
   return { run: run.directory, phase: run.phase, outcome: run.outcome, scope: run.fingerprint.scope,
     ...(run.importedReview ? { fromReview: run.importedReview.hash } : {}),
-    round: run.round, fixMode: run.options.fixMode, filesChanged,
+    round: run.round, fixMode: run.options.fixMode, commitMode: run.options.commitMode, filesChanged,
+    commits: run.commits ?? [],
+    ...(run.options.commitMode === "per-round" ? { commitRange: { base: run.initialFingerprint.mergeBaseOid, tip: run.fingerprint.headOid,
+      range: `${run.initialFingerprint.mergeBaseOid}..${run.fingerprint.headOid}`, checkoutClean: run.fingerprint.checkoutClean },
+      ...(run.commitJournal ? { commitRecovery: run.commitJournal } : {}) } : {}),
     sourceReconciliations: run.sourceReconciliations ?? [],
     ...(run.retainedCheckout ? { retainedCheckout: retainedCheckout ?? { pending: true } } : {}),
     findings: Object.values(run.ledger).map(({ id, title, status }) => ({ id, title, status })),

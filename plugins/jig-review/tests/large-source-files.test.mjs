@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { applyFile, backupEntry, changes, entry, git, makeOverlay, pathsDifferFromIndex, snapshot } from "../skills/review-fix-loop/scripts/repository.mjs";
 import { copyBlob, storeFile } from "../skills/review-fix-loop/scripts/run-store.mjs";
-import { advance, createRun, runUntilBoundary, status } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { advance, runUntilBoundary, status } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 
 const size = 36897688;

@@ -1,7 +1,7 @@
 interface:
   display_name: "Review Fix Loop"
-  short_description: "Persisted review, repair, and validation loops"
-  default_prompt: "Use $review-fix-loop to review and fix this code, validate the task requirements, and obtain terminal reviews within the repair limit."
+  short_description: "Review, repair, and converge a committed series"
+  default_prompt: "Use $review-fix-loop to review and fix this code, commit each repair round, validate the final tip, and review the full pinned commit range within the repair limit."
 
 policy:
   allow_implicit_invocation: true

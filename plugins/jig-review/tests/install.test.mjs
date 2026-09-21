@@ -35,6 +35,7 @@ function assertInstalledParser(destination) {
   assert.equal(result.reviewPolicy, "strict");
   assert.equal(result.maxRounds, 1);
   assert.equal(result.fixMode, "comprehensive");
+  assert.equal(result.commitMode, "per-round");
 }
 
 test("fresh direct installation includes a usable review dependency", (t) => {

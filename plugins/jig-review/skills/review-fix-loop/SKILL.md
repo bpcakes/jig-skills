@@ -1,6 +1,6 @@
 ---
 name: review-fix-loop
-description: Review and fix code through a bounded, persisted repair and validation loop. Use for ordinary review-and-fix requests; review-only and explicitly one-pass requests stay outside the loop.
+description: Review and fix code through a bounded loop, committing each repair round by default and reviewing the full pinned commit range. Use for ordinary review-and-fix requests; review-only and explicitly one-pass requests stay outside the loop.
 ---
 
 # Review Fix Loop
@@ -33,7 +33,13 @@ For repair assignments, establish the failure mechanism and repair the contract 
 
 Make repairs directly in the actual checkout identified by the assignment's `repository`. Default review, triage, repair, and validation all use that checkout; no temporary source copy is required. Return `workspaceEdits` with each changed file's `path`, `reason`, and `findingIds`. Preserve pre-existing work, existing file permissions, and the Git index. Stop editing before submitting the result.
 
-The controller records edits already present in the checkout and runs the repository's normal checks there. Failed or interrupted repairs remain visible; there is no automatic rollback or separate publication step for direct edits. Review and triage remain read-only. Diagnostic commands may write ignored build/cache outputs in the checkout; put other scratch files outside it. Only controller validation supplies required validation evidence.
+The controller records edits already present in the checkout and runs the repository's normal checks there. Failed or interrupted repairs remain visible; there is no automatic rollback or source-copy publication step for direct edits. Review and triage remain read-only. Diagnostic commands may write ignored build/cache outputs in the checkout; put other scratch files outside it. Only controller validation supplies required validation evidence.
+
+## Commit modes
+
+`--commit-mode per-round` is the default. The controller checkpoints existing included working changes before discovery, then appends one commit for each completed repair round before validation. Failed validation keeps that round's commit; recovery uses another round. It never squashes or rewrites earlier commits. All reviews cover the entire range from the fixed initial base to the current tip. Convergence requires a clean checkout, successful validation of that tip, and two complete terminal reviews of the same exact range. A later repair invalidates earlier terminal evidence.
+
+Use `--commit-mode none` for working-tree repairs with no staging or commits. Explicit requests to leave changes uncommitted select this mode. Assignment agents preserve the index in both modes; only the controller publishes round commits. State the effective commit mode. Read [commit publication](references/commits.md) for base selection, existing staged work, prerequisites, and recovery.
 
 ## Repair modes
 
@@ -49,7 +55,7 @@ Map explicit plain-language requests for minimal changes or comprehensive diagno
 
 For strict review or external provider bridges, read [configuration.md](references/configuration.md). Strict requires configured JSON bridges; none is bundled.
 
-Defaults are `--fix-mode balanced`, `--scope auto`, `--max-rounds 3`, `--review-policy balanced`, and `--min-severity low`. `--base` implies branch scope including local work. Balanced review uses two isolated discovery reviewers, one fresh review after repair, then a second independent terminal review. It can use the same available provider in separate isolated sessions. Strict requires two different providers and fails honestly when that evidence is unavailable. Each review slot or triage/repair assignment allows at most `--max-provider-attempts 3` attempts; uncertain executions are never replayed. `--max-rounds` permits 1–10 rounds, including failed repair and recovery rounds, but not transport retries of the same assignment. Supporting repairs consume ordinary rounds. There is no separate closure protocol.
+Defaults are `--commit-mode per-round`, `--fix-mode balanced`, `--scope auto`, `--max-rounds 3`, `--review-policy balanced`, and `--min-severity low`. `--base` implies branch scope including local work. Balanced review uses two isolated discovery reviewers, one fresh review after repair, then a second independent terminal review. It can use the same available provider in separate isolated sessions. Strict requires two different providers and fails honestly when that evidence is unavailable. Each review slot or triage/repair assignment allows at most `--max-provider-attempts 3` attempts; uncertain executions are never replayed. `--max-rounds` permits 1–10 rounds, including failed repair and recovery rounds, but not transport retries of the same assignment. Supporting repairs consume ordinary rounds. There is no separate closure protocol.
 
 Use `node scripts/loop-options.mjs` to normalize supplied controls; reviewer and exclusion controls come from the sibling comprehensive-review parser. `--wait` has been removed. An explicit higher `--min-severity` is a scope limit and can produce only `THRESHOLD_MET`, never `CONVERGED` or “clean”.
 
@@ -57,13 +63,13 @@ Required validation cannot be waived by triage or severity filtering. Missing pr
 
 ## Authority boundary
 
-An authorized review-and-fix request permits necessary repository-local edits, tests, formatting, required generated outputs, safe local validation, and bounded re-review. Routine implementation choices, necessary structural repairs, and another permitted round need no conversational confirmation.
+An authorized review-and-fix request permits necessary repository-local edits, tests, formatting, required generated outputs, safe local validation, bounded re-review, and the selected mode's controller-owned local commits. Routine implementation choices, necessary structural repairs, and another permitted round need no conversational confirmation. Respect an explicit prohibition on committing by selecting `--commit-mode none`.
 
-Ask only for a material public-behavior choice that repository evidence cannot resolve, or new authority for secret access, paid external systems, unapproved dependency installation, destructive data operations, commits, pushes, releases, or deployments. Reuse authorization already present in the session. Bundle unresolved contract choices into one question, record the answer once, and continue independent safe work. Host tool approvals and sandbox restrictions still apply.
+Ask only for a material public-behavior choice that repository evidence cannot resolve, or new authority for secret access, paid external systems, unapproved dependency installation, destructive data operations, history rewriting, pushes, releases, or deployments. Reuse authorization already present in the session. Bundle unresolved contract choices into one question, record the answer once, and continue independent safe work. Host tool approvals and sandbox restrictions still apply.
 
 ## Outcome
 
-Report the controller outcome, repair mode, satisfied or unresolved requirements, fixed and outstanding findings, changed files, validation commands/results, whether the index needs re-staging, and any blocker or incomplete evidence. Distinguish mitigations and residual causes from resolved findings. Link the run directory. Keep exact inventories, snapshots, fingerprints, attempts, and transcripts in `run.json`, `events.jsonl`, and their referenced artifacts.
+Report the controller outcome, repair and commit modes, committed range and round commits when applicable, satisfied or unresolved requirements, fixed and outstanding findings, changed files, validation commands/results, whether the index needs re-staging, and any blocker or incomplete evidence. Distinguish mitigations and residual causes from resolved findings. Link the run directory. Keep exact inventories, snapshots, fingerprints, attempts, and transcripts in `run.json`, `events.jsonl`, and their referenced artifacts.
 
 Acceptance uncertainty is reconciled in the existing triage step: a source-backed `fixed` decision for `requirement-<criterionId>` records resolutions against the assessed reports and matching validation receipts. Keep actual coverage or behavior gaps unresolved; passed checks alone do not settle them. Preserve original reports, and do not start another review or run merely to replace an uncertain verdict. See [assignment evidence](references/assignments.md).
 

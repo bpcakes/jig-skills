@@ -8,9 +8,9 @@ export const DEFAULT_MAX_ROUNDS = 3;
 export const MAX_ROUNDS = 10;
 
 export function parseArgs(argv) {
-  const options = { scope: "auto", base: null, fixMode: DEFAULT_FIX_MODE, minSeverity: "low", maxRounds: DEFAULT_MAX_ROUNDS,
+  const options = { scope: "auto", base: null, fixMode: DEFAULT_FIX_MODE, commitMode: "per-round", minSeverity: "low", maxRounds: DEFAULT_MAX_ROUNDS,
     reviewPolicy: "balanced", maxProviderAttempts: 3, infrastructureRetries: 1 };
-  const names = { "--scope": "scope", "--base": "base", "--fix-mode": "fixMode", "--min-severity": "minSeverity",
+  const names = { "--scope": "scope", "--base": "base", "--fix-mode": "fixMode", "--commit-mode": "commitMode", "--min-severity": "minSeverity",
     "--max-rounds": "maxRounds", "--review-policy": "reviewPolicy", "--max-provider-attempts": "maxProviderAttempts" };
   const seen = new Set();
   const forwarded = [];
@@ -32,6 +32,8 @@ export function parseArgs(argv) {
   if (!["balanced", "strict"].includes(options.reviewPolicy)) throw new Error("--review-policy must be balanced or strict.");
   options.fixMode = options.fixMode.toLowerCase();
   repairPolicy(options.fixMode);
+  options.commitMode = options.commitMode.toLowerCase();
+  if (!["per-round", "none"].includes(options.commitMode)) throw new Error("--commit-mode must be per-round or none.");
   options.minSeverity = options.minSeverity.toLowerCase();
   if (!["low", "medium", "high", "critical"].includes(options.minSeverity)) throw new Error("Unsupported --min-severity.");
   for (const key of ["maxRounds", "maxProviderAttempts"]) {

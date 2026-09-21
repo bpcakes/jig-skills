@@ -43,7 +43,7 @@ This example uses your Codex session without a second reviewer CLI. The commands
 | Decide whether similar implementations should be merged | Dup unifier in [Rust](#jig-rust) or [TypeScript/React](#jig-typescript) | Consolidation recommendations |
 | Check a specific correctness or testing concern | Focused reviews in [Rust](#jig-rust) or [TypeScript/React](#jig-typescript) | Findings |
 | Get independent reviews of the same diff | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Combined findings and coverage notes |
-| Review, fix, test, and re-review working changes | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Validated code changes and convergence report |
+| Review, fix, test, and re-review working changes | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Reviewed commit series and convergence report |
 | Write, improve, or execute an implementation plan | [ExecPlans](#jig-execplans) | Plan, plan edits, or implementation |
 | Assess privacy or encryption claims | Relevant [privacy skills](#jig-privacy-audit); use [audit intake](plugins/jig-privacy-audit/skills/audit-intake-and-evidence-map/SKILL.md) when requesting scope or evidence planning | Findings or an audit plan |
 
@@ -115,7 +115,7 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 | Skill | Use it for | Default result |
 |---|---|---|
 | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
-| [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, recoverable repairs, local validation, and independent terminal reviews. | Code changes and run record |
+| [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, one commit per repair round by default, local validation, and independent terminal reviews of the full fixed-base range. | Code changes and run record |
 
 Both skills run in Codex and require its subagent facility. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 
@@ -255,7 +255,7 @@ Review, fix, test, and freshly re-review working changes:
 $jig-review:review-fix-loop --base main
 ```
 
-The review example returns merged findings plus reviewer and coverage notes. The loop example changes files but does not commit them. Repair defaults to `--fix-mode balanced`: diagnose the demonstrated cause and repair the responsible boundary, expanding scope when evidence warrants it. Use `--fix-mode comprehensive` for broader investigation of related mechanisms and recurrence risks, or `--fix-mode minimal` for focused investigation with the same causal-repair standard. See [comprehensive-review usage](docs/comprehensive-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.
+The review example returns merged findings plus reviewer and coverage notes. The loop example appends a commit per repair round and reviews the full range from the pinned base. Use `--commit-mode none` to leave changes uncommitted. Repair defaults to `--fix-mode balanced`: diagnose the demonstrated cause and repair the responsible boundary, expanding scope when evidence warrants it. Use `--fix-mode comprehensive` for broader investigation of related mechanisms and recurrence risks, or `--fix-mode minimal` for focused investigation with the same causal-repair standard. See [comprehensive-review usage](docs/comprehensive-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.
 
 Automatic selection follows the requested task. Abstraction, duplication, Fowler refactoring, and component API assessments require a request for that kind of design analysis; routine coding and general review do not start those audits. Natural-language requests work without naming the skill. Correctness reviews, simplification, and review orchestration retain their existing task boundaries.
 

@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { advance, answer, createRun, prune, release, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { advance, answer, prune, release, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { hash, loadRun, locked, readJSON } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { snapshot } from "../skills/review-fix-loop/scripts/repository.mjs";
@@ -191,7 +192,7 @@ test("external repair adapter errors retain their cause after partial workspace 
 for (const mode of ["minimal", "balanced", "comprehensive"]) test(`CLI ${mode} repair policy survives native assignment boundaries and resume`, async t => {
   const f = fixture(t), contractFile = path.join(f.directory, "contract.json");
   writeFileSync(contractFile, JSON.stringify(f.contract));
-  const initial = JSON.parse(execFileSync(process.execPath, [cli, "init", "--cwd", f.root, "--contract", contractFile, "--fix-mode", mode], { encoding: "utf8" }));
+  const initial = JSON.parse(execFileSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--fix-mode", mode], { encoding: "utf8" }));
   assert.equal(initial.fixMode, mode);
   const started = loadRun(initial.run), policy = started.fixPolicy;
   assert.ok(policy.length > 0);

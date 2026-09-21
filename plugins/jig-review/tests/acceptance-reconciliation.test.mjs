@@ -4,7 +4,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { advance, createRun, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { advance, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 
 async function fixture(t, { failValidation = false, receiptWrites = false, externalReview = false } = {}) {

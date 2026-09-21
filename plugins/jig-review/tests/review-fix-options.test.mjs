@@ -12,7 +12,14 @@ test("defaults resolve auto scope, all severities, three rounds and balanced nat
   assert.equal(o.scope, "auto"); assert.equal(o.minSeverity, "low"); assert.equal(o.maxRounds, 3);
   assert.equal(o.reviewPolicy, "balanced"); assert.deepEqual(o.review.reviewers, ["codex"]);
   assert.equal(o.fixMode, "balanced");
+  assert.equal(o.commitMode, "per-round");
   assert.equal(DEFAULT_MAX_ROUNDS, 3); assert.equal(MAX_ROUNDS, 10);
+});
+test("commit mode defaults to per-round and accepts an explicit non-committing mode", () => {
+  assert.equal(parseArgs(["--commit-mode", " NONE "]).commitMode, "none");
+  for (const value of ["squash", "", "true"]) assert.throws(() => parseArgs(["--commit-mode", value]), /commit-mode|Missing value/);
+  assert.throws(() => parseArgs(["--commit-mode"]), /Missing value/);
+  assert.throws(() => parseArgs(["--commit-mode", "none", "--commit-mode", "per-round"]), /Duplicate/);
 });
 test("strict policy, provider settings and exclusions compose", () => {
   const o = parseArgs(["--review-policy", "strict", "--all-reviewers", "--cursor-speed", "fast", "--exclude-path", ".agents/", "--max-rounds", "2"]);

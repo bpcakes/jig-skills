@@ -6,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { advance, createRun, prune, release, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { advance, prune, release, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { discoverValidation } from "../skills/review-fix-loop/scripts/task-contract.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { loadRun, locked, readJSON } from "../skills/review-fix-loop/scripts/run-store.mjs";
@@ -605,18 +606,18 @@ test("settlement receipts survive archived records and do not release another ac
   assert.equal(readJSON(active).directory, next.directory);
 });
 
-test("direct-checkout runs pin version 13 and cannot resume version-12 records", async t => {
+test("runs pin version 14 and cannot resume version-13 records", async t => {
   const f = fixture(t), run = await f.start(), file = path.join(run.directory, "run.json");
-  assert.equal(run.version, 13, "Direct assignments must not be resumed by a copy-based controller");
-  assert.equal(loadRun(run.directory).version, 13);
-  const record = readJSON(file); record.version = 12;
+  assert.equal(run.version, 14, "Round commits require a controller that understands the pinned commit mode");
+  assert.equal(loadRun(run.directory).version, 14);
+  const record = readJSON(file); record.version = 13;
   writeFileSync(file, JSON.stringify(record));
   const before = readFileSync(file);
   await assert.rejects(advance(run.directory), /older runs require their original controller/);
   assert.deepEqual(readFileSync(file), before, "An incompatible run is not migrated or consumed");
 });
 
-for (const version of [4, 5, 6, 7, 8, 9, 10, 11, 12]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
+for (const version of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
   const f = fixture(t), run = await drive(await f.start()), file = path.join(run.directory, "run.json"), active = path.join(run.runsRoot, "active.json");
   const record = readJSON(file); record.version = version;
   if (version < 8) { delete record.fixPolicy; delete record.options.fixMode; }

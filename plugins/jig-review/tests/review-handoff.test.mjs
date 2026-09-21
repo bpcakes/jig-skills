@@ -8,7 +8,8 @@ import test from "node:test";
 import { createHandoff, readHandoff, validateHandoff } from "../skills/comprehensive-review/scripts/review-handoff.mjs";
 import { readBrief } from "../skills/comprehensive-review/scripts/review-brief.mjs";
 import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
-import { createRun, runUntilBoundary, submit } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { runUntilBoundary, submit } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { loadRun, readJSON } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 
@@ -96,7 +97,7 @@ test("handoff CLI exports immutable evidence and init consumes it without discov
   execFileSync(process.execPath, [exporter, "--capture", captureFile, "--brief", f.briefFile, "--brief-hash", handoff.payload.brief.hash, "--review", reviewFile, "--output", output]);
   assert.deepEqual(readHandoff(output), handoff);
   const contractFile = path.join(f.artifacts, "contract.json"); writeFileSync(contractFile, JSON.stringify(f.contract));
-  const result = JSON.parse(execFileSync(process.execPath, [cli, "init", "--cwd", f.root, "--contract", contractFile, "--from-review", output]));
+  const result = JSON.parse(execFileSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--from-review", output]));
   const saved = loadRun(result.run); f.runs.push(saved);
   rmSync(output);
   const run = await runUntilBoundary(saved.directory);
@@ -154,7 +155,7 @@ test("a supplied handoff cannot restart an already active run", async t => {
 test("CLI rejects missing handoff files and does not silently use normal init", t => {
   const f = fixture(t), contractFile = path.join(f.artifacts, "contract.json");
   writeFileSync(contractFile, JSON.stringify(f.contract));
-  const result = spawnSync(process.execPath, [cli, "init", "--cwd", f.root, "--contract", contractFile, "--from-review", path.join(f.artifacts, "missing")], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--from-review", path.join(f.artifacts, "missing")], { encoding: "utf8" });
   assert.equal(result.status, 1); assert.match(result.stderr, /ENOENT/);
   assert.equal(existsSync(path.join(f.root, ".git/jig/review-fix/active.json")), false);
 });

@@ -7,7 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import { applyFile, entry, git, makeOverlay, pathsDifferFromIndex, readRegularFile, snapshot } from "../skills/review-fix-loop/scripts/repository.mjs";
 import { storeBlob } from "../skills/review-fix-loop/scripts/run-store.mjs";
-import { advance, createRun } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { advance } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { gitEnvironment } from "../skills/comprehensive-review/scripts/git-environment.mjs";
 
 function fixture(t) {
