@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -59,9 +59,42 @@ for (const disposition of ["awaiting-validation", "needs-validation"]) test(`ser
   }
 });
 
+for (const scenario of ["failed prerequisite", "missing provider", "strict quorum", "missing provider without prerequisites"]) {
+  test(`per-round ${scenario} preserves HEAD and partial staging`, async t => {
+    const f = fixture(t);
+    writeFileSync(path.join(f.root, "value.cjs"), "module.exports=1;\n"); f.git("add", "value.cjs");
+    writeFileSync(path.join(f.root, "value.cjs"), "module.exports=2;\n");
+    const index = readFileSync(path.join(f.root, ".git/index"));
+    const missing = scenario.startsWith("missing provider");
+    const config = { reviewers: [{ id: "codex", ...(missing ? { command: [path.join(f.root, ".git/missing-reviewer")] } : {}) }] };
+    const args = scenario === "strict quorum" ? ["--review-policy", "strict"] : ["--reviewers", "codex"];
+    const prerequisites = scenario.endsWith("without prerequisites") ? [] : [{ id: "preflight", argv: [process.execPath, "-e",
+      `require('node:fs').appendFileSync('.git/preflight-calls','run\\n');process.exit(${scenario === "failed prerequisite" ? 9 : 0})`] }];
+    const run = await runUntilBoundary((await f.start(config, args, { prerequisites })).directory);
+    assert.equal(run.phase, scenario === "failed prerequisite" ? "VALIDATION_FAILED" : "REVIEW_INCOMPLETE");
+    if (scenario === "failed prerequisite") assert.equal(run.outcome.code, "PREREQUISITE_FAILED");
+    assert.equal(f.git("rev-parse", "HEAD"), f.base); assert.deepEqual(run.commits, []);
+    assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
+    assert.equal(f.git("show", ":value.cjs"), "module.exports=1;");
+    assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports=2;\n");
+    assert.equal(run.attempts.length, 0); assert.equal(run.reports.length, 0);
+    assert.equal(existsSync(path.join(f.root, ".git/check-calls")), false);
+    assert.deepEqual(run.validation.map(v => v.checkId), scenario === "failed prerequisite" ? ["preflight"] : []);
+    const calls = path.join(f.root, ".git/preflight-calls");
+    assert.equal(existsSync(calls) ? readFileSync(calls, "utf8") : "", scenario === "failed prerequisite" ? "run\n" : "");
+  });
+}
+
 for (const acceptance of ["satisfied", "uncertain"]) test(`default per-round prerequisites preserve discovery with ${acceptance} acceptance`, async t => {
   const f = fixture(t), reviewIds = [];
-  let run = await f.start({}, [], { prerequisites: [{ id: "preflight", argv: [process.execPath, "-e", "process.exit(0)"] }] });
+  writeFileSync(path.join(f.root, "value.cjs"), "module.exports=1;\n"); f.git("add", "value.cjs");
+  writeFileSync(path.join(f.root, "value.cjs"), "module.exports=2;\n");
+  let run = await f.start({}, [], { prerequisites: [{ id: "preflight", argv: [process.execPath, "-e",
+    `const assert=require('node:assert/strict'),{execFileSync}=require('node:child_process');
+     const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
+     assert.equal(git('rev-parse','HEAD'),${JSON.stringify(f.base)});
+     assert.equal(git('show',':value.cjs'),'module.exports=1;');
+     assert.equal(require('./value.cjs'),2);`] }] });
   for (let n = 0; n < 20; n++) {
     run = await runUntilBoundary(run.directory);
     if (TERMINAL.has(run.phase)) break;

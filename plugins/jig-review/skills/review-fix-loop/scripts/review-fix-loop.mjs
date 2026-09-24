@@ -1354,22 +1354,22 @@ async function advanceLocked(run) {
       await consume(run); return run;
     }
     if (run.options.commitMode === "per-round" && ["REVIEW", "VALIDATE"].includes(run.phase)
-        && !run.candidate && !run.validationCycle && checkoutDirty(run.root)) {
+        && !run.preflightPending && !run.candidate && !run.validationCycle && checkoutDirty(run.root)) {
       try { await commitRound(run); }
       catch (error) { transition(run, "BLOCKED", `Round commit stopped: ${error.message}`, { code: "COMMIT_FAILED" }); }
       return run;
     }
     if (run.phase === "INIT") transition(run, "PREFLIGHT", "Contract and scope pinned.");
     else if (run.phase === "PREFLIGHT") {
-      if (!run.preflightComplete && contractOf(run).prerequisites?.length) {
-        run.preflightPending = true; transition(run, "VALIDATE", "Check prerequisites before reviewer work."); return run;
-      }
       run.capabilities = run.config.reviewers.map(p => ({ ...p, available: p.command
         ? executableCommand({ role: "review", assignment: { provider: p.id }, cwd: run.root, command: p.bundled ? [p.id === "claude" ? "claude" : "cursor-agent"] : p.command, environmentFrom: run.config.environmentFrom?.review }) : p.id === "codex" }));
       const unavailable = run.options.explicitReviewers ? run.options.review.reviewers.filter(id => !run.capabilities.some(p => p.id === id && p.available)) : [];
       if (unavailable.length) { transition(run, "REVIEW_INCOMPLETE", `Explicitly selected providers are unavailable: ${unavailable.join(", ")}. Install their CLI or configure a command.`, { unavailable }); return run; }
       if (run.options.reviewPolicy === "strict" && run.capabilities.filter(p => p.available).length < 2) {
         transition(run, "REVIEW_INCOMPLETE", "Strict review requires two available provider capabilities; install the selected CLI or configure its command."); return run;
+      }
+      if (!run.preflightComplete && contractOf(run).prerequisites?.length) {
+        run.preflightPending = true; transition(run, "VALIDATE", "Check prerequisites before reviewer work."); return run;
       }
       if (run.importedReview) transition(run, "TRIAGE", "Completed review imported; verify its findings without repeating discovery.");
       else { nextPass(run); transition(run, "REVIEW", "Reviewer capabilities recorded."); }
