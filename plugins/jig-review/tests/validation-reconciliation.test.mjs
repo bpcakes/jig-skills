@@ -283,10 +283,12 @@ test("validation assessment rejects duplicate identities without accepting parti
   const result = response(run);
   assert.equal(result.validationImpact.length, 2);
   result.validationImpact[1].assignmentId = result.validationImpact[0].assignmentId;
-  await send(run, result);
+  const id = run.pending.id;
+  await assert.rejects(send(run, result), /duplicate assignmentId/);
   run = await advance(run.directory);
+  assert.equal(run.pending.id, id, "Correct the same assignment without another attempt");
   assert.equal(run.validationReuse, undefined);
-  assert.match(run.assignmentAttempts.at(-1).error, /exactly once/);
+  assert.equal(run.assignmentAttempts.at(-1).error, undefined);
   const done = await drive(run);
   assert.equal(done.phase, "CONVERGED", JSON.stringify(done.outcome));
   assert.deepEqual(f.calls(), ["first", "second"]);

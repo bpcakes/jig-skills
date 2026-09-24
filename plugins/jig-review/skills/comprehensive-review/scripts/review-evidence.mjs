@@ -167,7 +167,14 @@ class ReviewEvidence {
     };
   }
 
-  annotateReport(report, context) {
+  structuredReport(report, context) {
+    if (context.incomplete) throw new Error("Incomplete review evidence cannot produce a complete structured review.");
+    if (!context.evidence) return report;
+    this.annotateReport(report, context, { requireComplete: true });
+    return report.replace(/<review-coverage>\s*[\s\S]*?<\/review-coverage>\s*$/, "").trim();
+  }
+
+  annotateReport(report, context, { requireComplete = false } = {}) {
     if (!context.evidence) return report;
     const match = report.match(/<review-coverage>\s*([\s\S]*?)\s*<\/review-coverage>\s*$/);
     const reviewed = new Set();
@@ -188,6 +195,7 @@ class ReviewEvidence {
     if (!report) throw new Error("Reviewer returned coverage without a review report.");
     const missing = [...this.receipts.keys()].filter((id) => !reviewed.has(id));
     const limited = invalid || missing.length > 0 || context.incomplete;
+    if (requireComplete && limited) throw new Error("Structured review requires complete valid coverage receipts.");
     const notes = [
       `Evidence coverage: ${limited ? "limited" : "reviewer-attested"}; ${reviewed.size}/${this.receipts.size} pages reported reviewed with valid receipts.`,
       "Receipts attest page access and the reviewer's coverage claim, not review quality. Scope fingerprint status is separate.",

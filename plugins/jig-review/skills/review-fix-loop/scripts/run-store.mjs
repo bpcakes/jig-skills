@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { streamFile } from "./file-content.mjs";
 // V14 pins commit mode and journals controller-owned round commits.
 // Older runs retain their original frozen instructions and controller.
-export const RUN_VERSION = 14;
+export const RUN_VERSION = 15;
 
 const canonical = value => value && typeof value === "object" && !Array.isArray(value)
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]))
@@ -60,7 +60,7 @@ export function atomic(file, value) {
 export const json = (file, value) => atomic(file, `${JSON.stringify(value, null, 2)}\n`);
 // Large immutable snapshots stay outside hot workflow state. On resume they
 // are lazy: polling a pending job need not read or parse any file inventory.
-const manifestFields = { original: true, expected: true, preservationBaseline: true, sourceChanges: true, reconciledPaths: true, importedReview: true, pending: { before: true, metadata: true },
+const manifestFields = { original: true, expected: true, preservationBaseline: true, sourceChanges: true, reconciledPaths: true, importedReview: true, pending: { before: true, metadata: true }, reviewQueue: { "*": { before: true, metadata: true } },
   retainedCheckout: { before: true, metadata: true },
   candidate: { files: true }, failedCandidate: { files: true }, appliedCandidate: { files: true },
   validationCycle: { files: true, metadata: true }, apply: { source: true } };
@@ -84,8 +84,9 @@ function manifests(value, fields, directory, reading) {
   if (!value) return value;
   const result = {};
   for (const key of Object.keys(value)) {
-    if (!Object.hasOwn(fields, key)) { result[key] = value[key]; continue; }
-    if (fields[key] !== true) { result[key] = manifests(value[key], fields[key], directory, reading); continue; }
+    const field = Object.hasOwn(fields, key) ? fields[key] : fields["*"];
+    if (field === undefined) { result[key] = value[key]; continue; }
+    if (field !== true) { result[key] = manifests(value[key], field, directory, reading); continue; }
     if (!reading) {
       const getter = Object.getOwnPropertyDescriptor(value, key)?.get;
       result[key] = references.get(getter) ?? storeManifest(directory, value[key]);
@@ -152,6 +153,6 @@ function loadVersionedRun(directory, versions) {
 export const loadRun = directory => loadVersionedRun(directory, [RUN_VERSION]);
 // V4 through V13 share the readable journal and manifest schema. This reader is
 // exclusively for releasing a settled reference, never resuming old work.
-export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, RUN_VERSION]);
+export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, RUN_VERSION]);
 export function resultFile(run, id) { return path.join(run.directory, "assignments", id, "result.json"); }
 export function hasResult(run, id) { return existsSync(resultFile(run, id)); }

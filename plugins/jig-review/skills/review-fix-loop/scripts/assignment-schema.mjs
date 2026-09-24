@@ -23,7 +23,7 @@ export function resultSchema(assignment) {
         assignmentId: choice(assignment.validationAssessment.checks.map(c => c.assignmentId)),
         status: choice(["unaffected", "rerun"]), evidence: text,
       }), { minItems: assignment.validationAssessment.checks.length, maxItems: assignment.validationAssessment.checks.length }) } : {}),
-      decisions: array(object({ id: choice(assignment.findings.map(f => f.id)), status: choice(["actionable", "rejected", "fixed", "blocked", ...(assignment.sourceChanges ? ["needs-validation"] : [])]), evidence: text }),
+      decisions: array(object({ id: choice(assignment.findings.map(f => f.id)), status: choice(["actionable", "rejected", "fixed", "blocked", "awaiting-validation", ...(assignment.sourceChanges ? ["needs-validation"] : [])]), evidence: text }),
         { minItems: assignment.findings.length, maxItems: assignment.findings.length }) }),
     object({ ...envelope, question: object({ text, recommended: text, evidence: text }) })] };
   } else if (assignment.role === "repair") {
@@ -37,7 +37,7 @@ export function resultSchema(assignment) {
     ] }, { minItems: 1, maxItems: 128 }) })] };
   } else throw new Error(`No result schema for assignment role: ${assignment.role}`);
   return { $schema: "https://json-schema.org/draft/2020-12/schema", oneOf: [success,
-    object({ error: text, execution: { type: "string", enum: ["completed", "uncertain"] } }, ["error"])] };
+    object({ ...envelope, error: text, retryable: { type: "boolean" }, execution: { type: "string", enum: ["completed", "uncertain"] } }, ["error"])] };
 }
 
 // Execute precisely the small schema vocabulary generated above. Fail closed
@@ -49,6 +49,7 @@ function matches(schema, value) {
   if (schema.oneOf && schema.oneOf.filter(branch => matches(branch, value)).length !== 1) return false;
   if (Object.hasOwn(schema, "const") && value !== schema.const) return false;
   if (schema.enum && !schema.enum.includes(value)) return false;
+  if (schema.type === "boolean" && typeof value !== "boolean") return false;
   if (schema.type === "string" && (typeof value !== "string" || [...value].length < (schema.minLength ?? 0))) return false;
   if (schema.type === "object") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -65,5 +66,8 @@ function matches(schema, value) {
 }
 export function assertResult(assignment, result) {
   if (!matches(resultSchema(assignment), result)) throw new Error(`Malformed ${assignment.role} result: does not match the assignment result schema.`);
+  for (const [field, key] of [["acceptance", "criterionId"], ["decisions", "id"], ["validationImpact", "assignmentId"]]) {
+    if (result[field] && new Set(result[field].map(item => item[key])).size !== result[field].length) throw new Error(`Malformed ${assignment.role} result: duplicate ${key}.`);
+  }
   return result;
 }

@@ -41,3 +41,11 @@ for (const kind of ['equivalent', 'weakened']) {
     assert.equal(f.run("await import('./ages.test.mjs')"), 0);
   });
 }
+
+for (const kind of ['mock-assumption', 'compatible']) test(`real dependency ${kind} separates a passing mock from the consumer contract`, t => {
+  const f = fixture(t, `review-real-dependency-${kind}`);
+  assert.equal(f.run("await import('./create.test.mjs')"), 0, 'Both mocks pass');
+  const probe = "import assert from 'node:assert/strict'; import {store} from './store.mjs'; import {createItem} from './create.mjs'; import {exportItem} from './export.mjs'; assert.equal(exportItem(await createItem(store,'MixedCase')).externalKey,'MixedCase');";
+  assert.equal(f.run(probe) === 0, kind === 'compatible');
+  if (kind === 'compatible') assert.equal(f.run("await import('./integration.test.mjs')"), 0);
+});

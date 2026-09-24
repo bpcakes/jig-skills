@@ -1,4 +1,5 @@
 import { lstatSync, readlinkSync } from "node:fs";
+import { validateEvidenceOutputs } from "./evidence-outputs.mjs";
 import path from "node:path";
 import { safePath, git, repositoryRoot, readRegularFile, unsupported } from "./repository.mjs";
 
@@ -15,14 +16,16 @@ export function validateContract(contract) {
   for (const name of ["nonGoals", "compatibilityConstraints", "permittedBehaviorChanges"]) {
     if (!Array.isArray(contract[name]) || !contract[name].every(nonempty)) throw new Error(`Task contract requires ${name} as an array of strings.`);
   }
-  for (const name of ["acceptanceCriteria", "requiredValidation"]) {
-    if (!Array.isArray(contract[name]) || !contract[name].length) throw new Error(`Task contract requires nonempty ${name}.`);
+  for (const name of ["acceptanceCriteria", "requiredValidation", ...(contract.prerequisites === undefined ? [] : ["prerequisites"])]) {
+    if (!Array.isArray(contract[name]) || (!contract[name].length && name !== "prerequisites")) throw new Error(`Task contract requires nonempty ${name}.`);
     const ids = new Set();
     for (const item of contract[name]) {
       if (!item || typeof item.id !== "string" || !/^[a-zA-Z0-9_-]+$/.test(item.id) || ids.has(item.id)) throw new Error(`Invalid or duplicate ${name} ID.`);
       ids.add(item.id);
       if (name === "acceptanceCriteria" && !nonempty(item.description)) throw new Error("Acceptance criterion requires description.");
-      if (name === "requiredValidation") {
+      if (name !== "acceptanceCriteria") {
+        if (item.requiredEnvironment !== undefined && (!Array.isArray(item.requiredEnvironment) || item.requiredEnvironment.some(name => typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)))) throw new Error("requiredEnvironment must contain variable names, never values.");
+        if (name === "prerequisites" && item.optional) throw new Error("Prerequisites cannot be optional.");
         if (!command(item.argv)) throw new Error("Validation requires a nonempty argv array.");
         if (item.cwd && item.cwd !== ".") safePath(item.cwd);
         if (item.optional !== undefined && typeof item.optional !== "boolean") throw new Error("optional must be boolean.");
@@ -31,8 +34,11 @@ export function validateContract(contract) {
     }
   }
   if (!contract.requiredValidation.some(check => !check.optional)) throw new Error("At least one required validation command is necessary.");
+  validateEvidenceOutputs(contract.evidenceOutputs);
   const normalized = structuredClone(contract);
-  for (const check of normalized.requiredValidation) if (check.cwd === ".") delete check.cwd;
+  const validationIds = new Set(contract.requiredValidation.map(check => check.id));
+  if (contract.prerequisites?.some(check => validationIds.has(check.id))) throw new Error("Prerequisite IDs must differ from validation IDs.");
+  for (const check of [...normalized.requiredValidation, ...(normalized.prerequisites ?? [])]) if (check.cwd === ".") delete check.cwd;
   return normalized;
 }
 
@@ -41,7 +47,7 @@ export function validateContract(contract) {
 export function discoverValidation(root) {
   root = repositoryRoot(root);
   const files = git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").toString().split("\0").filter(Boolean);
-  const sources = [...new Set(files.filter(name => /(^|\/)(package\.json|Cargo\.toml|Makefile|Justfile|justfile|go\.mod|pyproject\.toml)$/.test(name) || /^\.github\/workflows\/.*\.ya?ml$/.test(name)))].sort();
+  const sources = [...new Set(files.filter(name => /(^|\/)(AGENTS\.md|CONTRIBUTING\.md|\.jig\.toml|jig-contract\.json|package\.json|Cargo\.toml|Makefile|Justfile|justfile|go\.mod|pyproject\.toml)$/.test(name) || /^\.github\/workflows\/.*\.ya?ml$/.test(name)))].sort();
   const candidates = [];
   const included = new Set(files);
   const readManifest = name => {

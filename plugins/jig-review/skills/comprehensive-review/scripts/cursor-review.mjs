@@ -186,7 +186,7 @@ async function runCursorReview(options, dependencies = {}) {
 
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context, { taskBrief });
+    const prompt = buildReviewPrompt(scope, context, { taskBrief }) + (dependencies.promptSuffix ?? "");
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
     const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
@@ -207,7 +207,8 @@ async function runCursorReview(options, dependencies = {}) {
       deadlineAt,
       signal,
     );
-    return evidence.annotateReport(parseCursorResult(result.stdout), context);
+    const report = parseCursorResult(result.stdout);
+    return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
   } finally {
     evidence.cleanup();
   }

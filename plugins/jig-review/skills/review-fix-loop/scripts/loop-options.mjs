@@ -43,7 +43,8 @@ export function parseArgs(argv) {
   if (seen.has("--base") && !options.base) throw new Error("--base must not be blank.");
   if (options.base && options.scope === "working-tree") throw new Error("--base cannot be combined with --scope working-tree.");
   if (options.base) options.scope = "branch";
-  if (!forwarded.includes("--reviewers") && !forwarded.includes("--all-reviewers")) {
+  options.explicitReviewers = forwarded.includes("--reviewers") || forwarded.includes("--all-reviewers");
+  if (!options.explicitReviewers) {
     forwarded.unshift("--reviewers", options.reviewPolicy === "strict" ? "claude,codex" : "codex");
   }
   options.review = reviewArgs(forwarded);

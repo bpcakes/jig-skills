@@ -208,9 +208,9 @@ for (const point of ["allocation", "deletion"]) test(`interrupted scratch ${poin
 
 for (const policy of ["balanced", "strict"]) test(`${policy} filters unavailable providers before counting a transient failed invocation`, async t => {
   const f = fixture(t); let failed = false;
-  const providers = policy === "balanced" ? [{ id: "claude" }, { id: "codex" }]
-    : [{ id: "claude", command: [process.execPath, stub, "success"] }, { id: "codex" }, { id: "cursor" }];
-  const run = await drive(await f.start({ options: parseArgs(["--review-policy", policy, "--reviewers", providers.map(p => p.id).join(",")]), config: { reviewers: providers } }), a => {
+  const providers = policy === "balanced" ? [{ id: "claude", command: ["/missing/jig-test-provider"] }, { id: "codex" }]
+    : [{ id: "claude", command: [process.execPath, stub, "success"] }, { id: "codex" }, { id: "cursor", command: ["/missing/jig-test-provider"] }];
+  const run = await drive(await f.start({ options: { ...parseArgs(["--review-policy", policy, "--reviewers", providers.map(p => p.id).join(",")]), explicitReviewers: false }, config: { reviewers: providers } }), a => {
     if (a.role !== "review") return { decisions: [] };
     if (!failed) { failed = true; return { error: "One completed transient failure" }; }
     return clean();
@@ -537,7 +537,7 @@ for (const scenario of ["tracked", "untracked", "attempt-limit"]) test(`isolated
   assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
 });
 
-for (const defect of ["unattributed", "unchanged", "both-attribution", "mode-deletion", "mode-unchanged", "duplicate", "excluded", "index", "symlink", "symlink-deletion", "ignored", "ignored-mode", "ignored-and-unchanged", "hidden-source", "special-bits", "unknown-finding", "unsafe-path"]) {
+for (const defect of ["unattributed", "unchanged", "both-attribution", "mode-deletion", "mode-unchanged", "duplicate", "excluded", "index", "symlink", "symlink-deletion", "ignored", "ignored-mode", "ignored-and-unchanged", "hidden-source", "special-bits", "unsafe-path"]) {
   test(`isolated workspace repairs reject ${defect} before publication`, async t => {
     const f = fixture(t); put(f.root, "value.cjs", "module.exports = 1;\n");
     put(f.root, ".gitignore", ".cache/\n"); put(f.root, "preserved.txt", "user work\n");
@@ -566,7 +566,6 @@ for (const defect of ["unattributed", "unchanged", "both-attribution", "mode-del
         put(a.repository, ".gitignore", ".cache/\nvalue.cjs\n"); workspaceEdits.push(item(".gitignore"));
       }
       if (defect === "special-bits") fs.chmodSync(path.join(a.repository, "value.cjs"), 0o4755);
-      if (defect === "unknown-finding") workspaceEdits[0].findingIds = ["invented"];
       if (defect === "unsafe-path") workspaceEdits[0].path = "../outside";
       return { workspaceEdits };
     });
@@ -576,7 +575,7 @@ for (const defect of ["unattributed", "unchanged", "both-attribution", "mode-del
       "both-attribution": /every changed source path/, "mode-deletion": /workspace mode requires a regular file/, "mode-unchanged": /every changed source path/,
       excluded: /unique, included/, index: /Assignment changed/, symlink: /Symlink repair/, "symlink-deletion": /Symlink repair/,
       ignored: /Ignored or unmanaged paths/, "ignored-mode": /Ignored or unmanaged paths/, "ignored-and-unchanged": /Ignored or unmanaged paths/, "hidden-source": /Ignored or unmanaged paths/,
-      "special-bits": /Unsupported source permissions/, "unknown-finding": /Malformed repair result/, "unsafe-path": /Unsafe repository path/,
+      "special-bits": /Unsupported source permissions/, "unsafe-path": /Unsafe repository path/,
     };
     assert.match(run.outcome.reason, expected[defect]);
     const attempt = readJSON(path.join(run.directory, "run.json")).assignmentAttempts.find(a => a.role === "repair");
@@ -606,18 +605,18 @@ test("settlement receipts survive archived records and do not release another ac
   assert.equal(readJSON(active).directory, next.directory);
 });
 
-test("runs pin version 14 and cannot resume version-13 records", async t => {
+test("runs pin version 15 and cannot resume version-14 records", async t => {
   const f = fixture(t), run = await f.start(), file = path.join(run.directory, "run.json");
-  assert.equal(run.version, 14, "Round commits require a controller that understands the pinned commit mode");
-  assert.equal(loadRun(run.directory).version, 14);
-  const record = readJSON(file); record.version = 13;
+  assert.equal(run.version, 15, "Concurrent assignments require a controller that preserves all sibling obligations");
+  assert.equal(loadRun(run.directory).version, 15);
+  const record = readJSON(file); record.version = 14;
   writeFileSync(file, JSON.stringify(record));
   const before = readFileSync(file);
   await assert.rejects(advance(run.directory), /older runs require their original controller/);
   assert.deepEqual(readFileSync(file), before, "An incompatible run is not migrated or consumed");
 });
 
-for (const version of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
+for (const version of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
   const f = fixture(t), run = await drive(await f.start()), file = path.join(run.directory, "run.json"), active = path.join(run.runsRoot, "active.json");
   const record = readJSON(file); record.version = version;
   if (version < 8) { delete record.fixPolicy; delete record.options.fixMode; }

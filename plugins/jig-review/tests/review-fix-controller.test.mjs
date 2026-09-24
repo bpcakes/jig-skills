@@ -323,7 +323,7 @@ test("provider failure falls back deterministically; strict requires cross-provi
   for (const policy of ["balanced", "strict"]) await t.test(policy, async t => {
     const f = fixture(t);
     const argv = [process.execPath, stub, "success"];
-    const run = await drive(await f.start("success", { options: parseArgs(["--review-policy", policy, "--reviewers", "claude,codex"]),
+    const run = await drive(await f.start("success", { options: { ...parseArgs(["--review-policy", policy, "--reviewers", "claude,codex"]), explicitReviewers: false },
       config: { reviewers: [{ id: "claude", command: [process.execPath, stub, "provider-failure"] }, { id: "codex", command: argv }], triageCommand: argv, repairCommand: argv, validationSandbox: "host" } }));
     assert.equal(run.phase, policy === "balanced" ? "CONVERGED" : "REVIEW_INCOMPLETE");
     assert.ok(run.attempts.some(a => a.error));
@@ -506,7 +506,7 @@ test("missing acceptance evidence can never converge", async t => {
 });
 
 test("native assignments persist until a matching, frozen result arrives", async t => {
-  const f = fixture(t); let run = await f.start("success", { config: {} });
+  const f = fixture(t); let run = await f.start("success", { config: { reviewConcurrency: 1 } });
   run = await drive(run, r => Boolean(r.pending));
   const id = run.pending.id;
   assert.equal((await advance(run.directory)).pending.id, id);
@@ -563,19 +563,28 @@ for (const order of [["high", "low"], ["low", "high"]]) test(`conflicting severi
   assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
 });
 
-test("ambiguous replacement/deletion reports consume attempts without creating candidates or deleting source", async t => {
+test("ambiguous native replacement/deletion stays correctable without creating a candidate or deleting source", async t => {
   const f = fixture(t), before = snapshot(f.root);
-  const run = await driveNative(await f.start("success", { config: {} }), r => {
-    const reply = nativeResult(r);
-    if (r.pending.role === "review") reply.acceptance[0].status = "unsatisfied";
-    if (r.pending.role === "repair") reply.edits[0].delete = true;
-    return reply;
-  });
-  assert.equal(run.phase, "BLOCKED");
-  assert.equal(run.assignmentAttempts.filter(a => a.role === "repair").length, 3);
-  assert.match(run.outcome.reason, /Malformed repair result/);
+  let run = await f.start("success", { config: {} });
+  for (;;) {
+    run = await drive(run, r => Boolean(r.pending && !r.pending.command));
+    if (run.pending.role === "repair") break;
+    const reply = nativeResult(run);
+    if (run.pending.role === "review") reply.acceptance[0].status = "unsatisfied";
+    await nativeSubmit(run, reply);
+  }
+  const id = run.pending.id, invalid = nativeResult(run);
+  invalid.edits[0].delete = true;
+  await assert.rejects(nativeSubmit(run, invalid), /Malformed repair result/);
+  assert.equal(existsSync(path.join(run.directory, "assignments", id, "result.json")), false);
+  run = await advance(run.directory);
+  assert.equal(run.pending.id, id); assert.equal(run.candidate, undefined);
   assert.equal(run.mutations.length, 0); assert.equal(run.validation.length, 0);
-  assert.equal(run.candidate, undefined); assert.equal(snapshot(f.root).guard, before.guard);
+  assert.equal(snapshot(f.root).guard, before.guard);
+  await nativeSubmit(run);
+  const done = await driveNative(run);
+  assert.equal(done.phase, "CONVERGED", JSON.stringify(done.outcome));
+  assert.equal(done.assignmentAttempts.filter(a => a.role === "repair").length, 1);
 });
 
 test("last allowed repair receives review and another repair cannot exceed the cap", async t => {
@@ -590,7 +599,9 @@ test("malformed reports exhaust bounded attempts without authorizing repairs", a
   const f = fixture(t);
   const run = await drive(await f.start("malformed"));
   assert.equal(run.phase, "REVIEW_INCOMPLETE"); assert.equal(run.round, 0);
-  assert.equal(run.attempts.length, 3);
+  assert.ok(run.slots.some(slot => slot.attempts === 3));
+  assert.ok(run.slots.every(slot => slot.attempts <= 3));
+  assert.equal(run.attempts.length, run.slots.reduce((sum, slot) => sum + slot.attempts, 0));
 });
 
 test("default validation runs against the applied candidate in the existing checkout", async t => {
@@ -612,15 +623,18 @@ test("loss of a claimed worker is an honest incomplete outcome, never a duplicat
   // of an actual invocation, not a provably unstarted command eligible for retry.
   for (let i = 0; i < 250 && (!existsSync(f.log) || !readFileSync(f.log, "utf8").includes(run.pending.id)); i++) await sleep(20);
   assert.ok(existsSync(f.log) && readFileSync(f.log, "utf8").includes(run.pending.id), "provider invocation started");
+  const issuedIds = run.attempts.map(attempt => attempt.id);
   process.kill(workerOwner.pid, "SIGKILL");
   await sleep(50); run = await drive(run);
-  assert.equal(run.phase, "REVIEW_INCOMPLETE"); assert.equal(run.attempts.length, 1);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE");
+  assert.deepEqual(run.attempts.map(attempt => attempt.id), issuedIds, "No replacement of either issued reviewer");
   for (let i = 0; i < 100 && ownedAlive(childOwner); i++) await sleep(20);
   assert.equal(ownedAlive(childOwner), false);
 });
 
-test("source drift retains completed provider findings and accounts for its processes", async t => {
-  const f = fixture(t); let run = await drive(await f.start("slow"), r => Boolean(r.pending?.command));
+test("serial source drift retains completed provider findings and accounts for its processes", async t => {
+  const f = fixture(t), argv = [process.execPath, stub, "slow", f.log];
+  let run = await drive(await f.start("slow", { config: { reviewConcurrency: 1, reviewers: [{ id: "codex", command: argv }], triageCommand: argv, repairCommand: argv } }), r => Boolean(r.pending?.command));
   const jobDir = path.join(run.directory, "assignments", run.pending.id);
   for (let i = 0; i < 100 && !existsSync(path.join(jobDir, "child.json")); i++) await sleep(20);
   const childOwner = readJSON(path.join(jobDir, "child.json"));
@@ -901,16 +915,17 @@ test("file images are deduplicated blobs, not repeated payloads in run state", a
   assert.deepEqual(readdirSync(run.workspaceRoot), []);
 });
 
-test("strict mode explains missing bridges before consuming provider invocations", async t => {
+test("strict mode explains unavailable CLIs before consuming provider invocations", async t => {
   const f = fixture(t);
-  let run = await createRun({ cwd: f.root, contract: f.contract, options: parseArgs(["--review-policy", "strict"]) });
+  let run = await createRun({ cwd: f.root, contract: f.contract, options: parseArgs(["--review-policy", "strict"]),
+    config: { reviewers: [{ id: "codex" }, { id: "claude", command: ["/missing/jig-test-provider"] }] } });
   run = await drive(run);
-  assert.equal(run.phase, "REVIEW_INCOMPLETE"); assert.match(run.outcome.reason, /JSON bridge.*--config/); assert.equal(run.attempts.length, 0);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE"); assert.match(run.outcome.reason, /install the selected CLI or configure its command/); assert.equal(run.attempts.length, 0);
 });
 
 test("malformed JSON envelopes never freeze an unresumable native assignment", async t => {
   const f = fixture(t);
-  let run = await drive(await f.start("success", { config: {} }), r => Boolean(r.pending));
+  let run = await drive(await f.start("success", { config: { reviewConcurrency: 1 } }), r => Boolean(r.pending));
   for (const value of [null, [], true, 1, "report", { error: [] }]) await assert.rejects(submit(run.directory, run.pending.id, value), /JSON object|nonempty string/);
   // Also consume corrupt/legacy persisted payloads; submit-time checks alone
   // cannot repair a run that already has an immutable malformed report.
@@ -926,7 +941,7 @@ test("malformed JSON envelopes never freeze an unresumable native assignment", a
 
 test("a provider returning JSON null consumes an attempt and falls back", async t => {
   const f = fixture(t), argv = [process.execPath, stub, "success"];
-  const run = await drive(await f.start("success", { options: parseArgs(["--reviewers", "claude,codex"]), config: {
+  const run = await drive(await f.start("success", { options: { ...parseArgs(["--reviewers", "claude,codex"]), explicitReviewers: false }, config: {
     reviewers: [{ id: "claude", command: [process.execPath, stub, "null-report"] }, { id: "codex", command: argv }], triageCommand: argv, repairCommand: argv,
   } }));
   assert.equal(run.phase, "CONVERGED");

@@ -58,8 +58,11 @@ try {
   // Log creation is startup work: a failure here conclusively precedes the
   // command and can use the controller's existing bounded infrastructure retry.
   if (request.role === "validate") log = openSync(path.join(directory, "stdout.log"), "wx", 0o600);
+  const environment = commandEnvironment(request);
+  const missing = (request.requiredEnvironment ?? []).filter(name => !environment[name]);
+  if (missing.length) throw new Error(`Required worker environment missing: ${missing.join(", ")}`);
   child = spawn(argv[0], argv.slice(1), { cwd: request.cwd,
-    env: commandEnvironment(request),
+    env: environment,
     stdio: [request.role === "validate" ? "ignore" : "pipe", "pipe", "pipe"] });
   spawned = Boolean(child.pid);
   child.stdin?.on("error", () => {});

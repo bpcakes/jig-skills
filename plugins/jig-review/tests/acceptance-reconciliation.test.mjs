@@ -8,14 +8,14 @@ import { advance, status, submit, TERMINAL } from "../skills/review-fix-loop/scr
 import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 
-async function fixture(t, { failValidation = false, receiptWrites = false, externalReview = false } = {}) {
+async function fixture(t, { failValidation = false, receiptWrites = false, externalReview = false, initiallyCorrect = false } = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), "jig-acceptance-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = (...args) => execFileSync("git", args, { cwd: root, stdio: "pipe" });
   git("init", "-q", "-b", "main"); git("config", "user.name", "Test"); git("config", "user.email", "test@example.invalid");
   writeFileSync(path.join(root, "value.cjs"), "module.exports = 0;\n");
   writeFileSync(path.join(root, "receipts.txt"), ""); git("add", "."); git("commit", "-qm", "base");
-  writeFileSync(path.join(root, "value.cjs"), "module.exports = 1;\n");
+  writeFileSync(path.join(root, "value.cjs"), initiallyCorrect ? "module.exports = 2;\n" : "module.exports = 1;\n");
   const adapter = path.join(root, ".git", "test-reviewer.mjs");
   if (externalReview) writeFileSync(adapter, `
     import assert from 'node:assert/strict'; import fs from 'node:fs';
@@ -36,7 +36,7 @@ async function fixture(t, { failValidation = false, receiptWrites = false, exter
   t.after(() => rmSync(path.dirname(run.workspaceRoot), { recursive: true, force: true }));
   return { root, run, index: readFileSync(path.join(root, ".git/index")), reviews: [], reportBytes: new Map() };
 }
-async function drive(f, { disposition = "fixed", laterUncertain = false, stop = () => false } = {}) {
+async function drive(f, { disposition = "fixed", pendingAcceptanceDisposition = "awaiting-validation", laterUncertain = false, stop = () => false } = {}) {
   let run = f.run;
   for (let n = 0; n < 400; n++) {
     run = await advance(run.directory); f.run = run;
@@ -62,7 +62,7 @@ async function drive(f, { disposition = "fixed", laterUncertain = false, stop = 
             && reuse.fingerprint === a.fingerprint && reuse.candidateHash === a.contentHash)));
         const provisional = !passed && a.sourceChanges && readFileSync(path.join(a.repository, "value.cjs"), "utf8").includes("= 2;");
         result = { decisions: a.findings.map(finding => ({ id: finding.id,
-          status: provisional ? "needs-validation" : !passed ? "actionable" : finding.required ? (typeof disposition === "function" ? disposition(run) : disposition) : "fixed",
+          status: provisional ? "needs-validation" : !passed ? (finding.required && !a.validation.some(v => v.outcome === "failed") && readFileSync(path.join(a.repository, "value.cjs"), "utf8").includes("= 2;") ? pendingAcceptanceDisposition : "actionable") : finding.required ? (typeof disposition === "function" ? disposition(run) : disposition) : "fixed",
           evidence: passed ? "The source exports 2 and the pinned assertion checks exactly that behavior; inspected its successful receipt" : "Check source against the contract and current validation" })),
           ...(a.validationAssessment ? { validationImpact: a.validationAssessment.checks.map(check => ({ assignmentId: check.assignmentId,
             status: "unaffected", evidence: "The assertion reads value.cjs; receipts.txt is write-only output" })) } : {}) };
@@ -176,4 +176,28 @@ test("an acceptance resolution cannot carry across a source reconciliation", asy
   assert.ok(original.every(r => r.fingerprint !== done.fingerprint.fingerprint && r.contentHash !== done.expected.contentHash));
   assert.ok(done.outcome.acceptanceGaps.length);
   assert.ok(done.outcome.acceptanceGaps.every(gap => !original.some(r => r.reportAssignmentId === gap.reportAssignmentId)));
+});
+
+
+test("discovery uncertainty validates and resolves in the same run without source repair", async t => {
+  const f = await fixture(t, { initiallyCorrect: true });
+  const done = await drive(f);
+  assert.equal(done.phase, "CONVERGED", JSON.stringify(done.outcome));
+  assert.equal(done.round, 0);
+  assert.equal(f.reviews.length, 2);
+  assert.equal(done.validation.length, 1);
+  assert.equal(done.mutations.length, 0);
+  assert.equal(done.acceptanceResolutions.length, 1);
+  assert.equal(done.reports[0].acceptance[0].status, "uncertain");
+});
+
+
+test("a requirement rejected before receipts gets one evidence-based triage after validation", async t => {
+  const f = await fixture(t, { initiallyCorrect: true });
+  const done = await drive(f, { pendingAcceptanceDisposition: "rejected" });
+  assert.equal(done.phase, "CONVERGED", JSON.stringify(done.outcome));
+  assert.equal(done.round, 0); assert.equal(f.reviews.length, 2);
+  assert.equal(done.validation.length, 1); assert.equal(done.acceptanceResolutions.length, 1);
+  assert.ok(done.ledger['requirement-value'].history.some(item => item.status === "rejected"));
+  assert.equal(done.ledger['requirement-value'].status, "fixed");
 });

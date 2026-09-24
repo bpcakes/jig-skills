@@ -32,7 +32,10 @@ function fixture(t, format = "sha1") {
   const log = path.join(directory, "calls");
   return { root, directory, contract, log, start: (scenario = "success", extra = {}) => {
     const argv = [process.execPath, stub, scenario, log];
-    return createRun({ cwd: root, contract, config: { reviewers: [{ id: "codex", command: argv }], triageCommand: argv, repairCommand: argv }, ...extra });
+    // These fixtures isolate one worker's ownership/retry lifecycle. Concurrent
+    // sibling cleanup and interrupted preparation are covered in workflow-improvements.
+    const config = extra.config ?? { reviewers: [{ id: "codex", command: argv }], triageCommand: argv, repairCommand: argv };
+    return createRun({ cwd: root, contract, ...extra, config: { reviewConcurrency: 1, ...config } });
   } };
 }
 async function until(check, description) {

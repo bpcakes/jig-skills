@@ -27,7 +27,7 @@ test("review wire schema carries the exact envelope, severity vocabulary and req
 test("triage schema binds decisions to the complete ledger and supports one structured question", () => {
   const [decisions, question] = resultSchema({ ...base, role: "triage" }).oneOf[0].oneOf;
   assert.deepEqual(decisions.properties.decisions.items.properties.id.enum, ["f-1"]);
-  assert.deepEqual(decisions.properties.decisions.items.properties.status.enum, ["actionable", "rejected", "fixed", "blocked"]);
+  assert.deepEqual(decisions.properties.decisions.items.properties.status.enum, ["actionable", "rejected", "fixed", "blocked", "awaiting-validation"]);
   assert.equal(decisions.properties.decisions.minItems, 1);
   assert.equal(decisions.properties.decisions.maxItems, 1);
   assert.deepEqual(question.properties.question.required, ["text", "recommended", "evidence"]);

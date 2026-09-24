@@ -226,7 +226,7 @@ async function runClaudeReview(options, dependencies = {}) {
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context, { taskBrief });
+    const prompt = buildReviewPrompt(scope, context, { taskBrief }) + (dependencies.promptSuffix ?? "");
     const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     const result = await runCommand(claudeBin,
@@ -241,7 +241,8 @@ async function runClaudeReview(options, dependencies = {}) {
           : { ...process.env, CLAUDE_CONFIG_DIR: options.configDir }),
       });
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
-    return evidence.annotateReport(parseClaudeResult(result.stdout), context);
+    const report = parseClaudeResult(result.stdout);
+    return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
   } finally {
     evidence.cleanup();
   }

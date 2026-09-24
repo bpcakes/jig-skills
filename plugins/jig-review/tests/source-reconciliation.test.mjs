@@ -24,7 +24,8 @@ function fixture(t) {
   const contract = { goal: "Correct export", acceptanceCriteria: [{ id: "value", description: "Exports 2" }], nonGoals: [], compatibilityConstraints: [], permittedBehaviorChanges: ["Correct export"],
     requiredValidation: [{ id: "unit", argv: [process.execPath, "-e", "require('node:assert/strict').equal(require('./value.cjs'),2)"] }] };
   return { root, index, contract, async start(extra = {}) {
-    const run = await createRun({ cwd: root, contract, ...extra });
+    // These cases exercise serial reconciliation; concurrent waves have a separate stop-and-cleanup contract.
+    const run = await createRun({ cwd: root, contract, ...extra, config: { reviewConcurrency: 1, ...extra.config } });
     t.after(() => rmSync(path.dirname(run.workspaceRoot), { recursive: true, force: true }));
     return run;
   } };

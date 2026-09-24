@@ -333,3 +333,17 @@ ${failure === "provider error" ? "process.exit(1);" : failure === "scope mutatio
     });
   }
 }
+
+test("structured bridges require valid complete coverage even if the report claims completeness", t => {
+  const evidence = store(t);
+  evidence.add("patch", "-before\n+after\n"); evidence.required = true;
+  const context = evidence.finish({ repoRoot: "/repo", label: "test" }, { limitations: [] });
+  const [{ id, receipt }] = pages(evidence);
+  const report = '{"complete":true,"evidence":"Evidence coverage: reviewer-attested;"}';
+  for (const reviewed of [[], [{ id, receipt: "forged" }], [{ id, receipt }, { id, receipt }]]) {
+    assert.throws(() => evidence.structuredReport(`${report}\n<review-coverage>${JSON.stringify({ reviewed })}</review-coverage>`, context), /complete valid coverage receipts/);
+  }
+  const valid = `${report}\n<review-coverage>${JSON.stringify({ reviewed: [{ id, receipt }] })}</review-coverage>`;
+  assert.equal(evidence.structuredReport(valid, context), report);
+  assert.throws(() => evidence.structuredReport(valid, { ...context, incomplete: true }), /Incomplete review evidence/);
+});

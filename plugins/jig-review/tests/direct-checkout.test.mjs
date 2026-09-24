@@ -368,7 +368,8 @@ for (const [role, execution] of [["review", "uncertain"], ["triage", "uncertain"
   writeFileSync(path.join(f.root, "value.cjs"), "module.exports = 2;\n");
   await send(run, { error: "Assignment failed while another writer edited the checkout", execution });
   const done = await drive(run);
-  assert.equal(done.phase, role === "review" ? "REVIEW_INCOMPLETE" : "BLOCKED");
+  assert.equal(done.phase, role === "review" ? "SCOPE_CHANGED" : "BLOCKED");
+  assert.equal(JSON.parse(readFileSync(path.join(run.directory, "assignments", run.pending.id, "result.json"))).execution, execution, "The original failure remains available after the wave stops");
   assert.deepEqual(status(done).filesChanged, ["value.cjs"]);
   assert.equal(status(done).indexNeedsRestaging, true);
   assert.deepEqual(status(done).retainedCheckout.changedPaths, ["value.cjs"]);
