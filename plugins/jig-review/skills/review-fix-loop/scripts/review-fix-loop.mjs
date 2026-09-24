@@ -318,10 +318,13 @@ function inspectionFailed(run, error, context) {
   transition(run, "BLOCKED", reason, { code });
 }
 const overlaps = (a, b) => a === "." || b === "." || a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+const sourceReconciliationCount = run => (run.sourceReconciliations ?? [])
+  .filter(record => !record.validationOnly && !record.repairEvidenceOnly).length;
 function sourceDrift(run, current, fingerprint) {
   const edits = changes(run.expected.files, current.files);
   const paths = edits.map(edit => edit.path);
-  evidenceChanges(run, run.expected.files, current.files, run.root, contractOf(run).evidenceOutputs);
+  try { evidenceChanges(run, run.expected.files, current.files, run.root, contractOf(run).evidenceOutputs); }
+  catch (error) { return { paths, reason: error.message }; }
   if (hash(current.repositories) !== hash(run.expected.repositories)) return { paths, reason: "Git index, HEAD, branch, submodule state, or comparison policy changed." };
   for (const key of ["scope", "repoRoot", "headOid", "baseOid", "mergeBaseOid", "excludePaths", "reviewIgnoreRevision"]) {
     if (hash(fingerprint[key] ?? null) !== hash(run.fingerprint[key] ?? null)) return { paths, reason: "Pinned review scope or exclusion policy changed." };
@@ -334,7 +337,7 @@ function sourceDrift(run, current, fingerprint) {
     ...(run.candidate?.patch ?? []).map(edit => edit.path)];
   const conflicts = paths.filter(name => [".gitignore", ".gitattributes", ".gitmodules", ".reviewignore"].includes(path.posix.basename(name)));
   if (conflicts.length) return { paths, conflicts, reason: "Repository visibility policy changed; source coverage needs explicit reconciliation." };
-  const reconciliations = (run.sourceReconciliations ?? []).filter(r => !r.validationOnly).length;
+  const reconciliations = sourceReconciliationCount(run);
   // At the limit, one completed checkout validation may still qualify for the
   // receipt-only exemption. Triage decides before any further command runs.
   const awaitingValidationAssessment = reconciliations === 3 && run.validationCycle?.overlay === run.root && run.validationCycle.job;
@@ -737,7 +740,7 @@ function triageResult(run, result) {
     const reconciliation = run.sourceReconciliations.find(item => item.evidence === assessment.evidence);
     if (reconciliation && reused.length === assessment.checks.length && reused.some(item => item.assignmentId === assessment.completedAssignment)) reconciliation.validationOnly = true;
     run.validationAssessment = null;
-    if (run.sourceReconciliations.filter(item => !item.validationOnly).length > 3) {
+    if (sourceReconciliationCount(run) > 3) {
       scopeChanged(run, "Validation changes exceed the source reconciliation limit of three.", { paths: run.sourceChanges.paths, evidence: assessment.evidence });
     }
   }
@@ -764,8 +767,8 @@ async function repairResult(run, result, current) {
     ids.add(edit.path);
   }
   const candidate = dictionary(run.pending.before);
+  const outputs = checkout && workspace ? evidenceChanges(run, run.pending.before, current.files, run.root, contractOf(run).evidenceOutputs) : new Set();
   if (workspace) {
-    const outputs = checkout ? evidenceChanges(run, run.pending.before, current.files, run.root, contractOf(run).evidenceOutputs) : new Set();
     const changed = new Set(changes(run.pending.before, current.files).map(edit => {
       if (isExcludedPath(edit.path, run.fingerprint.excludePaths) && !outputs.has(edit.path)) throw new Error(`Mutation of excluded path: ${edit.path}`);
       return edit.path;
@@ -831,7 +834,10 @@ async function repairResult(run, result, current) {
     if (hidden.length) throw new Error(`Previously captured source became hidden from Git: ${hidden.map(edit => edit.path).join(", ")}. Restore source visibility before continuing; edits remain in place.`);
     if (unattributed.length) {
       if (unattributed.some(edit => [".gitignore", ".gitattributes", ".gitmodules", ".reviewignore"].includes(path.posix.basename(edit.path)))) throw new Error("Unattributed repository visibility policy changed during repair; reconcile source coverage before continuing. Edits remain in place.");
-      if ((run.sourceReconciliations ?? []).filter(r => !r.validationOnly).length >= 3) throw new Error("Three source reconciliations already occurred; wait for the checkout to stabilize. Edits remain in place.");
+      // Checked appends during an already-counted repair are expected outputs.
+      // A mixed batch still consumes the unrelated-source drift budget.
+      const repairEvidenceOnly = unattributed.every(edit => outputs.has(edit.path));
+      if (!repairEvidenceOnly && sourceReconciliationCount(run) >= 3) throw new Error("Three source reconciliations already occurred; wait for the checkout to stabilize. Edits remain in place.");
       // In a shared checkout we cannot identify another writer. Preserve these
       // edits without claiming them as repairs; fresh validation/review covers
       // the combined state. An original-state recovery must preserve them too.
@@ -841,9 +847,10 @@ async function repairResult(run, result, current) {
         affectedPaths: unattributed.filter(edit => Object.values(run.ledger).some(f => overlaps(edit.path, f.path))).map(edit => edit.path) },
       null, run.fingerprint.fingerprint, fingerprint.fingerprint);
       const evidence = path.join(run.directory, "assignments", run.pending.id, "unattributed-changes.json");
-      json(evidence, { changes: unattributed, reports: run.reports });
+      json(evidence, { changes: unattributed, repairEvidencePaths: [...outputs], reports: run.reports });
       (run.sourceReconciliations ??= []).push({ paths: run.sourceChanges.paths, pathCount: unattributed.length,
-        pathsTruncated: run.sourceChanges.truncated, from: run.fingerprint.fingerprint, to: fingerprint.fingerprint, evidence });
+        pathsTruncated: run.sourceChanges.truncated, from: run.fingerprint.fingerprint, to: fingerprint.fingerprint, evidence,
+        ...(repairEvidenceOnly ? { repairEvidenceOnly: true } : {}) });
       run.reconciledPaths = [...new Set([...(run.reconciledPaths ?? []), ...unattributed.map(edit => edit.path)])];
     }
     const restoreOriginal = restoresFailedCheckout(run, captured.contentHash);
