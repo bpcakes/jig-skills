@@ -59,7 +59,8 @@ for (const disposition of ["awaiting-validation", "needs-validation"]) test(`ser
   }
 });
 
-for (const scenario of ["failed prerequisite", "missing provider", "strict quorum", "missing provider without prerequisites"]) {
+for (const scenario of ["failed prerequisite", "missing provider", "strict quorum", "missing provider without prerequisites",
+  "missing provider with default selection", "missing provider with default selection without prerequisites"]) {
   test(`per-round ${scenario} preserves HEAD and partial staging`, async t => {
     const f = fixture(t);
     writeFileSync(path.join(f.root, "value.cjs"), "module.exports=1;\n"); f.git("add", "value.cjs");
@@ -67,7 +68,8 @@ for (const scenario of ["failed prerequisite", "missing provider", "strict quoru
     const index = readFileSync(path.join(f.root, ".git/index"));
     const missing = scenario.startsWith("missing provider");
     const config = { reviewers: [{ id: "codex", ...(missing ? { command: [path.join(f.root, ".git/missing-reviewer")] } : {}) }] };
-    const args = scenario === "strict quorum" ? ["--review-policy", "strict"] : ["--reviewers", "codex"];
+    const args = scenario === "strict quorum" ? ["--review-policy", "strict"]
+      : scenario.includes("default selection") ? [] : ["--reviewers", "codex"];
     const prerequisites = scenario.endsWith("without prerequisites") ? [] : [{ id: "preflight", argv: [process.execPath, "-e",
       `require('node:fs').appendFileSync('.git/preflight-calls','run\\n');process.exit(${scenario === "failed prerequisite" ? 9 : 0})`] }];
     const run = await runUntilBoundary((await f.start(config, args, { prerequisites })).directory);

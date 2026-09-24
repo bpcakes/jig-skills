@@ -1368,6 +1368,9 @@ async function advanceLocked(run) {
       if (run.options.reviewPolicy === "strict" && run.capabilities.filter(p => p.available).length < 2) {
         transition(run, "REVIEW_INCOMPLETE", "Strict review requires two available provider capabilities; install the selected CLI or configure its command."); return run;
       }
+      if (!run.capabilities.some(p => p.available)) {
+        transition(run, "REVIEW_INCOMPLETE", "No available provider satisfies the selected review policy."); return run;
+      }
       if (!run.preflightComplete && contractOf(run).prerequisites?.length) {
         run.preflightPending = true; transition(run, "VALIDATE", "Check prerequisites before reviewer work."); return run;
       }
