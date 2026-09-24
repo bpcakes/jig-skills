@@ -14,6 +14,8 @@ node <skill>/scripts/review-fix-loop.mjs status --run /repository/.git/jig/revie
 
 Always use the returned run path; linked worktrees store the run under the common Git directory. Only one active run may exist for that repository. `run` drives the executable loop until a terminal outcome, an unanswered contract question, or a native assignment requiring a result. `advance` performs one durable transition or consumes/starts one assignment. Neither resets rounds or provider attempts. `status` reads recorded state; a terminal status describes the recorded fingerprint, not later checkout changes.
 
+`--cwd` must identify the user's checkout pinned before review or initialization. The controller treats whichever repository it receives as its root; it cannot determine whether the caller silently created a temporary worktree first. Check imported handoffs and resumed repair assignments against the pinned checkout before editing. Shared Git history or a controller-supplied path does not authorize relocating repairs.
+
 Automatic branch-base detection checks `refs/remotes/origin/HEAD`, then `main`, `master`, and `trunk`, preferring the local branch over `origin/<name>` for each name. Explicit bases remain binding.
 
 Commit mode defaults to `--commit-mode per-round`: checkpoint included working changes, append a commit for each completed repair round, and converge over one fixed base-to-tip range. Use `--commit-mode none` to preserve working changes and the index without committing. Read [commit publication](commits.md) before using the default mode.

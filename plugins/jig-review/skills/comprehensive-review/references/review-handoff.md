@@ -28,6 +28,8 @@ The helper validates the evidence envelope, rechecks the reviewed scope, and cre
 
 On “ok address” or equivalent repair authorization, use the sibling review-fix-loop's `init --from-review` entry with the saved artifact and a concrete repair/validation contract. Read its [controller interface](../../review-fix-loop/references/controller.md). An active loop must be resumed, not reinitialized. User-requested one-pass repairs still use the entry point's one-pass section.
 
+Use the user's original checkout as `--cwd`, not the artifact directory or a newly created review worktree. Verify that the handoff's `payload.capture.repoRoot` identifies that checkout. A handoff or existing run pointing elsewhere does not authorize moving repairs there: report the mismatch before editing and reconcile it without rewriting the recorded root or replaying patches blindly.
+
 The controller checks the original repository, scope, base, exclusions, source, and index, then imports findings as unresolved evidence for local triage. It does not repeat discovery. Committed-only branch evidence must still match a clean checkout; the repair run then pins branch scope including working-tree changes. Imported reports never count toward fresh terminal review quorum or acceptance of the repaired files. Partial reviewer coverage remains partial.
 
 For an older review without an artifact, build one only from the retained frozen reports, brief, and matching scope capture. If those are missing or stale, explain exactly what cannot be reused. Reconcile affected findings and scope explicitly; do not silently launch a fresh full review, edit controller state, or fabricate assignments to bypass admission.

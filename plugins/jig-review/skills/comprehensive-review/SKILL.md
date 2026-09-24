@@ -5,7 +5,9 @@ description: Run independent Claude and Codex reviews of Git diffs and merge fin
 
 # Comprehensive Review
 
-Produce one consolidated code review from one or more isolated reviewers. Default to Claude Code and native Codex; include Cursor Agent with Grok 4.6 only when selected.
+Produce one consolidated code review from one or more reviewers in independent contexts. Default to Claude Code and native Codex; include Cursor Agent with Grok 4.6 only when selected.
+
+Resolve the user's checkout with `git rev-parse --show-toplevel` from the requested repository, or the starting working directory when none is specified. Keep that root for review, handoff, and subsequent repairs. Reviewer independence means separate agent contexts; it does not require separate source trees. Do not create or switch to a temporary worktree, clone, or source copy to obtain a clean checkout or preserve unrelated edits. A user-selected linked worktree is a valid checkout; a different source location requires explicit user direction. Temporary directories hold review artifacts only.
 
 The review phase is read-only: neither the parent nor reviewers may change the reviewed files until all selected reviewers have finished or reached terminal failure and their reports are frozen. A review-only request ends with the consolidated report and, only with `--log-to-beads`, final issue logging. An ordinary review-and-fix request routes to the sibling [review-fix-loop](../review-fix-loop/SKILL.md), which owns repairs, validation, and bounded re-review without another authorization question. Use the one-pass repair section only when the user explicitly requests one pass or prohibits re-review. Loading this skill alone never authorizes fixes.
 

@@ -115,7 +115,7 @@ $jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh 
 |---|---|
 | A selected CLI is missing or unauthenticated | Install and authenticate that CLI through its normal setup, or explicitly select available reviewers with `--reviewers`. |
 | Claude uses the wrong account or profile | Pass `--claude-config-dir ~/.claude-profile-name`; verify that directory already contains the intended Claude Code configuration. |
-| Branch review refuses a dirty checkout | Add `--include-working-tree` to review branch and local changes together, use a clean checkout, or choose `--scope working-tree` to review only pending changes. |
+| Branch review refuses a dirty checkout | Keep the user's checkout. Add `--include-working-tree` when the requested scope includes branch and local changes, or choose `--scope working-tree` for pending changes only. For committed-only scope, report the conflict; do not create a temporary worktree or stash local work to bypass it. |
 | A large tracked directory overwhelms review evidence | Add a literal `--exclude-path <directory>` for one run, or commit it to the root `.reviewignore` for permanent policy. |
 | Review stops because there is no diff | Select the intended branch/base, or use a repository-capable focused skill for unchanged code. |
 | Evidence coverage is limited | Read the reported omissions or missing pages. Narrow the change set and rerun if fuller coverage is needed. |
