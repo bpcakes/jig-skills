@@ -52,13 +52,13 @@ test('grader receives the committed baseline separately from task before and aft
 });
 
 test('grader receives the contents of a newly created required artifact', t => {
-  const { child, artifacts, result } = exercise(t, 'created-artifact', () => ({}), 'selection-write-executable-plan');
+  const { child, artifacts, result } = exercise(t, 'created-artifact', () => ({}), 'selection-privacy-intake-planning');
   assert.equal(child.status, 0, child.stdout + child.stderr);
   assert.equal(result.passed, true);
   const prompt = readFileSync(path.join(artifacts, 'grade.prompt.txt'), 'utf8');
   const data = JSON.parse(prompt.slice(prompt.indexOf('\n') + 1));
-  assert.equal(data.before['plan.md'], null);
-  assert.equal(data.after['plan.md'], '# Inclusive age gate\nAccept ages 18 and older.\n');
+  assert.equal(data.before['audit-manifest.json'], null);
+  assert.equal(data.after['audit-manifest.json'], '{"scope":"local source only"}\n');
 });
 
 test('assembled runner accepts an in-scope implementation', t => {

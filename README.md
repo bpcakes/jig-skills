@@ -125,7 +125,6 @@ Plugin: `jig-exec-plans` · [Browse files](plugins/jig-exec-plans)
 
 | Skill | Use it for | Default result |
 |---|---|---|
-| [write-exec-plan](plugins/jig-exec-plans/skills/write-exec-plan/SKILL.md) | Writes a self-contained implementation plan with milestones, acceptance criteria, and validation steps. | Implementation plan |
 | [improve-exec-plan](plugins/jig-exec-plans/skills/improve-exec-plan/SKILL.md) | Revises an existing plan against repository evidence. Edits a named file in place; returns a revised plan when the target is in chat. | Plan edits |
 | [cursor-implement-exec-plan](plugins/jig-exec-plans/skills/cursor-implement-exec-plan/SKILL.md) | Runs Cursor Agent with Composer 2.5 to implement a checked-in plan when Cursor is explicitly requested. | Code and plan changes |
 
@@ -263,7 +262,7 @@ Some skills use different inputs:
 
 - Fowler refactoring, abstraction police, and duplication unification can assess requested repositories or paths, including unchanged code. The TypeScript duplication skill defaults to the current directory.
 - `swift-simplify` focuses on uncommitted Swift code and directly related support files. `typescript-type-system-review` can review pasted code.
-- `write-exec-plan` creates a requested executable implementation plan and reads `.agent/PLANS.md` when available; task complexity alone does not trigger it. `improve-exec-plan` needs an existing plan target. `cursor-implement-exec-plan` requires an explicit Cursor choice and a checked-in plan; save and commit a chat-only plan first.
+- `improve-exec-plan` needs an existing plan target. `cursor-implement-exec-plan` requires an explicit Cursor choice and a checked-in plan; save and commit a chat-only plan first.
 - Privacy audits start from product claims and explicitly authorized evidence: repositories, documentation, test accounts, network captures, and storage or logging artifacts.
 
 ## Troubleshooting and Updates

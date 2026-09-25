@@ -59,7 +59,7 @@ Supported launcher options:
 ## Guardrails
 
 - Do not pass `--force` unless the user explicitly asked for unattended execution or accepted that Cursor may run commands without interactive approval.
-- Do not delegate from a vague chat plan. If the plan is only in chat, first create or ask for a checked-in ExecPlan using `write-exec-plan`.
+- Do not delegate from a vague chat plan. If the plan is only in chat, first save it as a concrete, checked-in implementation plan.
 - Correct stale or missing progress records directly from verified code and validation evidence as part of the authorized implementation. Do not rewrite the user's objectives or mark acceptance complete without evidence.
 - Preserve user work. If the current workspace has unrelated dirty files, include that context in the Cursor prompt through `--extra-instruction` or stop and ask if the dirty state makes delegation risky. If using `--worktree`, first confirm the ExecPlan exists in the selected worktree base; untracked or unstaged plan edits in the original checkout will not automatically exist there.
 - If `cursor-agent` is missing, not authenticated, or the requested model is unavailable, surface the failure. Do not silently fall back to a different implementation agent.

@@ -93,7 +93,7 @@ Acceptance: retain every planned trial and failure, compare equivalent workloads
 High confidence on context cost; benefit requires evaluation. Large entrypoints often require additional overlapping references:
 
 - [Fowler Rust](../plugins/jig-rust/skills/fowler-rust-refactoring/SKILL.md#L22) routes an ordinary assessment through principles, smell catalog, refactoring catalog, and report template. Together with its entrypoint this is roughly 9,600 words before repository evidence.
-- [Improve ExecPlan](../plugins/jig-exec-plans/skills/improve-exec-plan/SKILL.md#L36) requires `.agent/PLANS.md` first with no absent-file fallback, then extensive file and lifecycle procedures. [Write ExecPlan](../plugins/jig-exec-plans/skills/write-exec-plan/SKILL.md#L12) also demands full standards reading and source rereading; its own skeleton later treats a checked-in standards file as conditional.
+- [Improve ExecPlan](../plugins/jig-exec-plans/skills/improve-exec-plan/SKILL.md#L36) requires `.agent/PLANS.md` first with no absent-file fallback, then extensive file and lifecycle procedures. [Write ExecPlan](https://github.com/bpcakes/jig-skills/blob/9c47b5e36bb641721abeb7343bed82d72350cdb2/plugins/jig-exec-plans/skills/write-exec-plan/SKILL.md#L12) also demands full standards reading and source rereading; its own skeleton later treats a checked-in standards file as conditional.
 - React performance/test quality and both abstraction-police skills repeat procedures that also appear in references. Stateful lifecycle instructions are valuable for durable workflows, but need not dominate a simple plan correction.
 - Both duplication skills mandate scanning even where two named definitions may supply the entire comparison; TypeScript's scanner also depends on an available TypeScript installation.
 
@@ -192,7 +192,7 @@ Keep the existing explicit reviewer launch policy. Do not add unconditional dele
 
 | Skill | Cases | Recommended action |
 |---|---:|---|
-| [write-exec-plan](../plugins/jig-exec-plans/skills/write-exec-plan/SKILL.md) | 0 | P2: A5/A6. Specify missing-standards fallback; separate template and durable-state guidance; scale verification and explanation to the actual plan. |
+| [write-exec-plan](https://github.com/bpcakes/jig-skills/blob/9c47b5e36bb641721abeb7343bed82d72350cdb2/plugins/jig-exec-plans/skills/write-exec-plan/SKILL.md) | 0 | P2: A5/A6. Specify missing-standards fallback; separate template and durable-state guidance; scale verification and explanation to the actual plan. |
 | [improve-exec-plan](../plugins/jig-exec-plans/skills/improve-exec-plan/SKILL.md) | 0 | P2: A5/A9. Find an inferable local target, handle absent `.agent/PLANS.md`, route lifecycle depth, and remove mandatory no-op revision/score. |
 | [cursor-implement-exec-plan](../plugins/jig-exec-plans/skills/cursor-implement-exec-plan/SKILL.md) | 0 | P1: A3. Align child and parent completion with whole-plan versus milestone requests. Preserve explicit provider and unattended-execution settings. |
 | [comprehensive-review](../plugins/jig-review/skills/comprehensive-review/SKILL.md) | 0 | P1: A1 review-phase composition. P2: A4/A5 test orchestration and route branch/provider details. P3: A10 document explicit Astra configuration. |

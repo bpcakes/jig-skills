@@ -60,7 +60,7 @@ process.stdin.on('end', async () => {
       change('src/lib.rs', null, 'delete'); change('src/moved.rs', previous, 'add');
       change('src/moved.rs', null, 'delete'); change('src/lib.rs', previous, 'add');
     }
-    if (scenario === 'created-artifact') change('plan.md', '# Inclusive age gate\nAccept ages 18 and older.\n', 'add');
+    if (scenario === 'created-artifact') change('audit-manifest.json', '{"scope":"local source only"}\n', 'add');
     else if (!['negative-glob-read', 'preserve-staged'].includes(scenario)) change('src/lib.rs', 'pub fn classify(value: i32) -> bool { value > 0 }\n');
     if (scenario === 'multi-skill-read' || scenario === 'catalog-glob-read') {
       const files = scenario === 'multi-skill-read'
@@ -72,7 +72,7 @@ process.stdin.on('end', async () => {
           scenario === 'multi-skill-read' ? files : ['-n3', ...files], { encoding: 'utf8' }) });
     }
     let instruction = scenario === 'foreign-read' ? process.env.EVAL_STUB_FOREIGN_SKILL
-      : scenario === 'created-artifact' ? '.agents/skills/write-exec-plan/SKILL.md' : '.agents/skills/rust-simplify/SKILL.md';
+      : scenario === 'created-artifact' ? '.agents/skills/audit-intake-and-evidence-map/SKILL.md' : '.agents/skills/rust-simplify/SKILL.md';
     if (scenario === 'absolute-read') instruction = path.resolve(instruction);
     const readArgs = scenario === 'numbered-read' ? JSON.parse(process.env.EVAL_STUB_READ_ARGS) : ['cat'];
     emit({ type: 'command_execution', command: scenario === 'negative-glob-read'

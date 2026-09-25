@@ -2119,56 +2119,6 @@
     ]
   },
   {
-    "id": "selection-write-executable-plan",
-    "skill": "write-exec-plan",
-    "mode": "implicit",
-    "expectInvoke": true,
-    "prompt": "Write a self-contained executable implementation plan in plan.md for making src/age.mjs satisfy README.md. Include milestones and observable validation. Leave implementation for a later task.",
-    "files": {
-      "src/age.mjs": "export const accepts = age => age > 18;\n",
-      "README.md": "The age gate must accept ages 18 and older. This fixture uses Node.js and has no dependencies or existing tests.\n"
-    },
-    "findings": {
-      "min": 0,
-      "max": 1
-    },
-    "criteria": [
-      {
-        "id": "plan",
-        "requirement": "Creates a grounded plan addressing the inclusive age-18 boundary, preservation of other ages and exports, and an executable Node validation for ages 17, 18, and 19. Does not change source or run a prototype."
-      }
-    ],
-    "forbidReviewerLaunches": true,
-    "allowedChanges": [
-      "plan.md"
-    ],
-    "requiredChanges": [
-      "plan.md"
-    ]
-  },
-  {
-    "id": "selection-brief-approach",
-    "skill": "write-exec-plan",
-    "mode": "negative",
-    "expectInvoke": false,
-    "prompt": "Briefly explain the approach you would take to correct src/age.mjs against README.md.",
-    "files": {
-      "src/age.mjs": "export const accepts = age => age > 18;\n",
-      "README.md": "The age gate must accept ages 18 and older. This fixture uses Node.js and has no dependencies or existing tests.\n"
-    },
-    "findings": {
-      "min": 0,
-      "max": 1
-    },
-    "criteria": [
-      {
-        "id": "answer",
-        "requirement": "Explains changing the comparison to include 18 and checking neighboring boundaries concisely, without creating or proposing a required ExecPlan phase."
-      }
-    ],
-    "forbidReviewerLaunches": true
-  },
-  {
     "id": "selection-privacy-intake-planning",
     "skill": "audit-intake-and-evidence-map",
     "mode": "implicit",

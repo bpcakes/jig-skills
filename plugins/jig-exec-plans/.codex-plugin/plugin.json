@@ -1,7 +1,7 @@
 {
   "name": "jig-exec-plans",
-  "version": "0.1.4",
-  "description": "ExecPlan authoring, improvement, and Cursor Agent implementation skills for self-contained implementation plans.",
+  "version": "0.1.5",
+  "description": "ExecPlan improvement and Cursor Agent implementation skills for self-contained implementation plans.",
   "author": {
     "name": "Jig"
   },
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Jig ExecPlans",
-    "shortDescription": "Write, improve, and implement executable plans",
-    "longDescription": "Codex skills for writing and improving self-contained ExecPlans with observable acceptance, validation, idempotence, durable-state lifecycle coverage, and delegated Cursor Agent implementation using Composer 2.5.",
+    "shortDescription": "Improve and implement executable plans",
+    "longDescription": "Codex skills for improving self-contained ExecPlans with observable acceptance, validation, idempotence, durable-state lifecycle coverage, and delegated Cursor Agent implementation using Composer 2.5.",
     "developerName": "Jig",
     "category": "Productivity",
     "capabilities": [
@@ -28,7 +28,6 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Write an ExecPlan for this change",
       "Improve this ExecPlan against the codebase",
       "Use Cursor Agent to implement this ExecPlan"
     ]
