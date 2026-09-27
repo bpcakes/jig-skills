@@ -152,6 +152,20 @@ test("a supplied handoff cannot restart an already active run", async t => {
   assert.equal(readJSON(path.join(f.root, ".git/jig/review-fix/active.json")).directory, run.directory);
 });
 
+test("a worktree handoff starts triage while the main checkout has an active run", async t => {
+  const f = fixture(t), main = await f.start(await f.handoff());
+  const checkout = path.join(f.artifacts, "checkout");
+  f.git("worktree", "add", "-qb", "linked", checkout);
+  writeFileSync(path.join(checkout, "value.cjs"), "module.exports = 1;\n");
+  const handoff = await f.handoff({ cwd: checkout });
+  const run = await runUntilBoundary((await f.start(handoff, { cwd: checkout })).directory);
+  assert.equal(run.phase, "TRIAGE");
+  assert.equal(run.pending.assignment.repository, checkout);
+  assert.notEqual(run.runsRoot, main.runsRoot);
+  assert.equal(readJSON(path.join(main.runsRoot, "active.json")).directory, main.directory);
+  await assert.rejects(f.start(handoff, { cwd: checkout }), /Resume the active run/);
+});
+
 test("CLI rejects missing handoff files and does not silently use normal init", t => {
   const f = fixture(t), contractFile = path.join(f.artifacts, "contract.json");
   writeFileSync(contractFile, JSON.stringify(f.contract));

@@ -31,6 +31,57 @@ function fixture(t) {
     return run;
   } };
 }
+function linkedCheckout(t, f) {
+  execFileSync("git", ["add", "value.cjs"], { cwd: f.root });
+  execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "base"], { cwd: f.root });
+  const parent = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-linked-")));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const checkout = path.join(parent, "checkout");
+  execFileSync("git", ["worktree", "add", "-qb", "linked", checkout], { cwd: f.root });
+  return checkout;
+}
+
+test("linked checkouts run independently while the main checkout validates and holds its controller lock", async t => {
+  const f = fixture(t), checkout = linkedCheckout(t, f);
+  const main = await drive(await f.start(), undefined, r => r.phase === "VALIDATE" && r.validationCycle?.job);
+  const mainActive = path.join(main.runsRoot, "active.json"), before = readFileSync(mainActive);
+  let linked = await locked(main.runsRoot, () => f.start({ cwd: checkout }));
+  assert.notEqual(linked.runsRoot, main.runsRoot);
+  assert.equal(linked.root, checkout);
+  const alias = path.join(path.dirname(checkout), "alias");
+  symlinkSync(checkout, alias);
+  await assert.rejects(f.start({ cwd: alias }), /Resume the active run/);
+  linked = await drive(linked);
+  assert.equal(linked.phase, "CONVERGED");
+  await assert.rejects(release(linked.directory, f.root), /Invalid run ownership/);
+  assert.equal((await release(linked.directory, checkout)).phase, "RELEASED");
+  assert.equal((await prune(linked.directory)).phase, "PRUNED");
+  assert.deepEqual(readFileSync(mainActive), before);
+  await assert.rejects(f.start(), /Resume the active run/);
+  assert.equal((await drive(main)).phase, "CONVERGED");
+});
+
+test("a legacy linked-checkout run in common storage must settle before that checkout starts again", async t => {
+  const f = fixture(t), checkout = linkedCheckout(t, f);
+  const linked = await f.start({ cwd: checkout });
+  const legacyRoot = path.join(f.root, ".git", "jig", "review-fix");
+  const directory = path.join(legacyRoot, linked.id);
+  mkdirSync(legacyRoot, { recursive: true });
+  renameSync(linked.directory, directory);
+  const record = readJSON(path.join(directory, "run.json"));
+  writeFileSync(path.join(directory, "run.json"), JSON.stringify({ ...record, directory, runsRoot: legacyRoot }));
+  rmSync(path.join(linked.runsRoot, "active.json"));
+  const active = path.join(legacyRoot, "active.json");
+  writeFileSync(active, JSON.stringify({ directory }));
+  await assert.rejects(f.start({ cwd: checkout }), /Resume the active run/);
+  assert.equal(readJSON(active).directory, directory);
+  assert.equal((await drive(loadRun(directory))).phase, "CONVERGED");
+  assert.equal((await release(directory, checkout)).phase, "RELEASED");
+  const next = await f.start({ cwd: checkout });
+  assert.equal((await prune(directory)).phase, "PRUNED");
+  assert.equal(readJSON(path.join(next.runsRoot, "active.json")).directory, next.directory);
+});
+
 const clean = () => ({ complete: true, findings: [], acceptance: [{ criterionId: "value", status: "satisfied", evidence: "Required check verifies the source", validationIds: ["unit"] }] });
 async function drive(run, respond = a => a.role === "review" ? clean() : { decisions: [] }, observe = () => false) {
   for (let i = 0; i < 400; i++) {

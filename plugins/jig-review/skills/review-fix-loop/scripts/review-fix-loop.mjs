@@ -178,6 +178,27 @@ function settleActive(run) {
 function activeReferenceError(file, directory, error) {
   return new Error(`Cannot safely release ${file}, which references ${directory}: ${error.message} Restore any missing run records first, then use release --cwd <repository> --run ${JSON.stringify(directory)}. Unknown recovery state is not bypassed.`);
 }
+const gitDirectory = (root, common = false) => realpathSync(git(root, "rev-parse", "--path-format=absolute", common ? "--git-common-dir" : "--git-dir").toString().trim());
+const runStorage = (root, common = false) => path.join(gitDirectory(root, common), "jig", "review-fix");
+function assertLegacyAdmission(root, runsRoot) {
+  const legacyRoot = runStorage(root, true);
+  if (legacyRoot === runsRoot) return;
+  // Earlier controllers put linked-worktree runs in the common directory.
+  // Leave their records and locks untouched, but never restart their checkout.
+  for (const receipt of retainedReferences(legacyRoot)) assertSettledReference(receipt);
+  const active = path.join(legacyRoot, "active.json");
+  if (!existsSync(active)) return;
+  const reference = readJSON(active);
+  if (settledReference(reference)) { assertSettledReference(reference); return; }
+  let prior;
+  try { prior = readJSON(path.join(reference.directory, "run.json")); }
+  catch (error) { throw activeReferenceError(active, reference.directory, error); }
+  if (typeof prior.root !== "string") throw activeReferenceError(active, reference.directory, new Error("Missing checkout ownership."));
+  if (path.resolve(prior.root) !== root) return;
+  try { prior = loadRunForRelease(reference.directory); }
+  catch (error) { throw activeReferenceError(active, reference.directory, error); }
+  if (!isSettled(prior)) throw new Error(`Resume the active run: ${reference.directory}`);
+}
 function configure(options, config) {
   const reviewers = (config.reviewers ?? options.review.reviewers.map(id => ({ id }))).map(provider =>
     provider.command || provider.id === "codex" ? provider : { ...provider, bundled: true,
@@ -247,10 +268,11 @@ export async function createRun({ cwd = process.cwd(), contract, options = parse
   for (const role of ["triage", "repair"]) {
     if (config[`${role}Command`] && !executableCommand({ role, cwd: scope.root, command: config[`${role}Command`], environmentFrom: config.environmentFrom?.[role] })) throw new Error(`${role} command executable is unavailable in ${scope.root}.`);
   }
-  const privateRoot = realpathSync(git(scope.root, "rev-parse", "--path-format=absolute", "--git-common-dir").toString().trim());
+  const privateRoot = gitDirectory(scope.root);
   const runsRoot = path.join(privateRoot, "jig", "review-fix");
   assertBackupFilesystem(scope.root, Object.keys(inspected.files), privateRoot);
   return locked(runsRoot, async () => {
+    assertLegacyAdmission(scope.root, runsRoot);
     const active = path.join(runsRoot, "active.json");
     const retained = retainedReferences(runsRoot);
     for (const receipt of retained) assertSettledReference(receipt);
@@ -565,7 +587,7 @@ function completeIssue(run) {
   assignment.instructions += role === "repair"
     ? " Edit source files directly in assignment.repository using the normal editing tool (apply_patch when available). Return workspaceEdits containing path, reason, and findingIds for every changed file, including additions and deletions. Preserve existing permissions; declare intentional permission changes with an optional mode of 0644 or 0755. Do not build replacement scripts or embed entire files in JSON for ordinary repairs. Stop editing before submitting. Keep the Git index unchanged."
     : " Keep source files and the Git index read-only.";
-  if (role === "review") assignment.instructions += " Use only this assignment, the scoped source, and repository contracts for your independent review. Do not seek out, read, or use controller run records under the Git common directory's jig/review-fix tree, except the explicit validation log paths supplied in validationEvidence. Earlier reports, other assignments, transcripts, validation narratives, and repair history are outside your review inputs. Ordinary Git object/index access for inspecting the diff remains allowed. A shared checkout does not authorize inheriting another reviewer's conclusions.";
+  if (role === "review") assignment.instructions += " Use only this assignment, the scoped source, and repository contracts for your independent review. Do not seek out, read, or use controller run records in jig/review-fix under any checkout's Git directory or the legacy common Git directory, except the explicit validation log paths supplied in validationEvidence. Earlier reports, other assignments, transcripts, validation narratives, and repair history are outside your review inputs. Ordinary Git object/index access for inspecting the diff remains allowed. A shared checkout does not authorize inheriting another reviewer's conclusions.";
   if (role === "repair" && assignment.contract.evidenceOutputs?.length) assignment.instructions += " Declared evidenceOutputs may receive append-only complete JSONL objects with unchanged permissions. Leave these outputs out of workspaceEdits; the controller records them as generated evidence and revalidates the combined state. Their claims are not controller validation receipts.";
   if (checkout) assignment.instructions += " This is the user's actual checkout, not a temporary copy. Preserve pre-existing work. Repair edits are immediately visible and remain in place on failure or interruption; the controller records them and validates in this checkout without republishing them.";
   else assignment.instructions += " Keep the original checkout read-only; this assignment uses a private copy for isolated execution or assessment of an unpublished candidate. Legacy inline edits are accepted if you leave the assignment copy unchanged.";
@@ -1483,9 +1505,8 @@ export function status(run) {
 }
 export async function release(directory, cwd = process.cwd()) {
   directory = path.resolve(directory);
-  const root = repositoryRoot(cwd), common = realpathSync(git(root, "rev-parse", "--path-format=absolute", "--git-common-dir").toString().trim());
-  const runsRoot = path.join(common, "jig", "review-fix");
-  if (path.dirname(directory) !== runsRoot || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path.basename(directory))) throw new Error("Invalid run ownership; nothing released.");
+  const root = repositoryRoot(cwd), runsRoot = path.dirname(directory);
+  if (![runStorage(root), runStorage(root, true)].includes(runsRoot) || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path.basename(directory))) throw new Error("Invalid run ownership; nothing released.");
   return locked(runsRoot, async () => {
     const file = path.join(runsRoot, "active.json"), active = existsSync(file) ? readJSON(file) : null;
     if (active && active.directory !== directory) throw new Error("Another run owns the active reference; nothing released.");
@@ -1494,7 +1515,8 @@ export async function release(directory, cwd = process.cwd()) {
     try { run = loadRunForRelease(directory); }
     catch (error) { throw activeReferenceError(file, directory, error); }
     if (run.runsRoot !== runsRoot || run.id !== path.basename(directory) || lstatSync(directory).isSymbolicLink()
-        || realpathSync(git(repositoryRoot(run.root), "rev-parse", "--path-format=absolute", "--git-common-dir").toString().trim()) !== common) throw new Error("Invalid run ownership; nothing released.");
+        || ![runStorage(repositoryRoot(run.root)), runStorage(repositoryRoot(run.root), true)].includes(runsRoot)
+        || (runsRoot !== runStorage(root, true) && repositoryRoot(run.root) !== root)) throw new Error("Invalid run ownership; nothing released.");
     if (!settleActive(run)) throw new Error("Run has active or unresolved recovery obligations; resume it with its original controller before release.");
     return { phase: "RELEASED", run: directory, recordsDeleted: false };
   });
@@ -1502,8 +1524,8 @@ export async function release(directory, cwd = process.cwd()) {
 export async function prune(directory) {
   directory = path.resolve(directory);
   const initial = loadRun(directory);
-  const common = realpathSync(git(repositoryRoot(initial.root), "rev-parse", "--path-format=absolute", "--git-common-dir").toString().trim());
-  if (realpathSync(path.dirname(directory)) !== path.join(common, "jig", "review-fix") || path.dirname(directory) !== initial.runsRoot
+  const root = repositoryRoot(initial.root);
+  if (![runStorage(root), runStorage(root, true)].includes(realpathSync(path.dirname(directory))) || path.dirname(directory) !== initial.runsRoot
       || path.basename(directory) !== initial.id || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(initial.id)) throw new Error("Invalid run ownership; nothing pruned.");
   return locked(initial.runsRoot, async () => {
     const run = loadRun(directory);
