@@ -10,7 +10,7 @@ import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { hash, loadRun, locked, readJSON } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { snapshot } from "../skills/review-fix-loop/scripts/repository.mjs";
-import { ownedAlive } from "../skills/review-fix-loop/scripts/process-ownership.mjs";
+import { ownedAlive, killOwned } from "../skills/review-fix-loop/scripts/process-ownership.mjs";
 import { commandEnvironment, launchJob } from "../skills/review-fix-loop/scripts/job-runtime.mjs";
 import { discoverValidation, validateContract } from "../skills/review-fix-loop/scripts/task-contract.mjs";
 import { defaultValidationSandbox } from "../skills/review-fix-loop/scripts/validation-sandbox.mjs";
@@ -1122,14 +1122,26 @@ test("timeout bounds reject timer overflow at both configuration boundaries", as
 
 test("workers that die before claiming have a persisted finite startup budget", async t => {
   const f = fixture(t), job = path.join(f.directory, "unclaimed-job"); mkdirSync(job);
-  const missingWorker = path.join(f.directory, "missing-worker.mjs");
-  for (let i = 0; i < 250 && !existsSync(path.join(job, "result.json")); i++) {
-    launchJob(job, missingWorker, 2);
-    await sleep(25);
+  const worker = path.join(f.directory, "unclaimed-worker.mjs");
+  // Keep the worker alive through identity capture, then kill it before it claims.
+  // An immediately exiting worker can instead exhaust the identity/deadline budget.
+  writeFileSync(worker, "setTimeout(() => process.exit(), Math.max(0, Number(process.argv[3]) - Date.now()));\n");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    launchJob(job, worker, 2, 30000);
+    const launches = readJSON(path.join(job, "launch.json"));
+    assert.equal(launches.length, attempt + 1);
+    const owner = launches.at(-1).owner;
+    assert.ok(owner?.token, "worker identity must be recorded before injecting death");
+    t.after(() => killOwned(owner));
+    killOwned(owner);
+    for (let i = 0; i < 200 && ownedAlive(owner); i++) await sleep(25);
+    assert.equal(ownedAlive(owner), false);
+    assert.equal(existsSync(path.join(job, "claimed")), false);
   }
+  launchJob(job, worker, 2, 30000);
   assert.equal(readJSON(path.join(job, "result.json")).outcome, "infrastructure_failed");
   const launches = readJSON(path.join(job, "launch.json")); assert.equal(launches.length, 2);
-  launchJob(job, missingWorker, 2); assert.deepEqual(readJSON(path.join(job, "launch.json")), launches);
+  launchJob(job, worker, 2, 30000); assert.deepEqual(readJSON(path.join(job, "launch.json")), launches);
 });
 
 test("strict mode converges with two configured structured provider capabilities", async t => {
