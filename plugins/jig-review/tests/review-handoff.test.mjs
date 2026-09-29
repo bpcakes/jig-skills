@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -160,7 +160,7 @@ test("a worktree handoff starts triage while the main checkout has an active run
   const handoff = await f.handoff({ cwd: checkout });
   const run = await runUntilBoundary((await f.start(handoff, { cwd: checkout })).directory);
   assert.equal(run.phase, "TRIAGE");
-  assert.equal(run.pending.assignment.repository, checkout);
+  assert.equal(run.pending.assignment.repository, realpathSync(checkout));
   assert.notEqual(run.runsRoot, main.runsRoot);
   assert.equal(readJSON(path.join(main.runsRoot, "active.json")).directory, main.directory);
   await assert.rejects(f.start(handoff, { cwd: checkout }), /Resume the active run/);

@@ -37,6 +37,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes bubblewrap
+          # Allow Bubblewrap's namespaces on this disposable Ubuntu runner.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-net --ro-bind / / -- true
       - name: Install pinned Beads CLI
         shell: bash

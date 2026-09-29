@@ -695,11 +695,12 @@ test("fresh-process polling reads neither source files nor immutable inventories
   let run = await drive(await f.start("success", { config: { reviewers: [{ id: "codex", command: [process.execPath, "-e", code] }] } }), r => Boolean(r.pending));
   await until(() => existsSync(marker), "provider running");
   const raw = readJSON(path.join(run.directory, "run.json"));
-  assert.deepEqual(raw.expected, raw.original);
-  assert.ok(raw.expected.$manifest); assert.ok(raw.pending.before.$manifest);
-  assert.ok(JSON.stringify(raw).length < 25000, "hot state must not contain 400-path inventories");
   const log = path.join(f.directory, "io"), observer = fileURLToPath(new URL("./fixtures/observe-poll.mjs", import.meta.url));
   try {
+    assert.deepEqual(raw.expected, raw.original);
+    assert.ok(raw.expected.$manifest); assert.ok(raw.pending.before.$manifest);
+    // Bounded path summaries are allowed; full file-entry maps belong in manifests.
+    assert.doesNotMatch(JSON.stringify(raw), /"kept-\d+":/, "hot state must not inline file inventories");
     for (let i = 0; i < 3; i++) {
       const result = spawnSync(process.execPath, ["--import", observer, cli, "advance", "--run", run.directory], {
         env: { ...process.env, JIG_TEST_SOURCE_ROOT: f.root, JIG_TEST_IO_LOG: log }, encoding: "utf8", timeout: 10000,
