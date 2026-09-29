@@ -1,6 +1,6 @@
 # jig-skills
 
-Focused skills for code review, refactoring, implementation planning, and privacy audits in Codex and Claude Code. Each skill supplies an agent with a workflow, evidence standards, and an output format; some include optional scanners.
+Focused skills for code review, refactoring, and privacy audits in Codex and Claude Code. Each skill supplies an agent with a workflow, evidence standards, and an output format; some include optional scanners.
 
 Use them to investigate a specific concern in Rust, Ruby and Rails, Swift, or TypeScript/React, or to review changes with multiple models. The catalog identifies which skills report findings, produce plans, or change files.
 
@@ -44,18 +44,17 @@ This example uses your Codex session without a second reviewer CLI. The commands
 | Check a specific correctness or testing concern | Focused reviews in [Rust](#jig-rust) or [TypeScript/React](#jig-typescript) | Findings |
 | Get independent reviews of the same diff | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Combined findings and coverage notes |
 | Review, fix, test, and re-review working changes | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Reviewed commit series and convergence report |
-| Write, improve, or execute an implementation plan | [ExecPlans](#jig-execplans) | Plan, plan edits, or implementation |
 | Assess privacy or encryption claims | Relevant [privacy skills](#jig-privacy-audit); use [audit intake](plugins/jig-privacy-audit/skills/audit-intake-and-evidence-map/SKILL.md) when requesting scope or evidence planning | Findings or an audit plan |
 
 ## Plugins
 
-The seven plugins contain 39 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
+The six plugins contain 36 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
 Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, and query-analysis skills are explicit-only; invoke the named skill when you want one. General-purpose editing skills and the comprehensive-review/review-fix-loop workflows remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
 
 For marketplace installs, invoke `$plugin:skill` followed by your request in Codex. For example: `$jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
 
-[Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [ExecPlans](#jig-execplans) · [Privacy audit](#jig-privacy-audit)
+[Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [Privacy audit](#jig-privacy-audit)
 
 ### Jig Rust
 
@@ -118,15 +117,6 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, one commit per repair round by default, local validation, and independent terminal reviews of the full fixed-base range. | Code changes and run record |
 
 Both skills run in Codex and require its subagent facility. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
-
-### Jig ExecPlans
-
-Plugin: `jig-exec-plans` · [Browse files](plugins/jig-exec-plans)
-
-| Skill | Use it for | Default result |
-|---|---|---|
-| [improve-exec-plan](plugins/jig-exec-plans/skills/improve-exec-plan/SKILL.md) | Revises an existing plan against repository evidence. Edits a named file in place; returns a revised plan when the target is in chat. | Plan edits |
-| [cursor-implement-exec-plan](plugins/jig-exec-plans/skills/cursor-implement-exec-plan/SKILL.md) | Runs Cursor Agent with Composer 2.5 to implement a checked-in plan when Cursor is explicitly requested. | Code and plan changes |
 
 ### Jig Privacy Audit
 
@@ -214,7 +204,6 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Review-fix controller | Git ≥ 2.42; Linux `flock` or macOS Python 3. Uses the existing project's validation environment; isolated validation is opt-in. |
 | Claude pass in comprehensive review | Installed, authenticated [Claude Code](https://claude.ai/code) CLI |
 | Cursor pass in comprehensive review | Installed, authenticated [Cursor Agent](https://cursor.com/) CLI |
-| Cursor ExecPlan implementation | Python ≥ 3.10 and an authenticated Cursor Agent CLI |
 
 Scanners generate investigation leads; the agent validates them against source and consumers. Project builds and tests require that project's own toolchain and dependencies. See individual skill documentation for scanner commands and constraints.
 
@@ -262,7 +251,6 @@ Some skills use different inputs:
 
 - Fowler refactoring, abstraction police, and duplication unification can assess requested repositories or paths, including unchanged code. The TypeScript duplication skill defaults to the current directory.
 - `swift-simplify` focuses on uncommitted Swift code and directly related support files. `typescript-type-system-review` can review pasted code.
-- `improve-exec-plan` needs an existing plan target. `cursor-implement-exec-plan` requires an explicit Cursor choice and a checked-in plan; save and commit a chat-only plan first.
 - Privacy audits start from product claims and explicitly authorized evidence: repositories, documentation, test accounts, network captures, and storage or logging artifacts.
 
 ## Troubleshooting and Updates

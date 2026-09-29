@@ -53,18 +53,6 @@
       "category": "Coding"
     },
     {
-      "name": "jig-exec-plans",
-      "source": {
-        "source": "local",
-        "path": "./plugins/jig-exec-plans"
-      },
-      "policy": {
-        "installation": "INSTALLED_BY_DEFAULT",
-        "authentication": "ON_USE"
-      },
-      "category": "Productivity"
-    },
-    {
       "name": "jig-privacy-audit",
       "source": {
         "source": "local",

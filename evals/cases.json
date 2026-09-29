@@ -998,58 +998,6 @@
     ]
   },
   {
-    "id": "astra-plan-noop-no-standard",
-    "skill": "improve-exec-plan",
-    "mode": "explicit",
-    "expectInvoke": true,
-    "prompt": "Use $improve-exec-plan to review plan.md against this repository and correct substantive execution gaps if any. Do not implement the feature.",
-    "files": {
-      "plan.md": "# Make labels uppercase\n\n## Purpose\n\nDisplay uppercase labels while preserving empty strings. Change only formatLabel in labels.js.\n\n## Progress\n\n- [ ] Implement uppercase formatting.\n- [ ] Run validation.\n\n## Context\n\nlabels.js exports formatLabel. Node.js is the only runtime needed. No package installation is required.\n\n## Steps\n\nReplace the return expression in formatLabel with value.toUpperCase(). Preserve the function name and signature.\n\n## Acceptance and validation\n\nRun node --input-type=module -e \"import {formatLabel} from './labels.js'; if (formatLabel('Ada') !== 'ADA' || formatLabel('') !== '') process.exit(1)\" from the repository root. Both inputs must satisfy the contract.\n\n## Surprises & Discoveries\n\nNone.\n\n## Decision Log\n\nUse the built-in string operation; no new dependency.\n\n## Outcomes & Retrospective\n\nNot implemented yet.\n",
-      "labels.js": "export function formatLabel(value) { return value; }\n",
-      "package.json": "{\"type\":\"module\"}\n",
-      "README.md": "A plan review is needed before implementation. This repository has no PLANS.md or .agent/PLANS.md. Node.js is available. formatLabel receives strings only; changing capitalization is the intended feature.\n"
-    },
-    "findings": {
-      "min": 0,
-      "max": 0
-    },
-    "criteria": [
-      {
-        "id": "noChurn",
-        "requirement": "Completes the assessment despite absent PLANS.md. Finds the plan executable as written and leaves every file unchanged. Does not add a no-op revision note, usefulness score, prototype, or feature implementation."
-      }
-    ]
-  },
-  {
-    "id": "astra-plan-repair-no-standard",
-    "skill": "improve-exec-plan",
-    "mode": "explicit",
-    "expectInvoke": true,
-    "prompt": "Use $improve-exec-plan to review plan.md against this repository and correct substantive execution gaps. Do not implement the feature.",
-    "files": {
-      "plan.md": "# Make labels uppercase\n\n## Purpose\n\nDisplay uppercase labels while preserving empty strings. Change only formatLabel in label.js.\n\n## Progress\n\n- [ ] Implement uppercase formatting.\n- [ ] Run validation.\n\n## Context\n\nlabel.js exports formatLabel. Node.js is the only runtime needed. No package installation is required.\n\n## Steps\n\nReplace the return expression in formatLabel with value.toUpperCase(). Preserve the function name and signature.\n\n## Acceptance and validation\n\nRun node --input-type=module -e \"import {formatLabel} from './label.js'; if (formatLabel('Ada') !== 'ADA' || formatLabel('') !== '') process.exit(1)\" from the repository root. Both inputs must satisfy the contract.\n\n## Surprises & Discoveries\n\nNone.\n\n## Decision Log\n\nUse the built-in string operation; no new dependency.\n\n## Outcomes & Retrospective\n\nNot implemented yet.\n",
-      "labels.js": "export function formatLabel(value) { return value; }\n",
-      "package.json": "{\"type\":\"module\"}\n",
-      "README.md": "A plan review is needed before implementation. This repository has no PLANS.md or .agent/PLANS.md. Node.js is available. formatLabel receives strings only; changing capitalization is the intended feature.\n"
-    },
-    "findings": {
-      "min": 0,
-      "max": 1
-    },
-    "criteria": [
-      {
-        "id": "repair",
-        "requirement": "Corrects the nonexistent label.js references to the actual labels.js in the plan, including the validation command, without changing the uppercase feature, implementation files, or completed history. Does not block on the absent standard. Any reported finding must describe the actual corrected defect, not invent unrelated issues; summarizing the fixed defect in findings is allowed."
-      }
-    ],
-    "allowedChanges": [
-      "plan.md"
-    ],
-    "requiredChanges": [
-      "plan.md"
-    ]
-  },
-  {
     "id": "astra-review-prior-authorized-fix",
     "skill": "comprehensive-review",
     "mode": "loaded",
@@ -2086,37 +2034,6 @@
       }
     ],
     "forbidReviewerLaunches": true
-  },
-  {
-    "id": "selection-cursor-generic-implementation",
-    "skill": "cursor-implement-exec-plan",
-    "mode": "negative",
-    "expectInvoke": false,
-    "prompt": "Implement the change described in plan.md and validate it.",
-    "files": {
-      "plan.md": "# Inclusive adult boundary\n\nImplement exactly one change: accepts(age) in src/age.mjs must accept ages 18 and older. Preserve the public export and leave other files unchanged. Validate with node --input-type=module -e 'import { accepts } from \"./src/age.mjs\"; if (!accepts(18) || accepts(17)) process.exit(1)'.\n",
-      "src/age.mjs": "export const accepts = age => age > 18;\n"
-    },
-    "findings": {
-      "min": 0,
-      "max": 0
-    },
-    "criteria": [
-      {
-        "id": "implementation",
-        "requirement": "Changes accepts to include age 18 while rejecting age 17 and preserving the export. Completes implementation directly without introducing a provider-selection question or delegating to Cursor."
-      }
-    ],
-    "forbidReviewerLaunches": true,
-    "allowedChanges": [
-      "src/age.mjs"
-    ],
-    "requiredChanges": [
-      "src/age.mjs"
-    ],
-    "forbiddenScriptLaunches": [
-      "run_cursor_execplan.py"
-    ]
   },
   {
     "id": "selection-privacy-intake-planning",
