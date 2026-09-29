@@ -33,6 +33,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      - name: Install and verify Linux validation sandbox
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          bwrap --unshare-net --ro-bind / / -- true
       - name: Install pinned Beads CLI
         shell: bash
         run: |
