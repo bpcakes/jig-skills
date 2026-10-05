@@ -85,6 +85,55 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(status, 0, report)
         self.assertEqual(report["dependencies"]["T-03"], ["T-01", "T-02"])
 
+    def test_emphasized_field_labels_preserve_dependency_validation(self):
+        for emphasis in ("*", "**", "_", "__"):
+            for colon_inside in (False, True):
+                def label(match):
+                    name = match[1]
+                    return (f"- {emphasis}{name}:{emphasis}" if colon_inside
+                            else f"- {emphasis}{name}{emphasis}:")
+
+                with self.subTest(emphasis=emphasis, colon_inside=colon_inside):
+                    content = re.sub(r"^- ([A-Za-z ]+):", label,
+                                     plan(task("T-01") + task("T-02", "T-01")),
+                                     flags=re.MULTILINE)
+                    status, report = self.validate(content, "critical", True)
+                    self.assertEqual(status, 0, report)
+                    self.assertEqual(report["dependencies"], {"T-01": [], "T-02": ["T-01"]})
+                    self.assert_error(content.replace("T-01\n", "T-O1\n"), "invalid-dependency")
+
+    def test_profiles_enforce_distinct_requirements(self):
+        for removed in ("- Recovery: Revert the configuration change.\n",
+                        "## Rollout\nUse the existing deployment and revert on failure.\n"):
+            content = plan().replace(removed, "")
+            status, report = self.validate(content, "standard", True)
+            self.assertEqual(status, 0, report)
+            status, report = self.validate(content, "critical", True)
+            self.assertEqual(status, 1, report)
+            expected = "missing-task-field" if removed.startswith("-") else "missing-section"
+            self.assertIn(expected, {f["code"] for f in report["findings"]})
+
+        light = ("# Configuration plan\n## Objective\nExpose configuration.\n"
+                 "## Scope\nConfiguration only.\n## Tasks\n"
+                 + task("T-01").replace("- Recovery: Revert the configuration change.\n", "")
+                 + "## Verification\nRun configuration tests.\n")
+        status, report = self.validate(light, "light", True)
+        self.assertEqual(status, 0, report)
+        status, report = self.validate(light, "standard", True)
+        self.assertEqual(status, 1, report)
+        self.assertIn("missing-section", {f["code"] for f in report["findings"]})
+
+    def test_non_utf8_input_returns_json_diagnostic(self):
+        path = self.project / "latin1.md"
+        path.write_bytes(plan().encode("utf-8") + b"\nCaf\xe9\n")
+        result = subprocess.run([sys.executable, "-B", str(VALIDATOR), str(path), "--json"],
+                                cwd=self.project, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "")
+        report = json.loads(result.stdout)
+        self.assertFalse(report["valid"])
+        self.assertEqual([f["code"] for f in report["findings"]], ["read-failed"])
+
     def test_malformed_dependency_values_are_not_dropped(self):
         for value in ("T-O2", "T-01x", "T-01, T-O2", "T-O2, T-01",
                       "T-01,", ",T-01", "none, T-01", "none!", "`T-01",
@@ -122,6 +171,30 @@ class ValidatorTests(unittest.TestCase):
                 status, report = self.validate(plan(extra=extra), strict=True)
                 self.assertEqual(status, 0, report)
                 self.assertEqual(report["dependencies"], {"T-01": []})
+
+    def test_markdown_link_destinations_are_literal(self):
+        for link in ("[notes](docs/TODO.md)", "[ticket](https://tracker/TK-412)",
+                     "[notes](docs/(archive)/TODO.md)", r"[notes](docs/\(TODO\).md)",
+                     '[notes](<docs/TODO notes.md> "Resolved notes")',
+                     "[notes](docs/TODO`example.md)",
+                     "[notes][spec]\n\n[spec]: docs/TODO.md",
+                     "[notes][spec]\n\n[spec]:\n  <docs/FIXME notes.md>"):
+            with self.subTest(link=link):
+                status, report = self.validate(plan(extra="\nRead " + link + "\n"), strict=True)
+                self.assertEqual(status, 0, report)
+        status, report = self.validate(plan(task("T-01", outcome="Read [notes](docs/TODO.md)")), strict=True)
+        self.assertEqual(status, 0, report)
+
+    def test_link_labels_titles_and_surrounding_prose_remain_checked(self):
+        for text in ("[TODO](docs/ready.md)", '[notes](docs/ready.md "TODO title")',
+                     "[TODO][spec]\n\n[spec]: docs/ready.md",
+                     "[notes](docs/TODO.md)\nTODO assign owner.",
+                     "[notes](TODO unfinished"):
+            with self.subTest(text=text):
+                content = plan(extra="\n" + text + "\n")
+                status, report = self.validate(content, strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertIn("document-placeholder", {f["code"] for f in report["findings"]})
 
     def test_indented_code_is_literal_and_prose_scanning_resumes(self):
         for indent in ("    ", "\t"):

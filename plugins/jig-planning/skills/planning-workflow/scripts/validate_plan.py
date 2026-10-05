@@ -22,7 +22,9 @@ TASK_HEADING_RE = re.compile(
     re.IGNORECASE,
 )
 FIELD_RE = re.compile(
-    r"^\s*[-*]\s*\*{0,2}(?P<name>[A-Za-z][A-Za-z /-]*?)\*{0,2}\s*:\s*(?P<value>.*)$"
+    r"^\s*[-*]\s*(?P<emphasis>\*{1,2}|_{1,2})?"
+    r"(?P<name>[A-Za-z][A-Za-z /-]*?)"
+    r"(?:(?P=emphasis)\s*:|\s*:(?(emphasis)(?P=emphasis)))\s*(?P<value>.*)$"
 )
 TASK_REF_RE = re.compile(r"\b(?:T|TASK)[-_ ]?\d+\b", re.IGNORECASE)
 TASK_ID = r"(?:T|TASK)[-_ ]?\d+"
@@ -38,6 +40,13 @@ AUTOLINK_RE = re.compile(
     r"<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[^<>\s@]+@[^<>\s@]+)>"
 )
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+LINK_START_RE = re.compile(
+    r"(?P<inline>\[(?:\\.|[^\]\\\n])*\]\()[ \t\n]*"
+    r"|^ {0,3}\[(?:\\.|[^\]\\\n])+\]:[ \t]*(?:\n[ \t]*)?", re.MULTILINE
+)
+LINK_END_RE = re.compile(
+    r'''(?:\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?\s*\)'''
+)
 
 
 SECTION_ALIASES: dict[str, tuple[str, ...]] = {
@@ -207,15 +216,57 @@ def without_code_blocks(lines: list[str]) -> list[str]:
     return result
 
 
+def mask_link_destinations(prose: str) -> str:
+    """Leave link labels and titles visible; mask only literal destinations."""
+    masked = list(prose)
+    for match in LINK_START_RE.finditer(prose):
+        start = end = match.end()
+        if start == len(prose):
+            continue
+        if prose[start] == "<":
+            end = start + 1
+            while end < len(prose) and prose[end] not in "<>\n":
+                end += 2 if prose[end] == "\\" else 1
+            if end >= len(prose) or prose[end] != ">":
+                continue
+            end += 1
+        else:
+            depth = 0
+            while end < len(prose) and not prose[end].isspace():
+                char = prose[end]
+                if char == "\\" and end + 1 < len(prose):
+                    end += 2
+                    continue
+                if char == "(":
+                    depth += 1
+                elif char == ")":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                elif char == "<":
+                    break
+                end += 1
+            if depth:
+                continue
+        if match["inline"] and not LINK_END_RE.match(prose, end):
+            continue
+        if not match["inline"] and end < len(prose) and not prose[end].isspace():
+            continue
+        masked[start:end] = ["\n" if char == "\n" else " " for char in prose[start:end]]
+    return "".join(masked)
+
+
 def placeholder_prose(lines: list[str]) -> list[str]:
     """Mask literal spans once, retaining newlines for field and document checks."""
     def mask(match: re.Match[str]) -> str:
         return re.sub(r"[^\n]", " ", match[0])
 
     # Inline spans can cross lines, but cannot cross paragraph boundaries.
-    paragraphs = re.split(r"(\n[ \t]*\n)", "\n".join(lines))
+    prose = mask_link_destinations("\n".join(lines))
+    prose = AUTOLINK_RE.sub(mask, prose)
+    paragraphs = re.split(r"(\n[ \t]*\n)", prose)
     prose = "".join(INLINE_CODE_RE.sub(mask, part) for part in paragraphs)
-    return AUTOLINK_RE.sub(mask, prose).split("\n")
+    return prose.split("\n")
 
 
 def find_sections(lines: list[str]) -> dict[str, int]:
@@ -334,7 +385,7 @@ def validate(path: Path, profile: str) -> Report:
     report = Report(path=str(path), profile=profile)
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         report.findings.append(Finding("error", "read-failed", str(exc)))
         return report
 
