@@ -175,6 +175,11 @@ class ValidatorTests(unittest.TestCase):
     def test_markdown_link_destinations_are_literal(self):
         for link in ("[notes](docs/TODO.md)", "[ticket](https://tracker/TK-412)",
                      "[release\nnotes](docs/TODO.md)",
+                     "[release [v1] notes](docs/TODO.md)",
+                     "[release [v1 [stable]] notes](docs/TODO.md)",
+                     "[the `items[0]` entry](docs/TODO.md)",
+                     "[the `items]` entry](docs/TODO.md)",
+                     r"[release \[v1\] notes](docs/TODO.md)",
                      "[notes](docs/(archive)/TODO.md)", r"[notes](docs/\(TODO\).md)",
                      '[notes](<docs/TODO notes.md> "Resolved notes")',
                      "[notes](docs/TODO`example.md)",
@@ -191,6 +196,10 @@ class ValidatorTests(unittest.TestCase):
     def test_link_labels_titles_and_surrounding_prose_remain_checked(self):
         for text in ("[TODO](docs/ready.md)", '[notes](docs/ready.md "TODO title")',
                      "[release\nTODO](docs/ready.md)",
+                     "[release [TODO] notes](docs/ready.md)",
+                     r"\[notes](TODO)",
+                     r"[notes\](TODO)",
+                     "](TODO)",
                      "[risk]: TODO assign an owner",
                      '[risk]: TODO "unterminated title',
                      "[risk]:\nTODO assign an owner",

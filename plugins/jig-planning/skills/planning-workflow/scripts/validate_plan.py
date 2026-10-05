@@ -41,7 +41,7 @@ AUTOLINK_RE = re.compile(
 )
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 LINK_START_RE = re.compile(
-    r"(?P<inline>\[(?:\\.|[^\]\\])*\]\()[ \t\n]*"
+    r"(?P<inline>\]\()[ \t\n]*"
     r"|^ {0,3}\[(?:\\.|[^\]\\])+\]:[ \t]*(?:\n[ \t]*)?", re.MULTILINE
 )
 LINK_TITLE = r'''(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))'''
@@ -216,10 +216,26 @@ def without_code_blocks(lines: list[str]) -> list[str]:
     return result
 
 
+def has_link_label(prefix: str) -> bool:
+    """Check the closing bracket against visible, unescaped opening brackets."""
+    prefix = INLINE_CODE_RE.sub(lambda match: " " * len(match[0]), prefix)
+    depth = 0
+    for match in re.finditer(r"\\.|[\[\]]", prefix):
+        if match[0] == "[":
+            depth += 1
+        elif match[0] == "]":
+            if match.end() == len(prefix):
+                return depth > 0
+            depth = max(0, depth - 1)
+    return False
+
+
 def mask_link_destinations(prose: str) -> str:
     """Leave link labels and titles visible; mask only literal destinations."""
     masked = list(prose)
     for match in LINK_START_RE.finditer(prose):
+        if match["inline"] and not has_link_label(prose[:match.start() + 1]):
+            continue
         start = end = match.end()
         if start == len(prose):
             continue
