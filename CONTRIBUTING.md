@@ -30,6 +30,7 @@ Run commands from the repository root. Select the checks for the helper you chan
 
 | Changed helper | Command |
 |---|---|
+| Planning canonical-schema validator | `python3 -B -m unittest discover -s plugins/jig-planning/skills/planning-workflow/tests -v` |
 | Skill evaluation harness | `node --test evals/*.test.mjs` |
 | Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
 | Privacy-audit scripts | `bash plugins/jig-privacy-audit/scripts/test_fixtures.sh` |

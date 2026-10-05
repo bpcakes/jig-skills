@@ -88,10 +88,10 @@ Do not require a fixed number of review rounds. Stop when:
 - remaining uncertainty is explicit and has an owner or resolution path;
 - another pass is likely to produce style changes rather than change execution, risk, or outcome.
 
-For plans using the canonical task schema, run:
+For plans using the canonical task schema, resolve `skill_dir` to the absolute directory containing this loaded `SKILL.md`. Run from the target project so the plan path stays project-relative:
 
 ```bash
-python scripts/validate_plan.py path/to/plan.md --profile standard
+python3 "${skill_dir}/scripts/validate_plan.py" path/to/plan.md --profile standard
 ```
 
 Use the selected profile in the command. The validator checks structure and dependency integrity; it does not prove the design is correct. It applies only to the canonical schema; do not expand a Light plan merely to run or satisfy it.

@@ -25,7 +25,16 @@ FIELD_RE = re.compile(
     r"^\s*[-*]\s*\*{0,2}(?P<name>[A-Za-z][A-Za-z /-]*?)\*{0,2}\s*:\s*(?P<value>.*)$"
 )
 TASK_REF_RE = re.compile(r"\b(?:T|TASK)[-_ ]?\d+\b", re.IGNORECASE)
-PLACEHOLDER_RE = re.compile(r"\b(?:TBD|TODO|FIXME|TK)\b|\?\?+|<[^>]+>", re.IGNORECASE)
+TASK_ID = r"(?:T|TASK)[-_ ]?\d+"
+DEPENDENCY_ITEM = rf"(?:{TASK_ID}|`{TASK_ID}`)"
+DEPENDENCY_LIST_RE = re.compile(
+    rf"{DEPENDENCY_ITEM}(?:\s*,\s*{DEPENDENCY_ITEM})*", re.IGNORECASE
+)
+PLACEHOLDER_RE = re.compile(
+    r"(?i:\b(?:TBD|TODO|FIXME|TK)\b)|\?\?+|(?<![\w>])<[a-z][a-z0-9 _-]*>"
+)
+INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)")
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 
 SECTION_ALIASES: dict[str, tuple[str, ...]] = {
@@ -166,6 +175,30 @@ def canonical_field(name: str) -> str | None:
     return None
 
 
+def without_fenced_code(lines: list[str]) -> list[str]:
+    """Keep line numbers while excluding literal examples from plan content."""
+    fence = ""
+    result = []
+    for line in lines:
+        match = FENCE_RE.match(line)
+        if fence:
+            if (match and match[1][0] == fence[0]
+                    and len(match[1]) >= len(fence) and not match[2].strip()):
+                fence = ""
+            result.append("")
+        elif match:
+            fence = match[1]
+            result.append("")
+        else:
+            result.append(line)
+    return result
+
+
+def has_placeholder(value: str) -> bool:
+    # Inline code is literal syntax, like fenced examples, not template prose.
+    return PLACEHOLDER_RE.search(INLINE_CODE_RE.sub("", value)) is not None
+
+
 def find_sections(lines: list[str]) -> dict[str, int]:
     found: dict[str, int] = {}
     for line_no, line in enumerate(lines, start=1):
@@ -213,12 +246,25 @@ def parse_tasks(lines: list[str], findings: list[Finding]) -> dict[str, Task]:
                 task.fields[field_name] = field_match.group("value").strip()
 
         dependency_value = task.fields.get("depends", "")
-        if dependency_value and normalize_text(dependency_value) not in {
+        absence_value = dependency_value
+        if absence_value.startswith("`") and absence_value.endswith("`"):
+            absence_value = absence_value[1:-1]
+        if dependency_value and absence_value.lower() not in {
             "none",
+            "n/a",
             "n a",
             "not applicable",
             "no dependencies",
         }:
+            if not DEPENDENCY_LIST_RE.fullmatch(dependency_value):
+                findings.append(
+                    Finding(
+                        "error", "invalid-dependency",
+                        f"{task_id} has invalid dependency syntax: {dependency_value!r}; "
+                        "use 'none' or a comma-separated list of task IDs.",
+                        task.line,
+                    )
+                )
             task.dependencies = [
                 normalize_task_id(reference) for reference in TASK_REF_RE.findall(dependency_value)
             ]
@@ -271,7 +317,7 @@ def validate(path: Path, profile: str) -> Report:
         report.findings.append(Finding("error", "read-failed", str(exc)))
         return report
 
-    lines = text.splitlines()
+    lines = without_fenced_code(text.splitlines())
     sections = find_sections(lines)
     report.sections_found = sorted(sections)
 
@@ -310,7 +356,7 @@ def validate(path: Path, profile: str) -> Report:
                         task.line,
                     )
                 )
-            elif PLACEHOLDER_RE.search(value):
+            elif has_placeholder(value):
                 report.findings.append(
                     Finding(
                         "warning",
@@ -374,7 +420,7 @@ def validate(path: Path, profile: str) -> Report:
             )
 
     for line_no, line in enumerate(lines, start=1):
-        if PLACEHOLDER_RE.search(line) and not line.lstrip().startswith("```"):
+        if has_placeholder(line):
             report.findings.append(
                 Finding(
                     "warning",
