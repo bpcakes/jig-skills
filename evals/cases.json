@@ -2444,5 +2444,58 @@
       }
     ],
     "forbidReviewerLaunches": true
+  },
+  {
+    "id": "planning-light-existing-components",
+    "skill": "planning-workflow",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $planning-workflow to give me a short implementation plan for the HEALTH_LABEL change described in README.md. Inspect the code, return the plan in your answer, and do not edit files.",
+    "files": {
+      "README.md": "A small Node service with one configuration module and one /health handler. Add an optional HEALTH_LABEL environment variable to the health response, defaulting to ok. Reuse loadConfig and health; no new dependencies or deployment steps are needed. Validate with node --test tests/health.test.mjs.\n",
+      "src/config.mjs": "export function loadConfig(env = process.env) { return { port: Number(env.PORT || 3000) }; }\n",
+      "src/health.mjs": "export function health(config) { return { status: \"ok\", port: config.port }; }\n",
+      "tests/health.test.mjs": "import test from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { loadConfig } from \"../src/config.mjs\";\nimport { health } from \"../src/health.mjs\";\ntest(\"health\", () => assert.deepEqual(health(loadConfig({})), { status: \"ok\", port: 3000 }));\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "grounded-light-plan",
+        "requirement": "Provides a Light plan using the existing loadConfig and health functions, covering the optional environment variable, default ok, and focused tests of default and configured behavior. Makes the first implementation action clear without requesting clarification already answered by the fixture."
+      },
+      {
+        "id": "proportionate-process",
+        "requirement": "Does not require a new configuration abstraction, dependencies, tracker export, independent reviewers, formal proof, model checking, rollout infrastructure, or a canonical-schema validator as prerequisites. Extra documentation and process must have a concrete reason in the fixture; optional task IDs alone are not a failure."
+      }
+    ]
+  },
+  {
+    "id": "planning-small-fix-no-plan",
+    "skill": "planning-workflow",
+    "mode": "implicit",
+    "expectInvoke": false,
+    "prompt": "Fix the typo in README.md: change healt endpoint to health endpoint. Make only that text correction.",
+    "files": {
+      "README.md": "The healt endpoint reports service readiness.\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "direct-fix",
+        "requirement": "Corrects healt endpoint to health endpoint in README.md without generating a plan, task graph, review process, or unrelated edits."
+      }
+    ],
+    "allowedChanges": [
+      "README.md"
+    ],
+    "requiredChanges": [
+      "README.md"
+    ]
   }
 ]
