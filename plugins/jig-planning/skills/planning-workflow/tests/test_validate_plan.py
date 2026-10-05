@@ -105,7 +105,9 @@ class ValidatorTests(unittest.TestCase):
 
     def test_literal_inline_syntax_and_autolinks_pass_strict(self):
         for value in ("Return Vec<String> and Promise<void>", "Return Map<K, V>",
+                      "Return Vec::<u8>::new().",
                       "Use <https://example.com/spec> and <dev@example.com>",
+                      "See <https://example.com/TODO> and <TODO@example.com>",
                       "Show `<token>` and `TODO` as literal examples",
                       "Show ``a `nested` <token>``"):
             with self.subTest(value=value):
@@ -120,6 +122,21 @@ class ValidatorTests(unittest.TestCase):
                 status, report = self.validate(plan(extra=extra), strict=True)
                 self.assertEqual(status, 0, report)
                 self.assertEqual(report["dependencies"], {"T-01": []})
+
+    def test_indented_code_is_literal_and_prose_scanning_resumes(self):
+        for indent in ("    ", "\t"):
+            with self.subTest(indent=indent):
+                extra = f'\n{indent}TODO = "literal"\n\n{indent}<owner>\n\nReady to proceed.\n'
+                status, report = self.validate(plan(extra=extra), strict=True)
+                self.assertEqual(status, 0, report)
+                status, report = self.validate(plan(extra=extra + "TODO resolve owner\n"), strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertEqual(len(report["findings"]), 1)
+
+    def test_indented_task_fields_without_blank_line_remain_structural(self):
+        content = plan(task("T-01").replace("\n- ", "\n    - "))
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 0, report)
 
     def test_only_matching_fence_closes_example_and_scanning_resumes(self):
         extra = "\n````text\n```\nTODO in literal code\n~~~\n````\nTODO resolve owner\n"

@@ -31,9 +31,12 @@ DEPENDENCY_LIST_RE = re.compile(
     rf"{DEPENDENCY_ITEM}(?:\s*,\s*{DEPENDENCY_ITEM})*", re.IGNORECASE
 )
 PLACEHOLDER_RE = re.compile(
-    r"(?i:\b(?:TBD|TODO|FIXME|TK)\b)|\?\?+|(?<![\w>])<[a-z][a-z0-9 _-]*>"
+    r"(?i:\b(?:TBD|TODO|FIXME|TK)\b)|\?\?+|(?<![\w>:])<[a-z][a-z0-9 _-]*>"
 )
 INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)")
+AUTOLINK_RE = re.compile(
+    r"<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[^<>\s@]+@[^<>\s@]+)>"
+)
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 
@@ -175,28 +178,38 @@ def canonical_field(name: str) -> str | None:
     return None
 
 
-def without_fenced_code(lines: list[str]) -> list[str]:
+def without_code_blocks(lines: list[str]) -> list[str]:
     """Keep line numbers while excluding literal examples from plan content."""
     fence = ""
+    indented = False
+    previous_blank = True
     result = []
     for line in lines:
         match = FENCE_RE.match(line)
+        code_indent = line.startswith(("    ", "\t"))
         if fence:
             if (match and match[1][0] == fence[0]
                     and len(match[1]) >= len(fence) and not match[2].strip()):
                 fence = ""
             result.append("")
+        elif (indented and not line.strip()) or (code_indent and (indented or previous_blank)):
+            indented = True
+            result.append("")
         elif match:
+            indented = False
             fence = match[1]
             result.append("")
         else:
+            indented = False
             result.append(line)
+        previous_blank = not line.strip()
     return result
 
 
 def has_placeholder(value: str) -> bool:
     # Inline code is literal syntax, like fenced examples, not template prose.
-    return PLACEHOLDER_RE.search(INLINE_CODE_RE.sub("", value)) is not None
+    prose = AUTOLINK_RE.sub("", INLINE_CODE_RE.sub("", value))
+    return PLACEHOLDER_RE.search(prose) is not None
 
 
 def find_sections(lines: list[str]) -> dict[str, int]:
@@ -317,7 +330,7 @@ def validate(path: Path, profile: str) -> Report:
         report.findings.append(Finding("error", "read-failed", str(exc)))
         return report
 
-    lines = without_fenced_code(text.splitlines())
+    lines = without_code_blocks(text.splitlines())
     sections = find_sections(lines)
     report.sections_found = sorted(sections)
 
