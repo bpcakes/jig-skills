@@ -147,7 +147,7 @@ class ValidatorTests(unittest.TestCase):
 
     def test_real_placeholders_warn_and_fail_strict(self):
         for value in ("TBD", "TODO", "FIXME", "TK", "??", "<owner>",
-                      "<observable result this task delivers>"):
+                      "<observable result this task delivers>", "<Observable result>"):
             with self.subTest(value=value):
                 content = plan(task("T-01", outcome=value))
                 status, report = self.validate(content)
@@ -156,6 +156,34 @@ class ValidatorTests(unittest.TestCase):
                 status, report = self.validate(content, strict=True)
                 self.assertEqual(status, 2, report)
                 self.assertTrue(report["valid"])
+
+    def test_bundled_title_placeholder_is_reported(self):
+        content = plan().replace("# Configuration plan", "# <Plan title>")
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 2, report)
+        self.assertEqual(report["findings"][0]["line"], 1)
+
+    def test_multiline_inline_code_and_following_prose(self):
+        for delimiter in ("`", "``"):
+            with self.subTest(delimiter=delimiter):
+                extra = f"\nThe example is {delimiter}replace\n<token>\nwith the value{delimiter}.\n"
+                status, report = self.validate(plan(extra=extra), strict=True)
+                self.assertEqual(status, 0, report)
+                status, report = self.validate(plan(extra=extra + "TODO assign owner\n"), strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertEqual(len(report["findings"]), 1)
+                self.assertEqual(report["findings"][0]["line"], len(plan(extra=extra).splitlines()) + 1)
+
+    def test_multiline_inline_code_in_task_fields(self):
+        content = plan(task("T-01", outcome="Show `<token>\nas an example`"))
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 0, report)
+
+    def test_unmatched_inline_delimiters_do_not_hide_other_paragraphs(self):
+        content = plan(extra="\nAn unmatched ` delimiter.\n\nTODO assign owner\n\nAnother ` delimiter.\n")
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 2, report)
+        self.assertEqual(len(report["findings"]), 1)
 
     def test_documented_command_from_another_project(self):
         installed = self.project / "installed skill"

@@ -31,9 +31,9 @@ DEPENDENCY_LIST_RE = re.compile(
     rf"{DEPENDENCY_ITEM}(?:\s*,\s*{DEPENDENCY_ITEM})*", re.IGNORECASE
 )
 PLACEHOLDER_RE = re.compile(
-    r"(?i:\b(?:TBD|TODO|FIXME|TK)\b)|\?\?+|(?<![\w>:])<[a-z][a-z0-9 _-]*>"
+    r"(?i:\b(?:TBD|TODO|FIXME|TK)\b)|\?\?+|(?<![\w>:])<[A-Za-z][A-Za-z0-9 _-]*>"
 )
-INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)")
+INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)", re.DOTALL)
 AUTOLINK_RE = re.compile(
     r"<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[^<>\s@]+@[^<>\s@]+)>"
 )
@@ -119,6 +119,7 @@ class Task:
     title: str
     line: int
     fields: dict[str, str] = field(default_factory=dict)
+    field_lines: dict[str, int] = field(default_factory=dict)
     dependencies: list[str] = field(default_factory=list)
 
 
@@ -206,10 +207,15 @@ def without_code_blocks(lines: list[str]) -> list[str]:
     return result
 
 
-def has_placeholder(value: str) -> bool:
-    # Inline code is literal syntax, like fenced examples, not template prose.
-    prose = AUTOLINK_RE.sub("", INLINE_CODE_RE.sub("", value))
-    return PLACEHOLDER_RE.search(prose) is not None
+def placeholder_prose(lines: list[str]) -> list[str]:
+    """Mask literal spans once, retaining newlines for field and document checks."""
+    def mask(match: re.Match[str]) -> str:
+        return re.sub(r"[^\n]", " ", match[0])
+
+    # Inline spans can cross lines, but cannot cross paragraph boundaries.
+    paragraphs = re.split(r"(\n[ \t]*\n)", "\n".join(lines))
+    prose = "".join(INLINE_CODE_RE.sub(mask, part) for part in paragraphs)
+    return AUTOLINK_RE.sub(mask, prose).split("\n")
 
 
 def find_sections(lines: list[str]) -> dict[str, int]:
@@ -248,7 +254,8 @@ def parse_tasks(lines: list[str], findings: list[Finding]) -> dict[str, Task]:
             continue
 
         task = Task(task_id=task_id, title=match.group("title").strip(), line=start + 1)
-        for body_line in lines[start + 1 : end]:
+        for body_index in range(start + 1, end):
+            body_line = lines[body_index]
             if HEADING_RE.match(body_line):
                 break
             field_match = FIELD_RE.match(body_line)
@@ -257,6 +264,7 @@ def parse_tasks(lines: list[str], findings: list[Finding]) -> dict[str, Task]:
             field_name = canonical_field(field_match.group("name"))
             if field_name and field_name not in task.fields:
                 task.fields[field_name] = field_match.group("value").strip()
+                task.field_lines[field_name] = body_index
 
         dependency_value = task.fields.get("depends", "")
         absence_value = dependency_value
@@ -331,6 +339,7 @@ def validate(path: Path, profile: str) -> Report:
         return report
 
     lines = without_code_blocks(text.splitlines())
+    prose_lines = placeholder_prose(lines)
     sections = find_sections(lines)
     report.sections_found = sorted(sections)
 
@@ -369,7 +378,7 @@ def validate(path: Path, profile: str) -> Report:
                         task.line,
                     )
                 )
-            elif has_placeholder(value):
+            elif PLACEHOLDER_RE.search(prose_lines[task.field_lines[field_name]]):
                 report.findings.append(
                     Finding(
                         "warning",
@@ -432,13 +441,13 @@ def validate(path: Path, profile: str) -> Report:
                 )
             )
 
-    for line_no, line in enumerate(lines, start=1):
-        if has_placeholder(line):
+    for line_no, line in enumerate(prose_lines, start=1):
+        if PLACEHOLDER_RE.search(line):
             report.findings.append(
                 Finding(
                     "warning",
                     "document-placeholder",
-                    f"Possible unresolved placeholder: {line.strip()[:120]}",
+                    f"Possible unresolved placeholder: {lines[line_no - 1].strip()[:120]}",
                     line_no,
                 )
             )
