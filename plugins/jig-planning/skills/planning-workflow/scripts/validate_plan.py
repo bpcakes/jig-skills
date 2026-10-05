@@ -41,12 +41,12 @@ AUTOLINK_RE = re.compile(
 )
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 LINK_START_RE = re.compile(
-    r"(?P<inline>\[(?:\\.|[^\]\\\n])*\]\()[ \t\n]*"
-    r"|^ {0,3}\[(?:\\.|[^\]\\\n])+\]:[ \t]*(?:\n[ \t]*)?", re.MULTILINE
+    r"(?P<inline>\[(?:\\.|[^\]\\])*\]\()[ \t\n]*"
+    r"|^ {0,3}\[(?:\\.|[^\]\\])+\]:[ \t]*(?:\n[ \t]*)?", re.MULTILINE
 )
-LINK_END_RE = re.compile(
-    r'''(?:\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?\s*\)'''
-)
+LINK_TITLE = r'''(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))'''
+LINK_END_RE = re.compile(rf"(?:\s+{LINK_TITLE})?\s*\)")
+REFERENCE_END_RE = re.compile(rf"(?:[ \t]+{LINK_TITLE})?[ \t]*(?:\n|$)")
 
 
 SECTION_ALIASES: dict[str, tuple[str, ...]] = {
@@ -250,7 +250,7 @@ def mask_link_destinations(prose: str) -> str:
                 continue
         if match["inline"] and not LINK_END_RE.match(prose, end):
             continue
-        if not match["inline"] and end < len(prose) and not prose[end].isspace():
+        if not match["inline"] and not REFERENCE_END_RE.match(prose, end):
             continue
         masked[start:end] = ["\n" if char == "\n" else " " for char in prose[start:end]]
     return "".join(masked)
@@ -262,10 +262,9 @@ def placeholder_prose(lines: list[str]) -> list[str]:
         return re.sub(r"[^\n]", " ", match[0])
 
     # Inline spans can cross lines, but cannot cross paragraph boundaries.
-    prose = mask_link_destinations("\n".join(lines))
-    prose = AUTOLINK_RE.sub(mask, prose)
-    paragraphs = re.split(r"(\n[ \t]*\n)", prose)
-    prose = "".join(INLINE_CODE_RE.sub(mask, part) for part in paragraphs)
+    paragraphs = re.split(r"(\n[ \t]*\n)", "\n".join(lines))
+    prose = "".join(INLINE_CODE_RE.sub(mask, AUTOLINK_RE.sub(mask, mask_link_destinations(part)))
+                    for part in paragraphs)
     return prose.split("\n")
 
 
