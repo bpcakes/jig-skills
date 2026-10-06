@@ -33,7 +33,8 @@ DEPENDENCY_LIST_RE = re.compile(
     rf"{DEPENDENCY_ITEM}(?:\s*,\s*{DEPENDENCY_ITEM})*", re.IGNORECASE
 )
 PLACEHOLDER_RE = re.compile(
-    r"(?i:\b(?:TBD|TODO|FIXME|TK)\b)|\?\?+|(?<![\w>:])<[A-Za-z][A-Za-z0-9 _-]*>"
+    r"(?i:\b(?:TBD|TODO|FIXME)\b|\bTK\b(?![-_]\w))"
+    r"|\?\?+|(?<![\w>:])<[A-Za-z][A-Za-z0-9 _-]*>"
 )
 INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)", re.DOTALL)
 AUTOLINK_RE = re.compile(

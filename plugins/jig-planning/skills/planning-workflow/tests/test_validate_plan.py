@@ -267,8 +267,22 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(len(report["findings"]), 1)
         self.assertEqual(report["findings"][0]["line"], len(plan(extra=extra).splitlines()))
 
+    def test_ticket_identifiers_are_not_placeholders(self):
+        for ticket in ("TK-412", "tk-412", "TK_412", "(TK-412)"):
+            with self.subTest(ticket=ticket):
+                content = plan(task("T-01", outcome=f"Resolve {ticket}"),
+                               extra=f"\nTrack delivery in {ticket}.\n")
+                status, report = self.validate(content, strict=True)
+                self.assertEqual(status, 0, report)
+                self.assertEqual(report["findings"], [])
+                status, report = self.validate(content + "TK: assign owner.\n", strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertEqual([f["code"] for f in report["findings"]],
+                                 ["document-placeholder"])
+
     def test_real_placeholders_warn_and_fail_strict(self):
-        for value in ("TBD", "TODO", "FIXME", "TK", "??", "<owner>",
+        for value in ("TBD", "TODO", "FIXME", "TK", "tk", "(Tk)",
+                      "TK: assign owner", "TK - assign owner", "TK-", "??", "<owner>",
                       "<observable result this task delivers>", "<Observable result>"):
             with self.subTest(value=value):
                 content = plan(task("T-01", outcome=value))
