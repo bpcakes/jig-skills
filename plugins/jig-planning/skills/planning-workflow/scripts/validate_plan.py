@@ -328,7 +328,15 @@ def parse_tasks(lines: list[str], findings: list[Finding]) -> dict[str, Task]:
             if not field_match:
                 continue
             field_name = canonical_field(field_match.group("name"))
-            if field_name and field_name not in task.fields:
+            if field_name in task.fields:
+                findings.append(
+                    Finding(
+                        "error", "duplicate-task-field",
+                        f"{task_id} repeats the {field_name!r} field; use one declaration per field.",
+                        body_index + 1,
+                    )
+                )
+            elif field_name:
                 task.fields[field_name] = field_match.group("value").strip()
                 task.field_lines[field_name] = body_index
 

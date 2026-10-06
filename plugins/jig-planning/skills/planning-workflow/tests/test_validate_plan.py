@@ -85,6 +85,37 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(status, 0, report)
         self.assertEqual(report["dependencies"]["T-03"], ["T-01", "T-02"])
 
+    def test_repeated_canonical_fields_are_errors(self):
+        for label in ("Depends on", "Dependencies", "Blocked by"):
+            for value in ("none", "T-99", "T-O2"):
+                for strict in (False, True):
+                    with self.subTest(label=label, value=value, strict=strict):
+                        extra = f"- {label}: {value}"
+                        content = plan(task("T-01").replace(
+                            "- Depends on: none", "- Depends on: none\n" + extra))
+                        status, report = self.validate(content, strict=strict)
+                        self.assertEqual(status, 1, report)
+                        self.assertFalse(report["valid"])
+                        duplicates = [f for f in report["findings"]
+                                      if f["code"] == "duplicate-task-field"]
+                        self.assertEqual(len(duplicates), 1, report)
+                        self.assertEqual(duplicates[0]["line"],
+                                         content.splitlines().index("- Depends on: none") + 2)
+
+        for alias in ("Result", "Surfaces", "Tests", "Rollback", "Completion"):
+            with self.subTest(alias=alias):
+                self.assert_error(plan(task("T-01") + f"- {alias}: Repeated value\n"),
+                                  "duplicate-task-field")
+
+    def test_dependency_backticks_wrap_individual_ids(self):
+        content = plan(task("T-01") + task("T-02", "T-01")
+                       + task("T-03", "`T-01`, `T-02`"))
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 0, report)
+        self.assertEqual(report["dependencies"]["T-03"], ["T-01", "T-02"])
+        self.assert_error(content.replace("`T-01`, `T-02`", "`T-01, T-02`"),
+                          "invalid-dependency")
+
     def test_emphasized_field_labels_preserve_dependency_validation(self):
         for emphasis in ("*", "**", "_", "__"):
             for colon_inside in (False, True):

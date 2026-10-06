@@ -29,7 +29,7 @@ Use this contract as a shape, not a quota. Omit sections that do not change exec
 - Rejected alternatives, only where useful
 
 ## 5. Execution graph
-- Task table or task sections
+- Task table or task sections (the validator supports task sections only)
 - Dependency summary and critical path
 - Parallelization constraints
 
@@ -81,6 +81,8 @@ Do not create decision records for routine implementation details.
 
 Use this schema when structured tasks are useful, with stable IDs such as `T-01`, `T-02`, and so on. It is not required for Light plans.
 
+The validator reads `###` task headings and their bullet fields, as shown below; it does not validate task tables. It rejects repeated recognized fields, including different aliases for the same field.
+
 ```markdown
 ### T-01 — <outcome-oriented title>
 - Outcome: <observable result this task delivers>
@@ -98,7 +100,7 @@ Use this schema when structured tasks are useful, with stable IDs such as `T-01`
 - **Outcome** states the delivered capability, not the activity. Prefer “Requests are authenticated with rotated keys” over “Implement auth changes.”
 - **Context** contains local rationale and pointers, not a copy of the whole plan.
 - **Changes** names affected boundaries. File paths are useful when known, but do not fabricate paths before inspecting the repository.
-- **Depends on** contains true prerequisites only. Use `none` or a comma-separated list of task IDs (optionally in backticks); malformed entries fail structural validation. Shared sequence preference is not automatically a dependency.
+- **Depends on** contains true prerequisites only. Use `none` or a comma-separated list of task IDs. Each ID may have its own backticks, for example `` `T-01`, `T-02` ``; wrapping the entire list in one backtick span is not supported. Malformed entries fail structural validation. Shared sequence preference is not automatically a dependency.
 - **Parallel with** is optional. Confirm the tasks do not edit the same source of truth, schema, generated artifact, or unstable interface.
 - **Verify** is proportionate to risk. Prefer the narrowest check that can falsify the task's result, then add broader checks only when justified.
 - **Recovery** is mandatory when the task can corrupt data, lock out users, break compatibility, or create difficult-to-reverse state.
