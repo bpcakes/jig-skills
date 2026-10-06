@@ -1,6 +1,6 @@
 # jig-skills
 
-Focused skills for code review, refactoring, and privacy audits in Codex and Claude Code. Each skill supplies an agent with a workflow, evidence standards, and an output format; some include optional scanners.
+Focused skills for implementation planning, code review, refactoring, and privacy audits in Codex and Claude Code. Each skill supplies an agent with a workflow, evidence standards, and an output format; some include optional scanners.
 
 Use them to investigate a specific concern in Rust, Ruby and Rails, Swift, or TypeScript/React, or to review changes with multiple models. The catalog identifies which skills report findings, produce plans, or change files.
 
@@ -36,6 +36,7 @@ This example uses your Codex session without a second reviewer CLI. The commands
 
 | What you want | Start with | Default result |
 |---|---|---|
+| Create or audit an implementation plan | [planning-workflow](plugins/jig-planning/skills/planning-workflow/SKILL.md) | Evidence-backed plan or plan audit |
 | Simplify code now | Language-specific `simplify` skills in [Rust](#jig-rust), [Swift](#jig-swift), or [TypeScript](#jig-typescript) | Code changes |
 | Get a behavior-preserving refactoring plan | Fowler refactoring in [Rust](#jig-rust) or [Ruby/Rails](#jig-ruby) | Prioritized plan |
 | Assess Rust module boundaries and ownership | [rust-architecture-review](plugins/jig-rust/skills/rust-architecture-review/SKILL.md) | Findings |
@@ -48,13 +49,23 @@ This example uses your Codex session without a second reviewer CLI. The commands
 
 ## Plugins
 
-The six plugins contain 36 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
+The seven plugins contain 37 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
 Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, and query-analysis skills are explicit-only; invoke the named skill when you want one. General-purpose editing skills and the comprehensive-review/review-fix-loop workflows remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
 
 For marketplace installs, invoke `$plugin:skill` followed by your request in Codex. For example: `$jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
 
-[Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [Privacy audit](#jig-privacy-audit)
+[Planning](#jig-planning) · [Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [Privacy audit](#jig-privacy-audit)
+
+### Jig Planning
+
+Plugin: `jig-planning` · [Browse files](plugins/jig-planning)
+
+| Skill | Use it for | Default result |
+|---|---|---|
+| [planning-workflow](plugins/jig-planning/skills/planning-workflow/SKILL.md) | Creates or audits implementation plans for complex changes, grounded in repository evidence. Uses the simplest sufficient design and scales tasks, review, verification, and recovery to risk. | Implementation plan or plan audit |
+
+Light plans need only objective, scope, tasks, and focused verification. Structured task graphs and independent reviews are conditional; small local fixes and work with an executable plan do not trigger extra planning. The bundled Python validator checks canonical task structure and dependencies, not design correctness.
 
 ### Jig Rust
 
@@ -149,7 +160,7 @@ codex plugin list --marketplace jig-skills --available --json
 codex plugin add jig-ruby@jig-skills
 ```
 
-Replace `jig-ruby` with any plugin ID in the catalog. Six plugins are marked `INSTALLED_BY_DEFAULT` and may be installed during startup; `jig-ruby` is available for explicit installation. You can also select the plugin in the Codex plugin UI and install or enable it there.
+Replace `jig-ruby` with any plugin ID in the catalog. Five plugins are marked `INSTALLED_BY_DEFAULT` and may be installed during startup; `jig-ruby` and `jig-planning` are available for explicit installation. You can also select the plugin in the Codex plugin UI and install or enable it there.
 
 An SSH Git URL is an alternative marketplace source if your GitHub SSH access is configured:
 
@@ -195,6 +206,7 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 
 | Feature | Additional requirements |
 |---|---|
+| Planning canonical-schema validator (optional) | Python ≥ 3.10 |
 | Rust abstraction-police collector | Python ≥ 3.11 |
 | Rust Fowler and duplication scanners | Python ≥ 3.10 |
 | Privacy-audit helper scripts | Python ≥ 3.10 |
@@ -212,6 +224,12 @@ Scanners generate investigation leads; the agent validates them against source a
 Run skills from the project you want assessed. Name the scope in your request: current working changes, a feature branch, a base reference, or specific files and directories. For most focused diff reviews, current working changes means staged and unstaged changes; consult the selected skill for exclusions and other supported inputs.
 
 Enter these examples in Codex with the relevant plugins installed. Replace sample paths and branch names with yours.
+
+Create a plan for a cross-component change:
+
+```text
+$jig-planning:planning-workflow Plan this migration using repository evidence. Prefer existing components and include verification and recovery proportionate to the risk.
+```
 
 Review a React branch for Effect and cleanup problems:
 

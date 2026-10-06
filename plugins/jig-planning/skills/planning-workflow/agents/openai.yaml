@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planning Workflow"
+  short_description: "Build evidence-backed implementation plans"
+  default_prompt: "Use $planning-workflow to create or audit a decision-complete implementation plan for this work."

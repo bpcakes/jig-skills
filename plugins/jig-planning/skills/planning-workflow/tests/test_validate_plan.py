@@ -1,0 +1,340 @@
+"""CLI regressions for dependency integrity and literal-code handling."""
+
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+
+SKILL = Path(__file__).resolve().parents[1]
+VALIDATOR = SKILL / "scripts" / "validate_plan.py"
+
+
+def task(task_id, depends="none", outcome="Deliver the configured result"):
+    return f"""### {task_id} — Deliver result
+- Outcome: {outcome}
+- Changes: src/config.py
+- Depends on: {depends}
+- Verify: Run the configuration tests.
+- Recovery: Revert the configuration change.
+- Done when: Default and configured cases pass.
+"""
+
+
+def plan(tasks=None, extra=""):
+    return """# Configuration plan
+## Objective
+Expose the configured result.
+## Scope
+Only the configuration path.
+## Evidence
+The configuration module owns the default.
+## Design
+Use the existing configuration module.
+## Tasks
+""" + (tasks if tasks is not None else task("T-01")) + """## Verification
+Run the configuration tests.
+## Rollout
+Use the existing deployment and revert on failure.
+## Risks
+No data migration is involved.
+""" + extra
+
+
+class ValidatorTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="planning validator ")
+        self.addCleanup(self.temp.cleanup)
+        self.project = Path(self.temp.name)
+
+    def validate(self, content, profile="standard", strict=False):
+        path = self.project / "plan.md"
+        path.write_text(content)
+        args = [sys.executable, "-B", str(VALIDATOR), str(path),
+                "--profile", profile, "--json"]
+        if strict:
+            args.append("--strict")
+        result = subprocess.run(args, cwd=self.project, capture_output=True, text=True)
+        self.assertEqual(result.stderr, "")
+        return result.returncode, json.loads(result.stdout)
+
+    def assert_error(self, content, code):
+        status, report = self.validate(content)
+        self.assertEqual(status, 1, report)
+        self.assertFalse(report["valid"])
+        self.assertIn(code, {f["code"] for f in report["findings"]})
+
+    def test_valid_profiles_and_explicit_absence(self):
+        for profile in ("light", "standard", "critical"):
+            for absence in ("none", "NONE", "n/a", "n a", "not applicable",
+                            "no dependencies", "`none`"):
+                with self.subTest(profile=profile, absence=absence):
+                    status, report = self.validate(plan(task("T-01", absence)), profile, True)
+                    self.assertEqual(status, 0, report)
+                    self.assertEqual(report["dependencies"], {"T-01": []})
+
+    def test_normalized_ids_and_duplicate_edges(self):
+        content = plan(task("T-01") + task("TASK_2", "T-01")
+                       + task("TASK 3", "`task_1`, T1, TASK 2"))
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 0, report)
+        self.assertEqual(report["dependencies"]["T-03"], ["T-01", "T-02"])
+
+    def test_repeated_canonical_fields_are_errors(self):
+        for label in ("Depends on", "Dependencies", "Blocked by"):
+            for value in ("none", "T-99", "T-O2"):
+                for strict in (False, True):
+                    with self.subTest(label=label, value=value, strict=strict):
+                        extra = f"- {label}: {value}"
+                        content = plan(task("T-01").replace(
+                            "- Depends on: none", "- Depends on: none\n" + extra))
+                        status, report = self.validate(content, strict=strict)
+                        self.assertEqual(status, 1, report)
+                        self.assertFalse(report["valid"])
+                        duplicates = [f for f in report["findings"]
+                                      if f["code"] == "duplicate-task-field"]
+                        self.assertEqual(len(duplicates), 1, report)
+                        self.assertEqual(duplicates[0]["line"],
+                                         content.splitlines().index("- Depends on: none") + 2)
+
+        for alias in ("Result", "Surfaces", "Tests", "Rollback", "Completion"):
+            with self.subTest(alias=alias):
+                self.assert_error(plan(task("T-01") + f"- {alias}: Repeated value\n"),
+                                  "duplicate-task-field")
+
+    def test_dependency_backticks_wrap_individual_ids(self):
+        content = plan(task("T-01") + task("T-02", "T-01")
+                       + task("T-03", "`T-01`, `T-02`"))
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 0, report)
+        self.assertEqual(report["dependencies"]["T-03"], ["T-01", "T-02"])
+        self.assert_error(content.replace("`T-01`, `T-02`", "`T-01, T-02`"),
+                          "invalid-dependency")
+
+    def test_emphasized_field_labels_preserve_dependency_validation(self):
+        for emphasis in ("*", "**", "_", "__"):
+            for colon_inside in (False, True):
+                def label(match):
+                    name = match[1]
+                    return (f"- {emphasis}{name}:{emphasis}" if colon_inside
+                            else f"- {emphasis}{name}{emphasis}:")
+
+                with self.subTest(emphasis=emphasis, colon_inside=colon_inside):
+                    content = re.sub(r"^- ([A-Za-z ]+):", label,
+                                     plan(task("T-01") + task("T-02", "T-01")),
+                                     flags=re.MULTILINE)
+                    status, report = self.validate(content, "critical", True)
+                    self.assertEqual(status, 0, report)
+                    self.assertEqual(report["dependencies"], {"T-01": [], "T-02": ["T-01"]})
+                    self.assert_error(content.replace("T-01\n", "T-O1\n"), "invalid-dependency")
+
+    def test_profiles_enforce_distinct_requirements(self):
+        for removed in ("- Recovery: Revert the configuration change.\n",
+                        "## Rollout\nUse the existing deployment and revert on failure.\n"):
+            content = plan().replace(removed, "")
+            status, report = self.validate(content, "standard", True)
+            self.assertEqual(status, 0, report)
+            status, report = self.validate(content, "critical", True)
+            self.assertEqual(status, 1, report)
+            expected = "missing-task-field" if removed.startswith("-") else "missing-section"
+            self.assertIn(expected, {f["code"] for f in report["findings"]})
+
+        light = ("# Configuration plan\n## Objective\nExpose configuration.\n"
+                 "## Scope\nConfiguration only.\n## Tasks\n"
+                 + task("T-01").replace("- Recovery: Revert the configuration change.\n", "")
+                 + "## Verification\nRun configuration tests.\n")
+        status, report = self.validate(light, "light", True)
+        self.assertEqual(status, 0, report)
+        status, report = self.validate(light, "standard", True)
+        self.assertEqual(status, 1, report)
+        self.assertIn("missing-section", {f["code"] for f in report["findings"]})
+
+    def test_non_utf8_input_returns_json_diagnostic(self):
+        path = self.project / "latin1.md"
+        path.write_bytes(plan().encode("utf-8") + b"\nCaf\xe9\n")
+        result = subprocess.run([sys.executable, "-B", str(VALIDATOR), str(path), "--json"],
+                                cwd=self.project, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "")
+        report = json.loads(result.stdout)
+        self.assertFalse(report["valid"])
+        self.assertEqual([f["code"] for f in report["findings"]], ["read-failed"])
+
+    def test_malformed_dependency_values_are_not_dropped(self):
+        for value in ("T-O2", "T-01x", "T-01, T-O2", "T-O2, T-01",
+                      "T-01,", ",T-01", "none, T-01", "none!", "`T-01",
+                      "T-01 T-02", "after T-01", "T-01; T-02"):
+            with self.subTest(value=value):
+                self.assert_error(plan(task("T-01") + task("T-02", value)),
+                                  "invalid-dependency")
+
+    def test_unknown_self_and_cyclic_dependencies_still_fail(self):
+        self.assert_error(plan(task("T-01", "T-99")), "unknown-dependency")
+        self.assert_error(plan(task("T-01", "T-01")), "self-dependency")
+        self.assert_error(plan(task("T-01", "T-02") + task("T-02", "T-01")),
+                          "dependency-cycle")
+
+    def test_required_structure_still_fails(self):
+        self.assert_error(plan().replace("## Scope", "## Details"), "missing-section")
+        self.assert_error(plan().replace("- Outcome:", "- Notes:"), "missing-task-field")
+
+    def test_literal_inline_syntax_and_autolinks_pass_strict(self):
+        for value in ("Return Vec<String> and Promise<void>", "Return Map<K, V>",
+                      "Return Vec::<u8>::new().",
+                      "Use <https://example.com/spec> and <dev@example.com>",
+                      "See <https://example.com/TODO> and <TODO@example.com>",
+                      "Show `<token>` and `TODO` as literal examples",
+                      "Show ``a `nested` <token>``"):
+            with self.subTest(value=value):
+                status, report = self.validate(plan(task("T-01", outcome=value)), strict=True)
+                self.assertEqual(status, 0, report)
+                self.assertEqual(report["findings"], [])
+
+    def test_fenced_examples_do_not_create_findings_or_tasks(self):
+        for fence in ("```", "~~~", "````"):
+            with self.subTest(fence=fence):
+                extra = f"\n{fence}text\n### T-99 — Example\n- Outcome: TODO\nVec<String>\n<token>\n{fence}\n"
+                status, report = self.validate(plan(extra=extra), strict=True)
+                self.assertEqual(status, 0, report)
+                self.assertEqual(report["dependencies"], {"T-01": []})
+
+    def test_markdown_link_destinations_are_literal(self):
+        for link in ("[notes](docs/TODO.md)", "[ticket](https://tracker/TK-412)",
+                     "[release\nnotes](docs/TODO.md)",
+                     "[release [v1] notes](docs/TODO.md)",
+                     "[release [v1 [stable]] notes](docs/TODO.md)",
+                     "[the `items[0]` entry](docs/TODO.md)",
+                     "[the `items]` entry](docs/TODO.md)",
+                     r"[release \[v1\] notes](docs/TODO.md)",
+                     "[notes](docs/(archive)/TODO.md)", r"[notes](docs/\(TODO\).md)",
+                     '[notes](<docs/TODO notes.md> "Resolved notes")',
+                     "[notes](docs/TODO`example.md)",
+                     "[notes][spec]\n\n[spec]: docs/TODO.md",
+                     '[notes][spec]\n\n[spec]: docs/TODO.md "Resolved notes"',
+                     "[notes][release notes]\n\n[release\nnotes]: docs/TODO.md",
+                     "[notes][spec]\n\n[spec]:\n  <docs/FIXME notes.md>"):
+            with self.subTest(link=link):
+                status, report = self.validate(plan(extra="\nRead " + link + "\n"), strict=True)
+                self.assertEqual(status, 0, report)
+        status, report = self.validate(plan(task("T-01", outcome="Read [notes](docs/TODO.md)")), strict=True)
+        self.assertEqual(status, 0, report)
+
+    def test_link_labels_titles_and_surrounding_prose_remain_checked(self):
+        for text in ("[TODO](docs/ready.md)", '[notes](docs/ready.md "TODO title")',
+                     "[release\nTODO](docs/ready.md)",
+                     "[release [TODO] notes](docs/ready.md)",
+                     r"\[notes](TODO)",
+                     r"[notes\](TODO)",
+                     "](TODO)",
+                     "[risk]: TODO assign an owner",
+                     '[risk]: TODO "unterminated title',
+                     "[risk]:\nTODO assign an owner",
+                     '[notes]: docs/ready.md "TODO title"',
+                     "[notes](\n\nTODO\n)",
+                     "[TODO][spec]\n\n[spec]: docs/ready.md",
+                     "[notes](docs/TODO.md)\nTODO assign owner.",
+                     "[notes](TODO unfinished"):
+            with self.subTest(text=text):
+                content = plan(extra="\n" + text + "\n")
+                status, report = self.validate(content, strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertIn("document-placeholder", {f["code"] for f in report["findings"]})
+
+    def test_indented_code_is_literal_and_prose_scanning_resumes(self):
+        for indent in ("    ", "\t"):
+            with self.subTest(indent=indent):
+                extra = f'\n{indent}TODO = "literal"\n\n{indent}<owner>\n\nReady to proceed.\n'
+                status, report = self.validate(plan(extra=extra), strict=True)
+                self.assertEqual(status, 0, report)
+                status, report = self.validate(plan(extra=extra + "TODO resolve owner\n"), strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertEqual(len(report["findings"]), 1)
+
+    def test_indented_task_fields_without_blank_line_remain_structural(self):
+        content = plan(task("T-01").replace("\n- ", "\n    - "))
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 0, report)
+
+    def test_only_matching_fence_closes_example_and_scanning_resumes(self):
+        extra = "\n````text\n```\nTODO in literal code\n~~~\n````\nTODO resolve owner\n"
+        status, report = self.validate(plan(extra=extra), strict=True)
+        self.assertEqual(status, 2, report)
+        self.assertEqual(len(report["findings"]), 1)
+        self.assertEqual(report["findings"][0]["line"], len(plan(extra=extra).splitlines()))
+
+    def test_ticket_identifiers_are_not_placeholders(self):
+        for ticket in ("TK-412", "tk-412", "TK_412", "(TK-412)"):
+            with self.subTest(ticket=ticket):
+                content = plan(task("T-01", outcome=f"Resolve {ticket}"),
+                               extra=f"\nTrack delivery in {ticket}.\n")
+                status, report = self.validate(content, strict=True)
+                self.assertEqual(status, 0, report)
+                self.assertEqual(report["findings"], [])
+                status, report = self.validate(content + "TK: assign owner.\n", strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertEqual([f["code"] for f in report["findings"]],
+                                 ["document-placeholder"])
+
+    def test_real_placeholders_warn_and_fail_strict(self):
+        for value in ("TBD", "TODO", "FIXME", "TK", "tk", "(Tk)",
+                      "TK: assign owner", "TK - assign owner", "TK-", "??", "<owner>",
+                      "<observable result this task delivers>", "<Observable result>"):
+            with self.subTest(value=value):
+                content = plan(task("T-01", outcome=value))
+                status, report = self.validate(content)
+                self.assertEqual(status, 0, report)
+                self.assertGreater(report["summary"]["warnings"], 0)
+                status, report = self.validate(content, strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertTrue(report["valid"])
+
+    def test_bundled_title_placeholder_is_reported(self):
+        content = plan().replace("# Configuration plan", "# <Plan title>")
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 2, report)
+        self.assertEqual(report["findings"][0]["line"], 1)
+
+    def test_multiline_inline_code_and_following_prose(self):
+        for delimiter in ("`", "``"):
+            with self.subTest(delimiter=delimiter):
+                extra = f"\nThe example is {delimiter}replace\n<token>\nwith the value{delimiter}.\n"
+                status, report = self.validate(plan(extra=extra), strict=True)
+                self.assertEqual(status, 0, report)
+                status, report = self.validate(plan(extra=extra + "TODO assign owner\n"), strict=True)
+                self.assertEqual(status, 2, report)
+                self.assertEqual(len(report["findings"]), 1)
+                self.assertEqual(report["findings"][0]["line"], len(plan(extra=extra).splitlines()) + 1)
+
+    def test_multiline_inline_code_in_task_fields(self):
+        content = plan(task("T-01", outcome="Show `<token>\nas an example`"))
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 0, report)
+
+    def test_unmatched_inline_delimiters_do_not_hide_other_paragraphs(self):
+        content = plan(extra="\nAn unmatched ` delimiter.\n\nTODO assign owner\n\nAnother ` delimiter.\n")
+        status, report = self.validate(content, strict=True)
+        self.assertEqual(status, 2, report)
+        self.assertEqual(len(report["findings"]), 1)
+
+    def test_documented_command_from_another_project(self):
+        installed = self.project / "installed skill"
+        shutil.copytree(SKILL, installed)
+        path = self.project / "path/to/plan.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(plan())
+        text = (installed / "SKILL.md").read_text()
+        command = re.search(r"```bash\n(python3 .*?)\n```", text).group(1)
+        result = subprocess.run(["bash", "-c", command], cwd=self.project,
+                                env={**os.environ, "skill_dir": str(installed)},
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("VALID:", result.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

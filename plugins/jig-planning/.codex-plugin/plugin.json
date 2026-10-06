@@ -1,0 +1,33 @@
+{
+  "name": "jig-planning",
+  "version": "0.1.0",
+  "description": "Evidence-backed implementation planning with depth and verification proportionate to delivery risk.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "planning",
+    "architecture",
+    "migrations",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig Planning",
+    "shortDescription": "Proportionate implementation plans",
+    "longDescription": "Create or audit implementation plans grounded in repository evidence, using the simplest sufficient design, focused verification, and dependencies and recovery where the work requires them.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Create an implementation plan for this change",
+      "Audit this implementation plan against the repository"
+    ]
+  }
+}
