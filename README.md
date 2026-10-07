@@ -37,6 +37,7 @@ This example uses your Codex session without a second reviewer CLI. The commands
 | What you want | Start with | Default result |
 |---|---|---|
 | Create or audit an implementation plan | [planning-workflow](plugins/jig-planning/skills/planning-workflow/SKILL.md) | Evidence-backed plan or plan audit |
+| Trim scope or simplify an existing epic or plan | [scope-drill-workflow](plugins/jig-planning/skills/scope-drill-workflow/SKILL.md) | Scope recommendations; applies approved changes when requested |
 | Simplify code now | Language-specific `simplify` skills in [Rust](#jig-rust), [Swift](#jig-swift), or [TypeScript](#jig-typescript) | Code changes |
 | Get a behavior-preserving refactoring plan | Fowler refactoring in [Rust](#jig-rust) or [Ruby/Rails](#jig-ruby) | Prioritized plan |
 | Assess Rust module boundaries and ownership | [rust-architecture-review](plugins/jig-rust/skills/rust-architecture-review/SKILL.md) | Findings |
@@ -49,7 +50,7 @@ This example uses your Codex session without a second reviewer CLI. The commands
 
 ## Plugins
 
-The seven plugins contain 37 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
+The seven plugins contain 38 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
 Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, and query-analysis skills are explicit-only; invoke the named skill when you want one. General-purpose editing skills and the comprehensive-review/review-fix-loop workflows remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
 
@@ -64,6 +65,7 @@ Plugin: `jig-planning` · [Browse files](plugins/jig-planning)
 | Skill | Use it for | Default result |
 |---|---|---|
 | [planning-workflow](plugins/jig-planning/skills/planning-workflow/SKILL.md) | Creates or audits implementation plans for complex changes, grounded in repository evidence. Uses the simplest sufficient design and scales tasks, review, verification, and recovery to risk. | Implementation plan or plan audit |
+| [scope-drill-workflow](plugins/jig-planning/skills/scope-drill-workflow/SKILL.md) | Audits an existing Beads epic or implementation plan through a focused interview, proposing Keep/Simplify/Defer/Remove decisions. | Scope recommendations; tracker changes only after approval |
 
 Light plans need only objective, scope, tasks, and focused verification. Structured task graphs and independent reviews are conditional; small local fixes and work with an executable plan do not trigger extra planning. The bundled Python validator checks canonical task structure and dependencies, not design correctness.
 

@@ -1,7 +1,7 @@
 {
   "name": "jig-planning",
-  "version": "0.1.0",
-  "description": "Evidence-backed implementation planning with depth and verification proportionate to delivery risk.",
+  "version": "0.2.0",
+  "description": "Evidence-backed implementation planning and scope reduction for existing epics and plans.",
   "author": {
     "name": "Jig"
   },
@@ -12,13 +12,14 @@
     "planning",
     "architecture",
     "migrations",
-    "codex-skills"
+    "codex-skills",
+    "scope-reduction"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Jig Planning",
-    "shortDescription": "Proportionate implementation plans",
-    "longDescription": "Create or audit implementation plans grounded in repository evidence, using the simplest sufficient design, focused verification, and dependencies and recovery where the work requires them.",
+    "shortDescription": "Implementation plans and scope reviews",
+    "longDescription": "Create or audit implementation plans grounded in repository evidence, using the simplest sufficient design, focused verification, and dependencies and recovery where the work requires them. Audit existing epics or plans through focused scope interviews, propose simpler alternatives, and apply approved tracker changes.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [
@@ -27,7 +28,8 @@
     ],
     "defaultPrompt": [
       "Create an implementation plan for this change",
-      "Audit this implementation plan against the repository"
+      "Audit this implementation plan against the repository",
+      "Scope-drill this epic and propose the smallest coherent release"
     ]
   }
 }
