@@ -45,7 +45,7 @@ One precise sentence describing the concept or mechanism they both own.
 
 ### Common invariant
 
-The narrow rule that can safely be centralized.
+The narrow rule that can safely be centralized, or why no common invariant has been established.
 
 ### Divergences
 
@@ -62,25 +62,20 @@ List only blockers grounded in source: public API, serialization, ownership, coh
 
 ### Recommendation
 
-Describe the target shape. Prefer a narrow shared core over a union type full of optional state.
+For `unify` or `shared_core`, describe the target shape. For `keep_separate`, state the preserved boundary. For `needs_evidence`, state the unresolved question and evidence needed.
 
 ### Smallest safe sequence
 
-1. Test or characterize the shared invariant.
-2. Extract or select the canonical implementation.
-3. Migrate one caller group.
-4. Preserve or stage public compatibility.
-5. Remove obsolete adapters and duplicate tests only after behavior is covered.
+For `unify` or `shared_core` only: list the actual dependency-ordered edits and compatibility steps for this cluster. Omit this section for other dispositions; do not copy a generic migration sequence.
 
 ### Validation
 
-- `<repository-specific command>`
-- `<feature or crate-specific command>`
+For actionable recommendations, give repository-specific validation commands and distinguish proposed commands from those actually run. Other dispositions need evidence anchors, not speculative implementation checks.
 ```
 
 ## Rejected Candidates
 
-Include high-scoring or obvious pairs that should remain separate so future scans do not repeatedly propose them.
+Use this short list for obvious false positives rejected during cheap screening. Reserve full `keep_separate` entries for clusters that received deep semantic validation; do not list the same cluster twice. This is a record for the reader, not persistent scanner suppression.
 
 ```markdown
 ## Rejected candidates
@@ -92,7 +87,10 @@ Include high-scoring or obvious pairs that should remain separate so future scan
 
 End with:
 
-- Rust files and crates reviewed.
+- Rust files and crates reviewed; clusters screened versus deeply validated.
+- Per-stream eligible/emitted/truncated pairs and lowest emitted scores.
+- `blocked_groups`, potential/considered/unselected/prefiltered pairs, omitted exact matches, and parse errors.
+- Note that connected discovery groups may include transitive matches and edges omitted by output caps.
 - Excluded generated, vendored, test, example, or build-output paths.
 - Candidate classes inspected manually beyond the scanner.
 - Commands actually run and their results.

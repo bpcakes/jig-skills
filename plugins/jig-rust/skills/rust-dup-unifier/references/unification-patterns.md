@@ -19,7 +19,7 @@ pub struct HttpOptions {
 
 pub struct RpcOptions {
     core: TransportCore,
-    retry: RetryPolicy,
+    retry: RetrySettings,
 }
 ```
 
@@ -109,6 +109,19 @@ impl TryFrom<WireRequest> for Request {
 ```
 
 A useful boundary prevents invalid states or compatibility concerns from leaking inward.
+
+## 8. Direct Merge of Private Types
+
+Use when private siblings represent the same concept and invariants, and their differences are accidental. Pick the existing type whose contract fits, migrate internal constructors and callers, then remove the redundant declaration and adapters. Check serialization, distinct trait impls, cfg gates, and type identity even when neither type is public. Do not add a trait or wrapper when one concrete type suffices.
+
+## Disposition to Pattern
+
+| Disposition | Useful patterns |
+|---|---|
+| `unify` | Direct private merge (8); canonical type with compatibility shell (6) when an existing public contract must survive. |
+| `shared_core` | Composition (1), private algorithm (2), policy core (3), behavioral trait (4), generation (5), or conversion boundary (7), according to the proven shared mechanism. |
+| `keep_separate` | No consolidation pattern is required. Explain the boundary; use a separate `shared_core` recommendation only if a specific shared mechanism is independently justified. |
+| `needs_evidence` | Defer pattern selection until the missing semantic or compatibility evidence is available. |
 
 ## Anti-Patterns
 

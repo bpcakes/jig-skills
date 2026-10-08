@@ -2497,5 +2497,80 @@
     "requiredChanges": [
       "README.md"
     ]
+  },
+  {
+    "id": "rust-dup-private-merge",
+    "skill": "rust-dup-unifier",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-dup-unifier to compare HttpOptions and RpcOptions in src/lib.rs. Recommend whether to consolidate them, with evidence and a concrete target if appropriate. Assessment only; leave files unchanged.",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"internal-options\"\nversion = \"0.1.0\"\nedition = \"2021\"\npublish = false\n",
+      "README.md": "This internal package runs two transports to the same endpoint. Both use the supplied timeout in milliseconds, with no protocol-specific defaults or validation. src/lib.rs contains all callers. There is no serialization, FFI, cfg-specific behavior, or downstream package API. Validate with cargo test.\n",
+      "src/lib.rs": "struct HttpOptions { endpoint: String, timeout_ms: u64 }\nstruct RpcOptions { endpoint: String, timeout_ms: u64 }\nfn connect(endpoint: &str, timeout_ms: u64) -> String { format!(\"{endpoint}:{timeout_ms}\") }\nfn http(options: HttpOptions) -> String { connect(&options.endpoint, options.timeout_ms) }\nfn rpc(options: RpcOptions) -> String { connect(&options.endpoint, options.timeout_ms) }\n#[test]\nfn transports() {\n    assert_eq!(http(HttpOptions { endpoint: \"local\".into(), timeout_ms: 50 }), \"local:50\");\n    assert_eq!(rpc(RpcOptions { endpoint: \"local\".into(), timeout_ms: 50 }), \"local:50\");\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "decision",
+        "requirement": "Recommends unify based on identical transport configuration contracts and actual callers, not scanner similarity alone. Uses a direct private concrete type merge rather than inventing a trait, generic policy, or optional-state union."
+      },
+      {
+        "id": "plan",
+        "requirement": "Provides source anchors, a concrete canonical type and caller migration, and appropriate proposed validation. Does not claim tests ran unless they actually did; does not treat unpublished status alone as proof of no callers."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "rust-dup-explain-negative",
+    "skill": "rust-dup-unifier",
+    "mode": "negative",
+    "expectInvoke": false,
+    "prompt": "Explain what user_label(7) and order_label(7) return. Leave files unchanged.",
+    "files": {
+      "src/lib.rs": "pub fn user_label(id: u64) -> String { format!(\"user-{id}\") }\npub fn order_label(id: u64) -> String { format!(\"order-{id}\") }\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "criteria": [
+      {
+        "id": "scope",
+        "requirement": "Answers user-7 and order-7 without invoking the duplication skill, scanning for duplicates, or proposing an unsolicited consolidation."
+      }
+    ],
+    "forbidReviewerLaunches": true
+  },
+  {
+    "id": "rust-dup-keep-separate",
+    "skill": "rust-dup-unifier",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $rust-dup-unifier to assess whether UserId and OrderId should become one type. Inspect their callers and explain the disposition. Read-only assessment.",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"typed-identities\"\nversion = \"0.1.0\"\nedition = \"2021\"\npublish = false\n",
+      "README.md": "User and order identifiers come from independent sequences and can have the same numeric value. Caller code must not be able to pass an order identifier to load_user or a user identifier to load_order. These are the only APIs in scope. No shared validation or formatting algorithm exists.\n",
+      "src/lib.rs": "pub struct UserId(pub u64);\npub struct OrderId(pub u64);\npub fn load_user(id: UserId) -> String { format!(\"user:{}\", id.0) }\npub fn load_order(id: OrderId) -> String { format!(\"order:{}\", id.0) }\n#[test]\nfn independent_records() {\n    assert_eq!(load_user(UserId(7)), \"user:7\");\n    assert_eq!(load_order(OrderId(7)), \"order:7\");\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 1
+    },
+    "criteria": [
+      {
+        "id": "boundary",
+        "requirement": "Classifies keep_separate with declaration and caller evidence: identical u64 storage does not erase the distinct identity domains or compile-time protection against mixing their consumers. Does not recommend an alias or direct merge."
+      },
+      {
+        "id": "report",
+        "requirement": "Explains the preserved boundary without inventing a consolidation target, migration sequence, or mandatory implementation validation. Does not duplicate the validated cluster in a rejected-candidates list or claim the scanner persists suppressions."
+      }
+    ],
+    "forbidReviewerLaunches": true
   }
 ]
