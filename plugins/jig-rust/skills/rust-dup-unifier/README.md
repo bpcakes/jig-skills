@@ -12,6 +12,7 @@ Run the scanner and test commands below from this skill directory.
 
 - `SKILL.md` — trigger, workflow, evidence standard, and implementation rules.
 - `scripts/scan_rust_dup_unifier.py` — dependency-free Rust-aware candidate generator.
+- `scanner/` — Rust candidate generator using rust-analyzer syntax trees, with its own tests and dependency lockfile.
 - `references/rust-semantic-checklist.md` — Rust-specific unification blockers and false positives.
 - `references/report-contract.md` — final report shape.
 - `references/unification-patterns.md` — Rust consolidation patterns and anti-patterns.
@@ -45,8 +46,32 @@ Useful options:
 
 The scanner deliberately favors recall over proof. It is a lightweight lexical extractor, not a Rust compiler: it does not expand macros or resolve types. Its output must be validated using the workflow in `SKILL.md` before a unification recommendation is made.
 
+## Rust scanner
+
+The Rust scanner is an alternative to the Python entrypoint. It parses syntax trees and reports unresolved modules, implementations, and macros as coverage gaps; it does not expand macros or resolve types. Its JSON schema is version 3, while Python emits version 2. Both use declaration IDs in candidate edges, but scores, IDs, and detailed shapes are not interchangeable between implementations.
+
+Build with Rust 1.95 or newer. Dependency setup requires network access and should be performed explicitly before an offline analysis:
+
+```bash
+cargo fetch --locked --manifest-path scanner/Cargo.toml
+cargo build --frozen --release --manifest-path scanner/Cargo.toml
+```
+
+Keep `scanner/Cargo.lock`: it pins a compatible parser release and matching Unicode tables required by the lexer. Unrestricted dependency updates can break that compatibility.
+
+Once built, the executable scans without Cargo, network access, or building the target project:
+
+```bash
+scanner/target/release/rust-dup-unifier /path/to/rust/repo \
+  --scope src --format json --output /tmp/rust-dup-unifier.json
+```
+
+Use `--details` for complete declaration shapes and `--exclude-exact` to omit exact mechanical matches. Both scanners include exact matches by default and cap candidates at 100 per stream (types and callables). Similarity still requires the semantic validation in `SKILL.md`.
+
 ## Test
 
 ```bash
 python3 -m unittest discover -s tests -v
+cargo test --frozen --manifest-path scanner/Cargo.toml
+cargo fmt --manifest-path scanner/Cargo.toml --check
 ```

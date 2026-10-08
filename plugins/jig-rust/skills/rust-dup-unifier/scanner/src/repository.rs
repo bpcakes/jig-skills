@@ -159,7 +159,7 @@ fn edition_for(file: &Path, root: &Path, coverage: &mut Coverage) -> Result<Edit
             continue;
         }
         coverage.cargo_manifests.push(relative(root, &manifest));
-        let document: toml::Value = fs::read_to_string(&manifest)?.parse()?;
+        let document: toml::Table = fs::read_to_string(&manifest)?.parse()?;
         if found.is_none() {
             if document
                 .get("package")

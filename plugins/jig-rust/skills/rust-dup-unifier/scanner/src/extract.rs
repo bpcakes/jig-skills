@@ -261,7 +261,7 @@ fn signature(function: &ast::Fn) -> String {
         .filter_map(ast::Attr::cast)
         .map(|a| a.syntax().text_range())
         .collect();
-    let mut output = Vec::new();
+    let mut output: Vec<String> = Vec::new();
     for token in tokens(node) {
         let range = token.text_range();
         if body.is_some_and(|body| body.contains_range(range))
@@ -479,7 +479,9 @@ pub fn parse_file(
                                     .join(",")
                             )
                         };
-                        let discriminant = child::<ast::Expr>(variant.syntax())
+                        let discriminant = variant
+                            .const_arg()
+                            .and_then(|arg| arg.expr())
                             .map(|expr| format!("={}", canonical(expr.syntax())))
                             .unwrap_or_default();
                         item.members.insert(name.clone(), payload + &discriminant);
