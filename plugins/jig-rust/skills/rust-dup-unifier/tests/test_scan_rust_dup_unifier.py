@@ -222,6 +222,12 @@ enum Wire { #[serde(rename = "a,b") ] A, B(u8, String), C { x: u8, y: Vec<u8> } 
             ("value::<Result<(Vec<u8>, usize), String>, u16>() << 1",
              "value::<Result<(Vec<u8>,usize),String>,u16>()<<1"),
             ("value::<Array<{ 8 >> 1 }>, u16>() >> 1", "value::<Array<{8>>1}>,u16>()>>1"),
+            ("<Pair<u8, u16>>::value()", "<Pair<u8,u16>>::value()"),
+            ("<Pair<u8, u16> as Values>::VALUE", "<Pair<u8,u16>as Values>::VALUE"),
+            ("<<Pair<u8, u16> as Values>::Item>::VALUE",
+             "<<Pair<u8,u16>as Values>::Item>::VALUE"),
+            ("<Array<{ 1 << 2 }, u16>>::value()", "<Array<{1<<2},u16>>::value()"),
+            ("(<Pair<u8, u16>>::value() < 8) as isize", "(<Pair<u8,u16>>::value()<8)as isize"),
         ]:
             with self.subTest(expression=expression):
                 item, = self.items(f"enum Flags {{ A = {expression}, B = 1 << 1, C = 1 >> 2 }}")

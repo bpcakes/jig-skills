@@ -403,6 +403,30 @@ def find_header_boundary(text: str, start: int) -> Optional[int]:
     return None
 
 
+def starts_qualified_path(text: str, start: int) -> bool:
+    """Recognize a balanced <Type ...>:: path in already-sanitized text."""
+    angle = 0
+    i = start
+    groups = {"(": ")", "[": "]", "{": "}"}
+    while i < len(text):
+        ch = text[i]
+        if ch in groups:
+            end = find_matching(text, i, ch, groups[ch])
+            if end is None:
+                return False
+            i = end
+        elif ch == "<":
+            angle += 1
+        elif ch == ">" and text[i - 1:i] != "-":
+            angle -= 1
+            if angle == 0:
+                return text[i + 1:].lstrip().startswith("::")
+        elif ch in ";}" and angle:
+            return False
+        i += 1
+    return False
+
+
 def split_top_level(text: str, delimiter: str = ",") -> list[str]:
     original = text
     text = sanitize_rust(text)
@@ -429,9 +453,12 @@ def split_top_level(text: str, delimiter: str = ",") -> list[str]:
             expression = True
         elif (
             ch == "<" and paren == bracket == brace == 0
-            and (not expression or angle or text[:i].rstrip().endswith("::"))
+            and (
+                not expression or angle or text[:i].rstrip().endswith("::")
+                or starts_qualified_path(text, i)
+            )
         ):
-            # Expressions use turbofish for generics; bare < and << are operators.
+            # Generic expression paths use turbofish or <Type>:: qualification.
             angle += 1
         elif (
             ch == ">" and angle and paren == bracket == brace == 0
