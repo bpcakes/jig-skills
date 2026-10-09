@@ -25,7 +25,8 @@ export function resultSchema(assignment) {
       }), { minItems: assignment.validationAssessment.checks.length, maxItems: assignment.validationAssessment.checks.length }) } : {}),
       decisions: array(object({ id: choice(assignment.findings.map(f => f.id)), status: choice(["actionable", "rejected", "fixed", "blocked", "awaiting-validation", ...(assignment.sourceChanges ? ["needs-validation"] : [])]), evidence: text }),
         { minItems: assignment.findings.length, maxItems: assignment.findings.length }) }),
-    object({ ...envelope, question: object({ text, recommended: text, evidence: text }) })] };
+    object({ ...envelope, question: object({ text, recommended: text, evidence: text }) }),
+    ...(assignment.validationRetryAvailable ? [object({ ...envelope, validationRetry: object({ evidence: text }) })] : [])] };
   } else if (assignment.role === "repair") {
     const attribution = { path: text, reason: text, findingIds: array(choice(assignment.findings.map(f => f.id)), { minItems: 1, uniqueItems: true }) };
     const mode = { type: "string", enum: ["0644", "0755"] };

@@ -39,7 +39,7 @@ The controller records edits already present in the checkout and runs the reposi
 
 ## Commit modes
 
-`--commit-mode per-round` is the default. The controller checkpoints existing included working changes before discovery, then appends one commit for each completed repair round before validation. Failed validation keeps that round's commit; recovery uses another round. It never squashes or rewrites earlier commits. All reviews cover the entire range from the fixed initial base to the current tip. Convergence requires a clean checkout, successful validation of that tip, and two complete terminal reviews of the same exact range. A later repair invalidates earlier terminal evidence.
+`--commit-mode per-round` is the default. The controller checkpoints existing included working changes before discovery, then appends one commit for each completed repair round before validation. Failed validation keeps that round's commit; source repairs use another round, while an evidence-backed validation retry does not. It never squashes or rewrites earlier commits. All reviews cover the entire range from the fixed initial base to the current tip. Convergence requires a clean checkout, successful validation of that tip, and two complete terminal reviews of the same exact range. A later repair invalidates earlier terminal evidence.
 
 Use `--commit-mode none` for working-tree repairs with no staging or commits. Explicit requests to leave changes uncommitted select this mode. Also select it before initialization when unrelated local work must remain uncommitted, and state that preservation reason. A dirty excluded file is not a reason to move the run elsewhere. Assignment agents preserve the index in both modes; only the controller publishes round commits. State the effective commit mode. Read [commit publication](references/commits.md) for base selection, existing staged work, prerequisites, and recovery.
 
@@ -61,7 +61,7 @@ Defaults are `--commit-mode per-round`, `--fix-mode balanced`, `--scope auto`, `
 
 Use `node scripts/loop-options.mjs` to normalize supplied controls; reviewer and exclusion controls come from the sibling comprehensive-review parser. `--wait` has been removed. An explicit higher `--min-severity` is a scope limit and can produce only `THRESHOLD_MET`, never `CONVERGED` or “clean”.
 
-Required validation cannot be waived by triage or severity filtering. Missing prerequisites are blockers, not permission to install dependencies or retry unchanged failing checks. Reuse the existing toolchain and dependencies; isolated validation is an explicit option for projects that already support it.
+Required validation cannot be waived by triage or severity filtering. A failed check starts diagnosis, not an automatic conversational stop. Inspect logs and use safe local diagnostics; a passing isolated rerun can justify retrying the full check without proving it passed. When triage offers `validationRetryAvailable`, a plausible transient failure permits one evidence-backed retry of the full validation plan in the same run, without source edits, a repair round, or user confirmation. Use the [validation retry result](references/assignments.md); preserve the failure and report the retry outcome. Repeated failures need causal repair or a concrete blocker; uncertain executions must not be replayed. Missing prerequisites do not authorize installing dependencies. Reuse the existing toolchain and dependencies; isolated validation is an explicit option for projects that already support it.
 
 ## Authority boundary
 
