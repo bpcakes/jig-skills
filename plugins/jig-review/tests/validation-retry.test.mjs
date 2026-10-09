@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { advance, createRun, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
+import { resultSchema } from "../skills/review-fix-loop/scripts/assignment-schema.mjs";
 
 async function fixture(t, { commitMode = "per-round", alwaysFails = false, uncertain = false, maxRounds = 1, initiallyCorrect = false } = {}) {
   const directory = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-validation-retry-")));
@@ -33,6 +34,7 @@ async function drive(f, { stop = () => false } = {}) {
     if (stop(run) || TERMINAL.has(run.phase) && !status(run).waiting) return run;
     if (run.pending && !run.pending.command) {
       const a = run.pending.assignment;
+      assert.deepEqual(a.resultSchema, resultSchema(a), "published result schema must match the submission contract");
       const correct = readFileSync(path.join(a.repository, "value.cjs"), "utf8").includes("= 2;");
       let result;
       if (a.role === "review") {

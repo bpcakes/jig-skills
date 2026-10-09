@@ -601,7 +601,6 @@ function completeIssue(run) {
     assignment.instructions += " This assignment copy includes the retained, unapplied repair combined with the latest checkout changes. Assess that combined source. Findings it addresses need controller validation before they can be fixed; return needs-validation for them. Keep residual findings actionable or blocked. The controller will validate the retained repair without generating it again; no validation or publication has yet been established for this candidate.";
   }
   if (run.answers.length) assignment.contractAnswers = run.answers;
-  assignment.resultSchema = resultSchema(assignment);
   const baseline = snapshotFor(run, overlay);
   if (checkout && baseline.guard !== run.expected.guard) {
     // Preparation may be interrupted, or another writer may act after guard().
@@ -625,6 +624,7 @@ function completeIssue(run) {
     assignment.instructions += " Match original validation records using both fingerprint and contentHash (the record calls this candidateHash), or use the supplied validationReuse binding for that record's assignmentId. validationPending lists checks still awaiting execution; old results for those checks are not current proof. Reuse does not change the original outcome: failed checks remain failed. Optional checks must still be attempted, though their failures do not block acceptance.";
     assignment.instructions += " For requirement-<criterionId> findings, inspect every current report's acceptance concern for that criterion. Mark fixed only when source, coverage, and applicable controller receipts establish the criterion; explain how those concerns are resolved in the decision evidence. Passing checks alone do not refute a coverage concern, and rejected does not satisfy a requirement. The controller records a separate acceptance resolution for each assessed report without rewriting it. Resolve evidence-only uncertainty here; do not restart discovery or a new run to seek a different verdict.";
   }
+  assignment.resultSchema = resultSchema(assignment);
   run.pending = { id, role, assignment, overlay, before: baseline.files, metadata: baseline.repositories, command: argv };
   const directory = path.join(run.directory, "assignments", id);
   json(path.join(directory, "request.json"), { role, cwd: overlay, command: argv, assignment, environmentFrom: run.config.environmentFrom?.[role],
