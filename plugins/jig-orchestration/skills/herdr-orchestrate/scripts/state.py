@@ -77,6 +77,25 @@ def evidence(value, settled=False):
         require(value.get("all_jobs_settled") is True, "unsettled", "all owned jobs must be observed settled")
 
 
+def scheduler_identity(settings):
+    """Validate the identity whenever scheduling is effectively enabled."""
+    if not settings.get("enabled", False):
+        return
+    for field in ("session", "control_pane_id"):
+        value = settings.get(field)
+        require(nonempty(value) and not value.startswith("-"), "invalid", f"scheduler.{field} is required")
+    agent = settings.get("agent")
+    require(isinstance(agent, dict), "invalid", "scheduler.agent is required")
+    for field in ("name", "agent", "pane_id", "terminal_id"):
+        value = agent.get(field)
+        require(nonempty(value) and not value.startswith("-"), "invalid", f"scheduler.agent.{field} is required")
+    native = agent.get("agent_session")
+    require(isinstance(native, dict) and all(nonempty(native.get(k)) for k in ("agent", "kind", "value")),
+            "invalid", "Register the coordinator's native agent_session identity")
+    require(agent["pane_id"] != settings["control_pane_id"], "invalid",
+            "Scheduler control pane must differ from coordinator pane")
+
+
 def private(path, directory=False):
     info = path.lstat()
     require(not stat.S_ISLNK(info.st_mode), "permissions", "state paths must not be symlinks")
@@ -226,6 +245,7 @@ class Engine:
         settings = config.get("scheduler", {})
         require(isinstance(settings, dict), "invalid", "scheduler configuration must be an object")
         require(type(settings.get("enabled", False)) is bool, "invalid", "scheduler.enabled must be boolean")
+        scheduler_identity(settings)
         for key in ("cadence_seconds", "minimum_cadence_seconds"):
             if key in settings:
                 value = settings[key]
@@ -240,7 +260,18 @@ class Engine:
     @staticmethod
     def read(run_dir):
         with locked(run_dir) as path:
-            return read_json(path / "state.json")
+            state = read_json(path / "state.json")
+            if (path / "heartbeat.json").exists():
+                state["scheduler"]["heartbeat_at"] = read_json(path / "heartbeat.json")["heartbeat_at"]
+            return state
+
+    @staticmethod
+    def heartbeat(run_dir, at):
+        """Replace liveness evidence without an action record or state-version change."""
+        instant(at)
+        with locked(run_dir) as path:
+            require((path / "state.json").exists(), "missing", "run is not initialized")
+            write_atomic(path / "heartbeat.json", {"heartbeat_at": at})
 
     @staticmethod
     def action(run_dir, action_id):
@@ -331,9 +362,15 @@ class Engine:
                     "invalid", "unsupported configuration fields")
             evidence(req.get("evidence"))
             candidate = {**config, **copy.deepcopy(fields)}
+            if "scheduler" in fields and isinstance(candidate["scheduler"], dict):
+                candidate["scheduler"].setdefault("enabled", state["scheduler"]["enabled"])
             Engine._validate_config(run_dir, candidate)
             require(set(state["tasks"]) <= set(candidate["scope"]["task_ids"]),
                     "ownership", "configuration must preserve all admitted tasks")
+            unresolved_claims = {task_id for task_id, claim in state["claims"].items()
+                                 if claim["status"] in {"pending", "unknown"}}
+            require(unresolved_claims <= set(candidate["scope"]["task_ids"]),
+                    "ownership", "reconcile unresolved tracker claims before removing their tasks")
             cap = candidate.get("unfinished_task_cap")
             require(cap is None or cap >= unfinished(state), "capacity", "new unfinished-task cap is below current occupancy")
             for existing in state["tasks"].values():
@@ -361,6 +398,9 @@ class Engine:
                 new_identity = {k: v for k, v in candidate["scheduler"].items()
                                 if k not in {"cadence_seconds", "minimum_cadence_seconds", "notifier_argv", "notification_authorized", "enabled"}}
                 require(old_identity == new_identity, "unsettled", "stop scheduler before rebinding its endpoint")
+            if "scheduler" in fields:
+                state["scheduler"]["enabled"] = candidate["scheduler"]["enabled"]
+                state["scheduler"]["version"] += 1
             state["config"] = candidate
             state["policy_version"] += 1
             return {"configured": sorted(fields)}
@@ -489,6 +529,10 @@ class Engine:
                     require(value is None or isinstance(value, dict), "invalid", "scheduler failure/alert must be an object or null")
                 else:
                     require(value is None or isinstance(value, str), "invalid", "scheduler reference/status must be a string or null")
+            if "enabled" in changes:
+                settings = {**config.get("scheduler", {}), "enabled": changes["enabled"]}
+                scheduler_identity(settings)
+                config["scheduler"] = settings
             state["scheduler"].update(changes)
             state["scheduler"]["version"] += 1
             return {"scheduler": state["scheduler"]}

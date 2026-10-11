@@ -24,7 +24,7 @@ import sys
 import time
 import uuid
 
-from state import Engine, StateError
+from state import Engine, StateError, scheduler_identity
 
 MAX_INPUT = 1024 * 1024
 
@@ -72,27 +72,21 @@ def positive_seconds(value, name):
     return value
 
 
-def scheduler_config(config):
+def scheduler_config(config, schedule=None):
     settings = config.get("scheduler", {})
     if not isinstance(settings, dict):
         raise RuntimeErrorDetail("invalid_config", "scheduler must be an object")
+    if schedule is not None:
+        # Existing runs may have a runtime stop/resume newer than their config.
+        settings = {**settings, "enabled": schedule.get("enabled", settings.get("enabled", False))}
     if not settings:
         return {"enabled": False, "cadence_seconds": 1200, "minimum_cadence_seconds": 1200}
     cadence = positive_seconds(settings.get("cadence_seconds", 1200), "cadence_seconds")
     minimum = positive_seconds(settings.get("minimum_cadence_seconds", cadence), "minimum_cadence_seconds")
-    if settings.get("enabled", False):
-        for field in ("session", "control_pane_id"):
-            if not isinstance(settings.get(field), str) or not settings[field] or settings[field].startswith("-"):
-                raise RuntimeErrorDetail("invalid_config", f"scheduler.{field} is required")
-        agent = settings.get("agent", {})
-        for field in ("name", "agent", "pane_id", "terminal_id"):
-            if not isinstance(agent.get(field), str) or not agent[field] or agent[field].startswith("-"):
-                raise RuntimeErrorDetail("invalid_config", f"scheduler.agent.{field} is required")
-        native = agent.get("agent_session", {})
-        if not all(isinstance(native.get(k), str) and native[k] for k in ("agent", "kind", "value")):
-            raise RuntimeErrorDetail("invalid_config", "Register the coordinator's native agent_session identity")
-        if agent["pane_id"] == settings["control_pane_id"]:
-            raise RuntimeErrorDetail("self_prompt", "Scheduler control pane must differ from coordinator pane")
+    try:
+        scheduler_identity(settings)
+    except StateError as exc:
+        raise RuntimeErrorDetail("invalid_config", str(exc)) from exc
     notifier = settings.get("notifier_argv")
     if notifier is not None:
         if settings.get("notification_authorized") is not True:
@@ -181,11 +175,12 @@ def tick(run_dir, now=None):
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "delivery.lock"):
         state = Engine.read(run_dir)
-        settings = scheduler_config(state["config"])
+        settings = scheduler_config(state["config"], state["scheduler"])
         if not enabled(state, settings):
             return {"status": "scheduler_stopped"}
         managed_guard(settings)
-        state = scheduler_patch(run_dir, lambda _: {"heartbeat_at": timestamp(now)})
+        Engine.heartbeat(run_dir, timestamp(now))
+        state = Engine.read(run_dir)
         schedule = state["scheduler"]
         if schedule.get("pending_action_id"):
             return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
@@ -217,15 +212,19 @@ def tick(run_dir, now=None):
 
         wake_id = "wake-" + uuid.uuid4().hex
         def prepare(current):
-            if scheduler_config(current["config"]) != settings:
+            if scheduler_config(current["config"], current["scheduler"]) != settings:
                 raise RuntimeErrorDetail("scheduler_rebound", "Scheduler configuration changed during identity lookup; inspect again")
             if not enabled(current, settings):
                 raise RuntimeErrorDetail("scheduler_stopped", "Scheduler stopped before dispatch")
             if current["scheduler"].get("pending_action_id"):
                 raise RuntimeErrorDetail("wake_pending", "Another wake is unresolved")
+            if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
+                return None  # A completed reconciliation consumed this tick.
             return {"pending_action_id": wake_id, "delivery_status": "dispatching", "failure": None,
                     "wake_requested_at": None, "wake_reason": None}
-        scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
+        prepared = scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
+        if prepared["scheduler"].get("pending_action_id") != wake_id:
+            return {"status": "reconciliation_completed"}
         prompt = (
             f"Orchestration wake {wake_id}. Run directory: {Path(run_dir).resolve()}. "
             "Perform one bounded reconciliation using the registered configuration and current state. "
@@ -272,7 +271,7 @@ def complete(run_dir, wake_id, now=None):
         pending = schedule.get("pending_action_id")
         if wake_id != "manual" and pending != wake_id:
             raise RuntimeErrorDetail("wrong_wake", "Completion must name the pending wake or 'manual' for a full manual pass")
-        settings = scheduler_config(current["config"])
+        settings = scheduler_config(current["config"], current["scheduler"])
         interval = max(settings["cadence_seconds"], settings["minimum_cadence_seconds"])
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
                 "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
@@ -287,7 +286,7 @@ def health(run_dir, now=None):
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "health.lock"):
         state = Engine.read(run_dir)
-        settings = scheduler_config(state["config"])
+        settings = scheduler_config(state["config"], state["scheduler"])
         if not enabled(state, settings):
             return {"status": "scheduler_stopped", "alert": "suppressed"}
         schedule = state["scheduler"]
@@ -329,7 +328,9 @@ def health(run_dir, now=None):
 
 def supervise(run_dir):
     state = Engine.read(run_dir)
-    settings = scheduler_config(state["config"])
+    settings = scheduler_config(state["config"], state["scheduler"])
+    if not enabled(state, settings):
+        return {"status": "scheduler_stopped"}
     managed_guard(settings)
     stopping = False
     def stop(signum, frame):

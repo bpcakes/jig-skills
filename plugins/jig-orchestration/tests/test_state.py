@@ -43,7 +43,10 @@ class EngineTests(unittest.TestCase):
                       "remote": {"slots": 1, "worktree_root": "/remote-worktrees", "endpoint": {"profile": "verified"}}},
             "actors": {"worker-a": {"role": "driver", "task_ids": ["A"], "host": "local", "helper_route": True}},
             "authority": sorted(Engine.ACTIONS), "unfinished_task_cap": None, "limits": [],
-            "scheduler": {"enabled": True},
+            "scheduler": {"enabled": True, "session": "owned", "control_pane_id": "w1:p2",
+                          "agent": {"name": "coordinator", "agent": "codex", "pane_id": "w1:p1",
+                                    "terminal_id": "terminal-1", "agent_session": {
+                                        "agent": "codex", "kind": "session_id", "value": "native-1"}}},
         }
         Engine.initialize(self.run, self.config)
 
@@ -196,6 +199,32 @@ class EngineTests(unittest.TestCase):
         self.apply("control", control="resume")
         self.admit(claim=claim)
         self.assertEqual(Engine.read(self.run)["tasks"]["A"]["claim"], claim)
+
+    def test_scope_change_preserves_claim_until_its_outcome_is_known(self):
+        intent = self.apply("claim_intent", "A", target={"authority": "canonical-ref", "owner": "tracker-actor"},
+                            evidence=self.proof())
+        narrowed = {"scope": {"task_ids": ["B", "C"]}, "actors": {}}
+        self.assert_error("ownership", self.apply, "configure", fields=narrowed, evidence=self.proof())
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="unknown", receipt=self.proof())
+        self.assert_error("ownership", self.apply, "configure", fields=narrowed, evidence=self.proof())
+        # Unrelated policy changes and pause still permit the same action's receipt.
+        self.apply("configure", fields={"unfinished_task_cap": 2}, evidence=self.proof())
+        self.apply("control", control="pause")
+        claim = {**self.proof(), "authority": "canonical-ref", "owner": "tracker-actor", "task_id": "A",
+                 "confirmed": True, "unpublished": False, "ready": True}
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="confirmed", receipt=claim)
+        self.apply("control", control="resume")
+        self.admit(claim=claim)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["claim"], claim)
+
+    def test_failed_claim_does_not_prevent_scope_narrowing(self):
+        intent = self.apply("claim_intent", "A", target={"authority": "canonical-ref", "owner": "tracker-actor"},
+                            evidence=self.proof())
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="failed", receipt=self.proof())
+        self.apply("configure", fields={"scope": {"task_ids": ["B", "C"]}, "actors": {}}, evidence=self.proof())
+        self.assertEqual(Engine.read(self.run)["claims"]["A"]["status"], "failed")
+        self.assert_error("scope", self.apply, "claim_intent", "A",
+                          target={"authority": "canonical-ref", "owner": "tracker-actor"}, evidence=self.proof())
 
     def test_concurrent_hosts_compete_for_one_slot_at_authority(self):
         self.admit("A")

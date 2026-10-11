@@ -54,6 +54,13 @@ class RuntimeTests(unittest.TestCase):
         return Engine.apply(self.run, {"action_id": value, "op": "control", "control": value,
                                      "expected_policy": state["policy_version"]})
 
+    def configure_scheduler(self, settings):
+        current = Engine.read(self.run)
+        return Engine.apply(self.run, {"op": "configure", "action_id": "config-" + str(current["version"]),
+                                      "expected_policy": current["policy_version"],
+                                      "fields": {"scheduler": settings},
+                                      "evidence": {"ref": "fixture:configuration", "observed_at": self.now.isoformat()}})
+
     def test_missing_managed_context_never_calls_herdr(self):
         with patch.dict(os.environ, {"HERDR_ENV": ""}), patch.object(runtime, "herdr_call") as call:
             with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "genuine"):
@@ -142,6 +149,87 @@ class RuntimeTests(unittest.TestCase):
         schedule = Engine.read(self.run)["scheduler"]
         self.assertIsNone(schedule["wake_requested_at"])
         self.assertEqual(runtime.parse_time(schedule["next_due_at"]), self.now + timedelta(seconds=60))
+
+    def test_manual_completion_during_lookup_suppresses_obsolete_wake(self):
+        runtime.request_wake(self.run, now=self.now)
+        completed_at = self.now + timedelta(seconds=2)
+        def lookup(settings, args):
+            runtime.complete(self.run, "manual", completed_at)
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=lookup) as call:
+            result = runtime.tick(self.run, self.now)
+        self.assertEqual(result["status"], "reconciliation_completed")
+        self.assertEqual(call.call_count, 1)
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(schedule["pending_action_id"])
+        self.assertIsNone(schedule["wake_requested_at"])
+        self.assertEqual(runtime.parse_time(schedule["next_due_at"]), completed_at + timedelta(seconds=60))
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            self.assertEqual(runtime.tick(self.run, completed_at + timedelta(seconds=30))["status"], "minimum_cadence")
+            call.assert_not_called()
+            self.assertEqual(runtime.tick(self.run, completed_at + timedelta(seconds=60))["status"], "delivered")
+
+    def test_idle_heartbeats_are_bounded_and_health_tracks_liveness(self):
+        runtime.complete(self.run, "manual", self.now)
+        before = Engine.read(self.run)
+        records = set((self.run / "actions").iterdir())
+        with patch.object(runtime, "herdr_call") as call:
+            for seconds in range(5, 60, 5):
+                self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=seconds))["status"], "not_due")
+        call.assert_not_called()
+        after = Engine.read(self.run)
+        self.assertEqual(after["version"], before["version"])
+        self.assertEqual(after["scheduler"]["version"], before["scheduler"]["version"])
+        self.assertEqual(set((self.run / "actions").iterdir()), records)
+        self.assertEqual(runtime.parse_time(after["scheduler"]["heartbeat_at"]), self.now + timedelta(seconds=55))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=170))["status"], "healthy")
+        overdue = runtime.health(self.run, self.now + timedelta(seconds=176))
+        self.assertEqual(overdue["status"], "unhealthy")
+        self.assertIn("heartbeat", overdue["failure"]["reason"])
+
+    def test_pending_wake_heartbeats_stay_bounded_and_do_not_hide_overdue_delivery(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            first = runtime.tick(self.run, self.now)
+            records = set((self.run / "actions").iterdir())
+            for seconds in (5, 60, 121):
+                self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=seconds))["status"],
+                                 "awaiting_reconciliation")
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(set((self.run / "actions").iterdir()), records)
+        overdue = runtime.health(self.run, self.now + timedelta(seconds=121))
+        self.assertEqual(overdue["failure"]["id"], "pending-" + first["wake_id"])
+
+    def test_configure_enablement_controls_delivery_and_scheduler_stop_can_resume(self):
+        self.configure_scheduler({**self.config["scheduler"], "enabled": False})
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "scheduler_stopped")
+            self.assertEqual(runtime.supervise(self.run)["status"], "scheduler_stopped")
+            self.assertEqual(runtime.health(self.run, self.now)["status"], "scheduler_stopped")
+        call.assert_not_called()
+        self.configure_scheduler(self.config["scheduler"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "delivered")
+        self.schedule(enabled=False)
+        self.assertFalse(Engine.read(self.run)["config"]["scheduler"]["enabled"])
+        self.schedule(enabled=True)
+        self.assertTrue(Engine.read(self.run)["config"]["scheduler"]["enabled"])
+        # Resuming never replays an already delivered wake.
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "awaiting_reconciliation")
+        call.assert_not_called()
+
+    def test_enablement_requires_identity_through_both_state_entrypoints(self):
+        self.schedule(enabled=False)
+        self.configure_scheduler({"enabled": False})
+        before = Engine.read(self.run)
+        with self.assertRaisesRegex(StateError, "scheduler.session"):
+            self.schedule(enabled=True)
+        with self.assertRaisesRegex(StateError, "scheduler.session"):
+            self.configure_scheduler({"enabled": True})
+        self.assertEqual(Engine.read(self.run), before)
+        self.configure_scheduler(self.config["scheduler"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "delivered")
 
     def test_fast_completion_not_overwritten_by_delivery_ack(self):
         def fake_call(settings, args):
