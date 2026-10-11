@@ -36,7 +36,7 @@ export function failureResult(error) {
   // Adapters that separate the provider's own error channel from transcript
   // text expose it as providerError; quoted repository output never classifies.
   const reported = error.providerError !== undefined ? error.providerError : error.message;
-  const permanent = /(?:invalid (?:api key|model)|authentication (?:failed|required)|not (?:logged in|authenticated)|insufficient[_ ]quota|quota exceeded|usage limit (?:reached|exceeded)|out of credits|credit balance.*(?:low|exhausted)|unknown (?:option|model)|no eligible (?:claude|codex) home|requires file-based credentials|isolation incomplete|unexpected argument|unrecognized subcommand|ENOENT)/i.test(reported);
+  const permanent = /(?:invalid (?:api key|model)|authentication (?:failed|required)|not (?:logged in|authenticated)|insufficient[_ ]quota|quota exceeded|usage limit (?:reached|exceeded)|out of credits|credit balance.*(?:low|exhausted)|unknown (?:option|model)|no eligible (?:claude|codex) home|requires file-based credentials|isolation incomplete|does not permit executing|unexpected argument|unrecognized subcommand|ENOENT)/i.test(reported);
   return { error: error.message, ...(permanent ? { retryable: false } : {}),
     ...(error.timedOut || error.parentSignal ? { execution: "uncertain" } : {}) };
 }

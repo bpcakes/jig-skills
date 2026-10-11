@@ -17,7 +17,7 @@ import { isExcludedPath } from "../../comprehensive-review/scripts/review-exclus
 import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
-import { launchExecutable } from "../../comprehensive-review/scripts/provider-launch.mjs";
+import { preflightExecutables } from "../../comprehensive-review/scripts/provider-launch.mjs";
 import { codexEfforts } from "../../comprehensive-review/scripts/review-options.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
@@ -1420,9 +1420,13 @@ async function advanceLocked(run) {
     else if (run.phase === "PREFLIGHT") {
       run.capabilities = run.config.reviewers.map(p => {
         const request = { role: "review", assignment: { provider: p.id }, cwd: run.root, environmentFrom: run.config.environmentFrom?.review };
-        // Bundled bridges start the provider CLI, or the Jig launcher that selects its home.
-        const command = p.bundled ? [launchExecutable(p.id, run.options.review[p.id]?.launcher ?? "none", BUNDLED_EXECUTABLES[p.id], commandEnvironment(request))] : p.command;
-        return { ...p, available: p.command ? executableCommand({ ...request, command }) : p.id === "codex" };
+        // Bundled bridges need the provider CLI, or the Jig launcher that selects its
+        // home plus whatever the adapter still runs directly.
+        const executables = p.bundled ? preflightExecutables(p.id, run.options.review[p.id]?.launcher ?? "none", BUNDLED_EXECUTABLES[p.id], commandEnvironment(request)) : null;
+        const available = !p.command ? p.id === "codex"
+          : p.bundled ? executables.every(executable => executableCommand({ ...request, command: [executable] }))
+          : executableCommand({ ...request, command: p.command });
+        return { ...p, available };
       });
       const unavailable = run.options.explicitReviewers ? run.options.review.reviewers.filter(id => !run.capabilities.some(p => p.id === id && p.available)) : [];
       if (unavailable.length) { transition(run, "REVIEW_INCOMPLETE", `Explicitly selected providers are unavailable: ${unavailable.join(", ")}. Install their CLI or configure a command.`, { unavailable }); return run; }

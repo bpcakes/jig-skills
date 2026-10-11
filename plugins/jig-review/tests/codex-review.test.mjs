@@ -9,6 +9,7 @@ import test from "node:test";
 
 import {
   MISSING_CREDENTIALS,
+  SHIM_NOT_EXECUTABLE,
   ambientSkills,
   buildCodexArgs,
   classifyFailure,
@@ -18,8 +19,10 @@ import {
   listedSkills,
   parseArgs,
   parseCodexResult,
+  probeShim,
   renderPrompt,
   runCodexReview,
+  writeShim,
 } from "../skills/comprehensive-review/scripts/codex-review.mjs";
 import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
@@ -228,6 +231,24 @@ test("the adapter runs Codex directly with a scrubbed environment and shell-orie
   assert.ok(!skills.includes("fake-system-skill"), "Codex's own skills inside the private home stay enabled");
   assert.equal(captured.env.JIG_CODEX_BIN?.endsWith("codex-shim.sh"), true);
   assert.equal(captured.env.JIG_REVIEW_CODEX_BIN, fakeCodex);
+});
+
+test("without a launcher the shim runs through sh, and an unexecutable shim is a permanent failure under a launcher", async (t) => {
+  const f = await adapterFixture(t);
+  // Direct launches never execute a file from the evidence directory.
+  const fakeCodex = fakeProvider(f.scratch, "sh-codex.mjs");
+  const directory = path.join(f.scratch, "noexec"); mkdirSync(directory, { mode: 0o700 });
+  const { shim } = writeShim(directory);
+  chmodSync(shim, 0o600);
+  const viaSh = spawnSync("/bin/sh", [shim, "--jig-review-probe"], { encoding: "utf8" });
+  assert.equal(viaSh.status, 0, "sh can read a non-executable shim");
+  let failure;
+  await assert.rejects(probeShim(shim, { deadlineAt: Date.now() + 5000, signal: null }), (error) => { failure = error; return true; });
+  assert.ok(failure.message.startsWith(SHIM_NOT_EXECUTABLE), failure.message);
+  assert.equal(failure.providerError, SHIM_NOT_EXECUTABLE);
+  assert.equal(failureResult(failure).retryable, false);
+  await runCodexReview(f.parse(), { codexBin: fakeCodex });
+  assert.equal(f.captured().argv[0], "exec", "the direct review still reaches the provider through the shim");
 });
 
 test("a Jig launcher wraps the Codex command and forwards the adapter arguments exactly", async (t) => {

@@ -6,6 +6,7 @@ import {
   childEnvironment,
   launchExecutable,
   normalizeLauncher,
+  preflightExecutables,
   resolveProviderLaunch,
 } from "../skills/comprehensive-review/scripts/provider-launch.mjs";
 
@@ -57,6 +58,14 @@ test("preflight resolves the executable a launch will start", () => {
   assert.equal(launchExecutable("codex", "home:work", "codex", { JIG_LAUNCHER_BIN: "/opt/jig" }), "/opt/jig");
   assert.equal(launchExecutable("cursor", "none", "cursor-agent", {}), "cursor-agent");
   assert.throws(() => launchExecutable("cursor", "auto", "cursor-agent", {}), /not cursor/);
+});
+
+test("preflight lists every executable a bundled launch needs", () => {
+  assert.deepEqual(preflightExecutables("claude", "none", "claude", {}), ["claude"]);
+  assert.deepEqual(preflightExecutables("codex", "none", "codex", {}), ["codex"]);
+  assert.deepEqual(preflightExecutables("claude", "auto", "claude", {}), ["jig"]);
+  assert.deepEqual(preflightExecutables("codex", "auto", "codex", { JIG_LAUNCHER_BIN: "/opt/jig" }), ["/opt/jig", "codex"], "the Codex adapter renders with codex before Jig launches it");
+  assert.throws(() => preflightExecutables("cursor", "auto", "cursor-agent", {}), /not cursor/);
 });
 
 test("child environment drops parent session markers but keeps provider configuration", () => {

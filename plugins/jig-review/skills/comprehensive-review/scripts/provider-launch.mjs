@@ -61,6 +61,16 @@ function launchExecutable(provider, launcher, executable, inherited = process.en
   return launcherBinary(inherited, override);
 }
 
+// Every executable a bundled launch needs: the launcher when one is selected,
+// plus the provider itself for Codex, whose adapter renders the prompt with the
+// provider executable directly before Jig starts the review.
+function preflightExecutables(provider, launcher, executable, inherited = process.env, override = null) {
+  if (normalizeLauncher(launcher) === "none") return [executable];
+  assertLauncherProvider(provider);
+  const launcherBin = launcherBinary(inherited, override);
+  return provider === "codex" ? [launcherBin, executable] : [launcherBin];
+}
+
 function resolveProviderLaunch({ provider, launcher, executable, args, inherited = process.env, jigBin = null }) {
   const normalized = normalizeLauncher(launcher);
   if (normalized === "none") return { command: executable, args: [...args], launcher: normalized };
@@ -91,5 +101,6 @@ export {
   launchExecutable,
   launcherBinary,
   normalizeLauncher,
+  preflightExecutables,
   resolveProviderLaunch,
 };

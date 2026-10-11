@@ -154,7 +154,18 @@ test("launcher-selected bundled bridges preflight the Jig executable instead of 
   assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
   assert.match(JSON.stringify(run.outcome), /claude, codex/);
   assert.ok(run.capabilities.every(p => p.bundled && p.available === false));
+  // With a launcher present, Codex still needs its own executable because the adapter renders with it directly.
+  const previousPath = process.env.PATH;
+  t.after(() => { process.env.PATH = previousPath; });
+  const bin = path.join(f.root, ".git", "bin"); mkdirSync(bin, { recursive: true });
   process.env.JIG_LAUNCHER_BIN = process.execPath;
+  // Keep git and node reachable; drop only directories that provide a codex executable.
+  process.env.PATH = [bin, ...(previousPath ?? "").split(path.delimiter).filter(dir => dir && !existsSync(path.join(dir, "codex")))].join(path.delimiter);
+  run = await f.start({}, args);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [["claude", true], ["codex", false]]);
+  writeFileSync(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n"); chmodSync(path.join(bin, "codex"), 0o755);
   run = await f.start({}, args);
   run = await advance(run.directory); run = await advance(run.directory);
   assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
