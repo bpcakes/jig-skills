@@ -1,6 +1,7 @@
 ---
 name: react-render-performance-review
 description: Review React render costs, context invalidation, lists, keys, and memoization where performance is at issue.
+disable-model-invocation: true
 ---
 
 # React Render Performance Review

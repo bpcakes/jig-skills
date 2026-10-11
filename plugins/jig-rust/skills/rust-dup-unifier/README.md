@@ -4,7 +4,7 @@
 
 ## Installation
 
-This skill is bundled with the `jig-rust` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#install-with-codex), then invoke `$jig-rust:rust-dup-unifier`.
+This skill is bundled with the `jig-rust` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#installation), then invoke `$jig-rust:rust-dup-unifier` in Codex or `/jig-rust:rust-dup-unifier` in Claude Code.
 
 Run the scanner and test commands below from this skill directory.
 

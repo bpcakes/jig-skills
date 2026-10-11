@@ -1,6 +1,7 @@
 ---
 name: rust-dup-unifier
 description: Assess whether similar Rust abstractions should be unified when the user requests duplication or consolidation analysis. Excludes routine coding and general code review.
+disable-model-invocation: true
 ---
 
 # Rust Dup Unifier

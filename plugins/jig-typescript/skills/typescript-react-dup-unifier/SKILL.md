@@ -1,6 +1,7 @@
 ---
 name: typescript-react-dup-unifier
 description: Assess whether similar TypeScript/React abstractions should be unified when the user requests duplication or consolidation analysis. Excludes routine coding and general code review.
+disable-model-invocation: true
 ---
 
 # TypeScript/React Dup Unifier

@@ -6,7 +6,7 @@ The package is intentionally stricter than a smell detector. It requires evidenc
 
 ## Installation
 
-This skill is bundled with the `jig-typescript` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#install-with-codex), then invoke `$jig-typescript:typescript-react-abstraction-police`.
+This skill is bundled with the `jig-typescript` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#installation), then invoke `$jig-typescript:typescript-react-abstraction-police` in Codex or `/jig-typescript:typescript-react-abstraction-police` in Claude Code.
 
 Run the scanner and test commands below from this skill directory.
 

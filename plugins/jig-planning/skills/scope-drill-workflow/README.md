@@ -39,8 +39,9 @@ also review a pasted plan or exported epic with clearly stated access limits.
 
 ## Use
 
-For a marketplace install, invoke `$jig-planning:scope-drill-workflow`.
-For a direct copy, use `$scope-drill-workflow`, or ask naturally:
+For a marketplace install, invoke `$jig-planning:scope-drill-workflow` in Codex
+or `/jig-planning:scope-drill-workflow` in Claude Code. For a direct copy, use
+`$scope-drill-workflow` or `/scope-drill-workflow`, or ask naturally:
 
 ```text
 Use scope-drill-workflow on epic br-abc.

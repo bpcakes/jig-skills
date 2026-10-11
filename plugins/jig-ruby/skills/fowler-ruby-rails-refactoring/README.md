@@ -14,7 +14,7 @@ A reusable agent skill for finding and validating refactoring opportunities in R
 
 ## Using the Skill
 
-This skill is bundled with the `jig-ruby` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#install-with-codex), then invoke `$jig-ruby:fowler-ruby-rails-refactoring`.
+This skill is bundled with the `jig-ruby` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#installation), then invoke `$jig-ruby:fowler-ruby-rails-refactoring` in Codex or `/jig-ruby:fowler-ruby-rails-refactoring` in Claude Code.
 
 Keep the directory intact so `SKILL.md` can load its relative `references/`, `scripts/`, and `examples/` files. Run the scanner and test commands below from this skill directory.
 

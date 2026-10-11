@@ -1,6 +1,7 @@
 ---
 name: sqlx-query-safety-review
 description: Review Rust SQL construction, binding, decoding, cardinality, and query/API boundaries; SQLx first, other drivers supported.
+disable-model-invocation: true
 ---
 
 # sqlx-query-safety-review
