@@ -20,6 +20,8 @@ test('orchestration observations are current selectable cases with bounded comma
       'bash -lc "herdr --session test api"', 'ssh test.example true',
       'bead close A', 'br update A --status closed', 'gh pr merge 42',
       'scripts/install.sh codex herdr-orchestrate', 'claude -p review', 'codex exec review',
+      'sh scripts/install.sh codex herdr-orchestrate',
+      'bash /repo/scripts/install.sh codex herdr-orchestrate',
     ]) assert.equal(checkCommands(c, [command]), false, `${c.id}: ${command}`);
     assert.deepEqual(c.allowedChanges ?? [], []);
   }

@@ -181,8 +181,26 @@ export function launchesScript(command, scriptName, depth = 0) {
     const executable = path.basename(args.shift() ?? '');
     if (executable === scriptName) return true;
     if (['sh', 'bash', 'zsh', 'dash'].includes(executable)) {
-      const flag = args.findIndex(a => /^-[A-Za-z]*c[A-Za-z]*$/.test(a));
-      return flag >= 0 && launchesScript(args[flag + 1] ?? '', scriptName, depth + 1);
+      let index = 0, commandString = false, stdin = false, noexec = false;
+      // Stop at the script/command operand: later flags belong to that input.
+      while (/^[+-]/.test(args[index] ?? '')) {
+        const option = args[index++];
+        if (option === '--' || option === '-') break;
+        if (['--help', '--version'].includes(option)) return false;
+        if (['--rcfile', '--init-file'].includes(option)) { index++; continue; }
+        if (option.startsWith('--')) continue;
+        const enabled = option[0] === '-', flags = option.slice(1);
+        if (flags.includes('c')) commandString = enabled;
+        if (flags.includes('s')) stdin = enabled;
+        if (flags.includes('n')) noexec = enabled;
+        if (/[oO]$/.test(flags)) {
+          const value = args[index++];
+          if (flags.endsWith('o') && value === 'noexec') noexec = enabled;
+        }
+      }
+      if (noexec) return false;
+      if (commandString) return launchesScript(args[index] ?? '', scriptName, depth + 1);
+      return !stdin && path.basename(args[index] ?? '') === scriptName;
     }
     if (/^python(?:\d+(?:\.\d+)?)?$/.test(executable)) {
       let index = 0;

@@ -960,6 +960,38 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=180))["alert"], "retry_exhausted")
         self.assertEqual(Engine.read(self.run)["scheduler"]["last_alert"]["attempts"], 3)
 
+    def test_health_records_notifier_exit_despite_binary_diagnostics(self):
+        for stream in (1, 2):
+            for returncode in (0, 1):
+                with self.subTest(stream=stream, returncode=returncode):
+                    run = self.root / f"binary-notifier-{stream}-{returncode}"
+                    delivered = self.root / f"notice-{stream}-{returncode}"
+                    notifier = [sys.executable, "-c", (
+                        'import os, sys; '
+                        'notice = sys.stdin.buffer.read(); '
+                        'open(sys.argv[1], "ab").write(notice); '
+                        'os.write(int(sys.argv[2]), bytes([255])); '
+                        'sys.exit(int(sys.argv[3]))'
+                    ), str(delivered), str(stream), str(returncode)]
+                    Engine.initialize(run, {**self.config, "scheduler": {
+                        **self.config["scheduler"], "notifier_argv": notifier,
+                        "notification_authorized": True}})
+                    result = runtime.health(run, self.now)
+                    expected = "transport_accepted" if returncode == 0 else "transport_failed"
+                    self.assertEqual(result["alert"], expected)
+                    receipt = result["receipt"]
+                    self.assertEqual(receipt["returncode"], returncode)
+                    self.assertEqual(receipt["attempts"], 1)
+                    schedule = Engine.read(run)["scheduler"]
+                    self.assertEqual(schedule["last_alert"], receipt)
+                    self.assertEqual(schedule["health_alerts"][result["failure"]["id"]], receipt)
+                    notices = delivered.read_bytes().splitlines()
+                    self.assertEqual(len(notices), 1)
+                    self.assertEqual(json.loads(notices[0])["failure"], result["failure"])
+                    self.assertEqual(runtime.health(run, self.now + timedelta(seconds=60))["alert"],
+                                     "already_attempted")
+                    self.assertEqual(delivered.read_bytes().splitlines(), notices)
+
     def test_health_never_replays_a_notifier_that_may_have_sent(self):
         notifier = self.root / "notifier"
         delivered = self.root / "delivered"

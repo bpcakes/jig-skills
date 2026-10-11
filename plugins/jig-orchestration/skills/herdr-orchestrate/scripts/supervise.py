@@ -453,8 +453,10 @@ def health(run_dir, now=None):
         notice, claim = decision["notice"], decision["claim"]
         failure, notifier = notice["failure"], claim["notifier_argv"]
         try:
-            result = subprocess.run(notifier, input=json.dumps(notice) + "\n", text=True,
-                                    capture_output=True, timeout=20, check=False)
+            # Only the exit status is part of the notifier's output contract.
+            result = subprocess.run(notifier, input=(json.dumps(notice) + "\n").encode("utf-8"),
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    timeout=20, check=False)
             receipt = {"failure_id": failure["id"], "at": timestamp(now),
                        "status": "transport_accepted" if result.returncode == 0 else "transport_failed",
                        "returncode": result.returncode}
