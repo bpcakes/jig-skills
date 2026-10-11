@@ -153,7 +153,7 @@ function runCommand(command, args, options = {}) {
           new Error(
             `${command} exited with ${exitCode ?? `signal ${exitSignal}`}${detail ? `: ${detail}` : ""}`,
           ),
-          { exitCode },
+          { exitCode, stderr: detail },
         ));
         return;
       }

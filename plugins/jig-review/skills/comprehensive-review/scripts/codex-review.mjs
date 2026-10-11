@@ -28,6 +28,59 @@ import {
 const DEFAULT_TIMEOUT_MS = 28 * 60 * 1000;
 const MAX_CODEX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const LAST_MESSAGE_FILE = "codex-last-message.txt";
+const MAX_TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024;
+
+function tailBuffer(previous, chunk, limit) {
+  const combined = previous.length ? Buffer.concat([previous, chunk]) : Buffer.from(chunk);
+  return combined.length <= limit ? combined : combined.subarray(combined.length - limit);
+}
+
+// With --json, stdout carries Codex's JSONL event stream. A partial first line
+// after tail truncation is skipped like any other non-JSON line.
+function parseEvents(buffer) {
+  const events = [];
+  for (const line of buffer.toString("utf8").split("\n")) {
+    const text = line.trim();
+    if (!text) continue;
+    try {
+      const event = JSON.parse(text);
+      if (event && typeof event === "object") events.push(event);
+    } catch {
+      // Not a complete event line.
+    }
+  }
+  return events;
+}
+
+function structuredErrors(events) {
+  return events
+    .filter((event) => event.type === "error" || event.type === "turn.failed")
+    .map((event) => event.message ?? event.error?.message ?? event.error)
+    .filter((message) => typeof message === "string" && message.trim());
+}
+
+// Only Codex's own error events classify a failure. Once a thread has started,
+// stderr and the rest of the event stream are transcript, including command
+// output quoted from the repository, so a mentioned "quota exceeded" or ENOENT
+// there must not disable the provider. Before any event exists, stderr is the
+// launcher's or CLI's startup diagnostic and remains the failure message.
+function classifyFailure(error, transcript) {
+  const events = parseEvents(transcript);
+  if (!events.length) {
+    error.providerError = error.stderr || error.message;
+    return error;
+  }
+  const structured = structuredErrors(events);
+  error.transcript = error.stderr ?? "";
+  error.providerError = structured.join("\n");
+  const status = /exited with (signal \S+|\S+?)(?::|$)/.exec(error.message)?.[1];
+  if (status && !error.timedOut && !error.cancelled) {
+    error.message = `codex exited with ${status}${structured.length
+      ? `: ${structured.join("; ")}`
+      : "; no structured provider error was reported (see transcript)"}`;
+  }
+  return error;
+}
 
 function normalizeModel(value) {
   if (value == null) return null;
@@ -138,12 +191,17 @@ function parseArgs(argv) {
 // A read-only, ephemeral, configuration-independent Codex session. The user's
 // config.toml is ignored so the reviewer does not inherit instructions, MCP
 // servers, or model overrides from whichever home the launcher selected; auth
-// still comes from that home. The sandbox denies writes and network access.
+// still comes from that home. Execpolicy rules are ignored too, so neither the
+// home nor the reviewed repository can widen command approval past the
+// read-only sandbox, which denies writes and network access. --json keeps the
+// event stream on stdout for failure classification.
 function buildCodexArgs(options, scope, lastMessagePath) {
   const args = [
     "exec",
+    "--json",
     "--ephemeral",
     "--ignore-user-config",
+    "--ignore-rules",
     "--sandbox",
     "read-only",
     "--color",
@@ -215,16 +273,28 @@ async function runCodexReview(options, dependencies = {}) {
       jigBin: dependencies.jigBin ?? null,
     });
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
-    await runCommand(launch.command, launch.args, {
-      cwd: scope.repoRoot,
-      input: prompt,
-      timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
-      maxBuffer: MAX_CODEX_OUTPUT_BYTES,
-      signal,
-      env: gitEnvironment(childEnvironment(process.env)),
-    });
+    let transcript = Buffer.alloc(0);
+    try {
+      await runCommand(launch.command, launch.args, {
+        cwd: scope.repoRoot,
+        input: prompt,
+        timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
+        maxBuffer: MAX_CODEX_OUTPUT_BYTES,
+        overflow: "truncate",
+        onStdout: (chunk) => { transcript = tailBuffer(transcript, chunk, MAX_TRANSCRIPT_TAIL_BYTES); },
+        signal,
+        env: gitEnvironment(childEnvironment(process.env)),
+      });
+    } catch (error) {
+      throw classifyFailure(error, transcript);
+    }
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
-    const report = parseCodexResult(lastMessagePath);
+    let report;
+    try {
+      report = parseCodexResult(lastMessagePath);
+    } catch (error) {
+      throw classifyFailure(error, transcript);
+    }
     return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
   } finally {
     evidence.cleanup();
@@ -266,6 +336,7 @@ if (isMain) {
 
 export {
   buildCodexArgs,
+  classifyFailure,
   parseArgs,
   parseCodexResult,
   runCodexReview,

@@ -18,6 +18,7 @@ import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
 import { launchExecutable } from "../../comprehensive-review/scripts/provider-launch.mjs";
+import { CODEX_CLI_EFFORTS } from "../../comprehensive-review/scripts/review-options.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
@@ -201,18 +202,24 @@ function assertLegacyAdmission(root, runsRoot) {
   if (!isSettled(prior)) throw new Error(`Resume the active run: ${reference.directory}`);
 }
 // Codex without a command is the host's native subagent unless the reviewer entry
-// or --codex-runtime selects the bundled CLI bridge. Claude and Cursor without a
-// command always use the bundled bridge.
+// or --codex-runtime selects the bundled CLI bridge. The effective runtime is
+// resolved once, so dispatch, preflight, launcher and effort validation agree:
+// a configured native entry cannot silently drop a requested launcher, and a
+// configured CLI entry cannot admit a native-only effort.
 const BUNDLED_EXECUTABLES = Object.freeze({ claude: "claude", codex: "codex", cursor: "cursor-agent" });
-function bridged(provider, options) {
-  if (provider.command) return false;
-  if (provider.id !== "codex") return true;
-  return (provider.runtime ?? options.review.codex?.runtime) === "cli";
+function codexRuntime(provider, options) {
+  const selected = options.review.codex ?? {};
+  const runtime = provider.runtime ?? selected.runtime ?? "native";
+  if (runtime === "native" && selected.launcher && selected.launcher !== "none") throw new Error("--codex-launcher requires the cli runtime, but the codex reviewer entry selects runtime native.");
+  if (runtime === "cli" && selected.effort && !CODEX_CLI_EFFORTS.has(selected.effort)) throw new Error(`--codex-effort ${selected.effort} is not a Codex CLI effort; the cli runtime accepts ${[...CODEX_CLI_EFFORTS].join(", ")}.`);
+  return runtime;
 }
 function configure(options, config) {
   const reviewers = (config.reviewers ?? options.review.reviewers.map(id => ({ id }))).map(provider => {
     if (provider.runtime !== undefined && (provider.id !== "codex" || !["native", "cli"].includes(provider.runtime))) throw new Error("runtime applies only to the codex reviewer and must be native or cli.");
-    return bridged(provider, options) ? { ...provider, bundled: true,
+    if (provider.id === "codex" && !provider.command) provider = { ...provider, runtime: codexRuntime(provider, options) };
+    const bundled = !provider.command && (provider.id !== "codex" || provider.runtime === "cli");
+    return bundled ? { ...provider, bundled: true,
       command: [process.execPath, fileURLToPath(new URL("./provider-bridge.mjs", import.meta.url)), provider.id] } : provider;
   });
   if (!reviewers.length || new Set(reviewers.map(p => p.id)).size !== reviewers.length) throw new Error("Reviewer capabilities must have unique provider IDs.");
@@ -1103,7 +1110,8 @@ async function review(run) {
     const provider = pool[(slot.slot + slot.attempts) % pool.length];
     slot.attempts++;
     if (run.pending) { (run.reviewQueue ??= {})[run.pending.id] = run.pending; run.pending = null; run.reviewWave = true; }
-    issue(run, "review", { provider: provider.id, providerOptions: run.options.review[provider.id], slot: slot.slot,
+    // The effective Codex runtime resolved at init travels with the assignment.
+    issue(run, "review", { provider: provider.id, providerOptions: { ...run.options.review[provider.id], ...(provider.runtime ? { runtime: provider.runtime } : {}) }, slot: slot.slot,
       instructions: "Independently inspect the entire scope and immutable task contract. Remain read-only. Check the responsible contracts and affected paths for residual causes, inappropriate layer responsibilities, and regressions; passing tests alone do not establish a sound repair. Report demonstrated consequences, not stylistic preferences or speculative redesign. Return complete coverage, actionable findings, and evidence for every acceptance criterion. Do not invoke another reviewer." }, provider.command);
     if (TERMINAL.has(run.phase)) return;
     launch(run);

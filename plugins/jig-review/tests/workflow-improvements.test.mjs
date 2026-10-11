@@ -121,6 +121,9 @@ test("bridge marks only recognized permanent errors non-retryable", () => {
   for (const error of ["authentication failed", "quota exceeded", "usage limit reached",
     "jig exited with 1: No eligible Claude home with fresh subscription headroom; inspect `jig claude homes --usage` or pass HOME explicitly",
     "jig exited with 2: error: unexpected argument '--auto' found"]) assert.equal(failureResult(new Error(error)).retryable, false);
+  // An adapter that separates the provider's error channel from transcript text decides through providerError.
+  assert.equal(failureResult(Object.assign(new Error("codex exited with 1; no structured provider error was reported"), { providerError: "", transcript: "ENOENT quota exceeded" })).retryable, undefined);
+  assert.equal(failureResult(Object.assign(new Error("codex exited with 1: usage limit reached"), { providerError: "usage limit reached" })).retryable, false);
   assert.equal(failureResult(new Error("temporary capacity exceeded")).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("timed out"), { timedOut: true })).execution, "uncertain");
 });
@@ -158,6 +161,16 @@ test("launcher-selected bundled bridges preflight the Jig executable instead of 
   assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["claude", true, true], ["codex", true, true]]);
   await assert.rejects(f.start({ reviewers: [{ id: "claude", runtime: "cli" }] }, ["--reviewers", "claude"]), /runtime applies only to the codex reviewer/);
   await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "subagent" }] }, ["--reviewers", "codex"]), /must be native or cli/);
+  // The configured entry and the loop options resolve to one effective runtime before dispatch.
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--reviewers", "codex", "--codex-launcher", "auto"]), /requires the cli runtime, but the codex reviewer entry selects runtime native/);
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]), /not a Codex CLI effort/);
+});
+
+test("the configured codex runtime is resolved once and travels with the capability", async t => {
+  const configured = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex"]);
+  assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
+  const native = await fixture(t).start({ reviewers: [{ id: "codex" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]);
+  assert.deepEqual(native.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "native", undefined]]);
 });
 
 test("evidence declarations reject broad paths and policy files", () => {

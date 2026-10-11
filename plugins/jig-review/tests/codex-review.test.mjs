@@ -8,6 +8,7 @@ import test from "node:test";
 
 import {
   buildCodexArgs,
+  classifyFailure,
   parseArgs,
   parseCodexResult,
   runCodexReview,
@@ -37,7 +38,7 @@ async function workingTreeFingerprint(repo) {
 
 // A stand-in for codex (or for jig forwarding to codex): records argv, prompt, and
 // environment, then writes the report to the --output-last-message path.
-function fakeProvider(directory, name, { exitCode = 0, stderr = "", report = "No actionable findings from Codex." } = {}) {
+function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "", report = "No actionable findings from Codex." } = {}) {
   const file = path.join(directory, name);
   writeFileSync(file, [
     "#!/usr/bin/env node",
@@ -46,6 +47,7 @@ function fakeProvider(directory, name, { exitCode = 0, stderr = "", report = "No
     "for await (const chunk of process.stdin) prompt += chunk;",
     "const argv = process.argv.slice(2);",
     "writeFileSync(process.env.FAKE_CODEX_CAPTURE, JSON.stringify({ argv, prompt, env: process.env }));",
+    `if (${JSON.stringify(stdout)}) process.stdout.write(${JSON.stringify(stdout)});`,
     `if (${JSON.stringify(stderr)}) process.stderr.write(${JSON.stringify(stderr)});`,
     `if (${exitCode} !== 0) process.exit(${exitCode});`,
     "const output = argv[argv.indexOf('--output-last-message') + 1];",
@@ -112,7 +114,7 @@ test("Codex arguments select an ephemeral read-only session without user configu
   const args = buildCodexArgs({ model: "gpt-5-codex", effort: "high" }, { repoRoot: "/repo" }, "/tmp/last.txt");
   assert.equal(args[0], "exec");
   assert.equal(args.at(-1), "-", "the prompt arrives over stdin");
-  for (const flag of ["--ephemeral", "--ignore-user-config"]) assert.ok(args.includes(flag), flag);
+  for (const flag of ["--json", "--ephemeral", "--ignore-user-config", "--ignore-rules"]) assert.ok(args.includes(flag), flag);
   assert.deepEqual(args.slice(args.indexOf("--sandbox"), args.indexOf("--sandbox") + 2), ["--sandbox", "read-only"]);
   assert.deepEqual(args.slice(args.indexOf("--cd"), args.indexOf("--cd") + 2), ["--cd", "/repo"]);
   assert.deepEqual(args.slice(args.indexOf("--output-last-message"), args.indexOf("--output-last-message") + 2), ["--output-last-message", "/tmp/last.txt"]);
@@ -191,4 +193,38 @@ test("a missing final message fails the review instead of returning an empty rep
   writeFileSync(silent, "#!/usr/bin/env node\nfor await (const chunk of process.stdin) {}\nprocess.stdout.write('progress only');\n");
   chmodSync(silent, 0o755);
   await assert.rejects(runCodexReview(f.parse(), { codexBin: silent }), /did not write a final message/);
+});
+
+test("transcript text never classifies a failure; only Codex's structured error events do", async (t) => {
+  const f = await adapterFixture(t);
+  const transcript = [
+    JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+    JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "cat README.md", aggregated_output: "ENOENT: quota exceeded, usage limit reached, authentication failed" } }),
+  ].join("\n") + "\n";
+  const noisy = fakeProvider(f.scratch, "noisy-codex.mjs", { exitCode: 1, stdout: transcript, stderr: "cat README.md\nENOENT: quota exceeded\n" });
+  let failure;
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: noisy }), (error) => { failure = error; return true; });
+  assert.match(failure.message, /codex exited with 1; no structured provider error was reported/);
+  assert.equal(failure.providerError, "");
+  assert.match(failure.transcript, /quota exceeded/);
+  assert.equal(failureResult(failure).retryable, undefined, "a transient failure with quoted repository text stays retryable");
+
+  const structured = fakeProvider(f.scratch, "unauthenticated-codex.mjs", { exitCode: 1,
+    stdout: transcript + JSON.stringify({ type: "error", message: "authentication failed: not logged in" }) + "\n" });
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: structured }), (error) => { failure = error; return true; });
+  assert.equal(failure.message, "codex exited with 1: authentication failed: not logged in");
+  assert.equal(failure.providerError, "authentication failed: not logged in");
+  assert.equal(failureResult(failure).retryable, false);
+
+  const silent = fakeProvider(f.scratch, "silent-success-codex.mjs", { stdout: transcript, report: "" });
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: silent }), (error) => { failure = error; return true; });
+  assert.match(failure.message, /no review output/);
+  assert.equal(failure.providerError, "");
+
+  const timeout = classifyFailure(Object.assign(new Error("codex timed out after 5 ms"), { timedOut: true, stderr: "ENOENT" }), Buffer.from(transcript));
+  assert.equal(timeout.message, "codex timed out after 5 ms", "timeouts keep their message");
+  assert.equal(timeout.providerError, "");
+  const failedTurn = classifyFailure(new Error("codex exited with 1: noise"), Buffer.from(JSON.stringify({ type: "turn.failed", error: { message: "usage limit reached" } }) + "\n"));
+  assert.equal(failedTurn.providerError, "usage limit reached");
+  assert.equal(failureResult(failedTurn).retryable, false);
 });
