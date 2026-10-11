@@ -3,6 +3,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { normalizeClaudeConfigDir } from "./claude-config.mjs";
+import { normalizeLauncher } from "./provider-launch.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
 const REVIEWER_ORDER = ["claude", "codex", "cursor"];
@@ -10,6 +11,9 @@ const REVIEWERS = new Set(REVIEWER_ORDER);
 const CLAUDE_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const CLAUDE_FILE_ACCESS = new Set(["restricted", "host"]);
 const CODEX_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
+// Values of the Codex CLI model_reasoning_effort key; the CLI adapter rejects max and ultra.
+const CODEX_CLI_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
+const CODEX_RUNTIMES = new Set(["native", "cli"]);
 const CURSOR_MODELS = Object.freeze({
   low: "cursor-grok-4.6-low",
   medium: "cursor-grok-4.6-medium",
@@ -23,8 +27,11 @@ const REVIEW_VALUE_FLAGS = new Map([
   ["--claude-effort", "claudeEffort"],
   ["--claude-file-access", "claudeFileAccess"],
   ["--claude-config-dir", "claudeConfigDir"],
+  ["--claude-launcher", "claudeLauncher"],
   ["--codex-model", "codexModel"],
   ["--codex-effort", "codexEffort"],
+  ["--codex-runtime", "codexRuntime"],
+  ["--codex-launcher", "codexLauncher"],
   ["--cursor-effort", "cursorEffort"],
   ["--cursor-speed", "cursorSpeed"],
   ["--exclude-path", "excludePaths"],
@@ -79,6 +86,28 @@ function parseReviewers(value) {
   return REVIEWER_ORDER.filter((reviewer) => selected.has(reviewer));
 }
 
+// Native Codex is the host's own subagent. The CLI runtime runs the codex-review
+// adapter as an independent process, which is the only form a Jig launcher can
+// start, so selecting a launcher selects the CLI runtime.
+function codexOptions(raw, provided) {
+  let runtime = effort("--codex-runtime", raw.codexRuntime, CODEX_RUNTIMES);
+  const launcher = normalizeLauncher(raw.codexLauncher, "--codex-launcher");
+  if (launcher !== "none") {
+    if (provided.has("--codex-runtime") && runtime === "native") {
+      throw new Error("--codex-launcher runs Codex through its CLI adapter; use --codex-runtime cli or omit --codex-runtime.");
+    }
+    runtime = "cli";
+  }
+  return {
+    model: raw.codexModel == null ? null : nonblank("--codex-model", raw.codexModel),
+    effort: raw.codexEffort == null
+      ? null
+      : effort("--codex-effort", raw.codexEffort, runtime === "cli" ? CODEX_CLI_EFFORTS : CODEX_EFFORTS),
+    runtime,
+    launcher,
+  };
+}
+
 function parseArgs(argv) {
   const raw = {
     reviewers: "claude,codex",
@@ -86,8 +115,11 @@ function parseArgs(argv) {
     claudeEffort: null,
     claudeFileAccess: "restricted",
     claudeConfigDir: null,
+    claudeLauncher: null,
     codexModel: null,
     codexEffort: null,
+    codexRuntime: "native",
+    codexLauncher: null,
     cursorEffort: "high",
     cursorSpeed: "standard",
     excludePaths: [],
@@ -125,8 +157,9 @@ function parseArgs(argv) {
       "--claude-effort",
       "--claude-file-access",
       "--claude-config-dir",
+      "--claude-launcher",
     ],
-    codex: ["--codex-model", "--codex-effort"],
+    codex: ["--codex-model", "--codex-effort", "--codex-runtime", "--codex-launcher"],
     cursor: ["--cursor-effort", "--cursor-speed"],
   };
   for (const [reviewer, configurationFlags] of Object.entries(reviewerFlags)) {
@@ -147,16 +180,13 @@ function parseArgs(argv) {
           CLAUDE_FILE_ACCESS,
         ),
         configDir: normalizeClaudeConfigDir(raw.claudeConfigDir),
+        launcher: normalizeLauncher(raw.claudeLauncher, "--claude-launcher"),
       }
     : null;
-  const codex = selected.has("codex")
-    ? {
-        model: raw.codexModel == null ? null : nonblank("--codex-model", raw.codexModel),
-        effort: raw.codexEffort == null
-          ? null
-          : effort("--codex-effort", raw.codexEffort, CODEX_EFFORTS),
-      }
-    : null;
+  if (claude && claude.launcher !== "none" && claude.configDir != null) {
+    throw new Error("--claude-config-dir cannot be combined with --claude-launcher; the launcher selects the Claude home.");
+  }
+  const codex = selected.has("codex") ? codexOptions(raw, provided) : null;
   let cursor = null;
   if (selected.has("cursor")) {
     const cursorEffort = effort(
@@ -199,6 +229,7 @@ if (isMain) {
 }
 
 export {
+  CODEX_CLI_EFFORTS,
   CURSOR_MODELS,
   CURSOR_SPEEDS,
   cursorModel,

@@ -74,6 +74,7 @@ test("argument parsing keeps Claude configuration separate from scope", () => {
       effort: "xhigh",
       fileAccess: "restricted",
       configDir: null,
+      launcher: "none",
       expectedFingerprint: "a".repeat(64),
       timeoutMs: 5000,
       excludePaths: [],
@@ -497,4 +498,69 @@ test("adapter terminates a Claude process at its internal deadline", async (t) =
     () => process.kill(providerPid, 0),
     (error) => error.code === "ESRCH",
   );
+});
+
+test("a Jig launcher wraps the Claude command, forwards its arguments, and excludes an explicit config directory", async (t) => {
+  const repo = makeRepository();
+  const scratch = mkdtempSync(path.join(os.tmpdir(), "jig-claude-launcher-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
+  });
+  writeFileSync(path.join(repo, "example.js"), "export function value() {\n  return 2;\n}\n");
+  const capturePath = path.join(scratch, "capture.json");
+  const taskBrief = path.join(scratch, "brief.json");
+  writeFileSync(taskBrief, JSON.stringify({ goal: "Preserve public values", requirements: [{ id: "R1", text: "Return the requested value", source: "User request" }], constraints: [], nonGoals: [], unknowns: [] }));
+  const pinnedBrief = readBrief(taskBrief);
+  const fakeJig = path.join(scratch, "fake-jig.mjs");
+  writeFileSync(fakeJig, [
+    "#!/usr/bin/env node",
+    'import { writeFileSync } from "node:fs";',
+    "let prompt = '';",
+    "for await (const chunk of process.stdin) prompt += chunk;",
+    "writeFileSync(process.env.FAKE_CLAUDE_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), prompt, env: process.env }));",
+    "process.stdout.write(JSON.stringify({ result: 'No actionable findings from Claude.' }));",
+    "",
+  ].join("\n"));
+  chmodSync(fakeJig, 0o755);
+  const previous = { FAKE_CLAUDE_CAPTURE: process.env.FAKE_CLAUDE_CAPTURE, CLAUDECODE: process.env.CLAUDECODE,
+    CLAUDE_CODE_MESSAGING_SOCKET: process.env.CLAUDE_CODE_MESSAGING_SOCKET, CLAUDE_EFFORT: process.env.CLAUDE_EFFORT, JIG_LAUNCHER_BIN: process.env.JIG_LAUNCHER_BIN };
+  Object.assign(process.env, { FAKE_CLAUDE_CAPTURE: capturePath, CLAUDECODE: "1", CLAUDE_CODE_MESSAGING_SOCKET: "/run/parent.sock", CLAUDE_EFFORT: "xhigh" });
+  delete process.env.JIG_LAUNCHER_BIN;
+  t.after(() => {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  const expectedFingerprint = await workingTreeFingerprint(repo);
+  const parse = (extra) => parseArgs([
+    "--cwd", repo, "--scope", "working-tree", "--expected-fingerprint", expectedFingerprint,
+    "--task-brief", taskBrief, "--task-brief-hash", pinnedBrief.hash, "--timeout-ms", "5000", ...extra,
+  ]);
+  assert.equal(parse([]).launcher, "none");
+  assert.throws(() => parse(["--launcher", "auto", "--config-dir", "~/.claude-work"]), /--config-dir cannot be combined with --launcher/);
+  assert.throws(() => parse(["--launcher", "picker"]), /Unsupported --launcher value "picker"/);
+  await assert.rejects(
+    runClaudeReview({ ...parse([]), launcher: "home:work", configDir: "/tmp/profile" }, { claudeBin: "/definitely/not/invoked" }),
+    /cannot be combined with --launcher/,
+  );
+
+  const report = await runClaudeReview(parse(["--launcher", "auto", "--model", "opus"]), { claudeBin: "/definitely/not/invoked", jigBin: fakeJig });
+  assert.equal(report, "No actionable findings from Claude.");
+  let captured = JSON.parse(readFileSync(capturePath, "utf8"));
+  assert.deepEqual(captured.argv.slice(0, 5), ["claude", "launch", "--auto", "--", "-p"]);
+  assert.deepEqual(captured.argv.slice(captured.argv.indexOf("--model"), captured.argv.indexOf("--model") + 2), ["--model", "opus"]);
+  assert.ok(captured.argv.includes("--restricted"));
+  assert.match(captured.prompt, /\+  return 2;/);
+  assert.equal(captured.env.CLAUDECODE, undefined);
+  assert.equal(captured.env.CLAUDE_CODE_MESSAGING_SOCKET, undefined);
+  assert.equal(captured.env.CLAUDE_EFFORT, undefined);
+  assert.equal(captured.env.FAKE_CLAUDE_CAPTURE, capturePath, "unrelated variables are inherited");
+
+  process.env.JIG_LAUNCHER_BIN = fakeJig;
+  await runClaudeReview(parse(["--launcher", "home:work"]), { claudeBin: "/definitely/not/invoked" });
+  captured = JSON.parse(readFileSync(capturePath, "utf8"));
+  assert.deepEqual(captured.argv.slice(0, 5), ["claude", "launch", "work", "--", "-p"]);
+  assert.equal(captured.env.CLAUDE_CONFIG_DIR, undefined, "the launcher, not the adapter, selects the home");
 });

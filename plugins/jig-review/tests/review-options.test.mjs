@@ -19,8 +19,9 @@ test("default reviewers remain Claude and Codex", () => {
       effort: null,
       fileAccess: "restricted",
       configDir: null,
+      launcher: "none",
     },
-    codex: { model: null, effort: null },
+    codex: { model: null, effort: null, runtime: "native", launcher: "none" },
     cursor: null,
     excludePaths: [],
   });
@@ -42,8 +43,9 @@ test("all-reviewers selects every provider in canonical order", () => {
         effort: null,
         fileAccess: "restricted",
         configDir: null,
+        launcher: "none",
       },
-      codex: { model: null, effort: null },
+      codex: { model: null, effort: null, runtime: "native", launcher: "none" },
       cursor: {
         effort: "xhigh",
         speed: "fast",
@@ -81,8 +83,9 @@ test("reviewers and namespaced model settings are normalized", () => {
         effort: "max",
         fileAccess: "host",
         configDir: null,
+        launcher: "none",
       },
-      codex: { model: "gpt-5.6-sol", effort: "ultra" },
+      codex: { model: "gpt-5.6-sol", effort: "ultra", runtime: "native", launcher: "none" },
       cursor: {
         effort: "xhigh",
         speed: "fast",
@@ -246,4 +249,21 @@ test("CLI entrypoint works when the skill directory is reached through a symlink
     },
     excludePaths: [],
   });
+});
+
+test("Jig launchers select provider homes and imply the Codex CLI runtime", () => {
+  const launched = parseArgs(["--claude-launcher", "auto", "--codex-launcher", "home:work"]);
+  assert.equal(launched.claude.launcher, "auto");
+  assert.deepEqual(launched.codex, { model: null, effort: null, runtime: "cli", launcher: "home:work" });
+  assert.deepEqual(parseArgs(["--codex-runtime", "cli"]).codex, { model: null, effort: null, runtime: "cli", launcher: "none" });
+  assert.equal(parseArgs(["--codex-effort", "ultra"]).codex.effort, "ultra", "native Codex keeps the host effort range");
+  assert.equal(parseArgs(["--codex-runtime", "cli", "--codex-effort", "minimal"]).codex.effort, "minimal");
+  assert.throws(() => parseArgs(["--codex-runtime", "cli", "--codex-effort", "ultra"]), /Unsupported --codex-effort value "ultra"\. Use minimal, low, medium, high, xhigh/);
+  assert.throws(() => parseArgs(["--codex-runtime", "native", "--codex-launcher", "auto"]), /use --codex-runtime cli or omit --codex-runtime/);
+  assert.throws(() => parseArgs(["--codex-runtime", "subagent"]), /Unsupported --codex-runtime value/);
+  assert.throws(() => parseArgs(["--claude-launcher", "picker"]), /Unsupported --claude-launcher value "picker"/);
+  assert.throws(() => parseArgs(["--claude-launcher", "home:work", "--claude-config-dir", "~/.claude-work"]), /cannot be combined with --claude-launcher/);
+  assert.throws(() => parseArgs(["--reviewers", "claude", "--codex-launcher", "auto"]), /--codex-launcher requires selecting codex/);
+  assert.throws(() => parseArgs(["--reviewers", "codex", "--claude-launcher", "auto"]), /--claude-launcher requires selecting claude/);
+  assert.throws(() => parseArgs(["--reviewers", "cursor", "--codex-runtime", "cli"]), /--codex-runtime requires selecting codex/);
 });
