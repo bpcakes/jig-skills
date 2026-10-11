@@ -22,6 +22,8 @@ The wake targets the registered pane and validates the returned agent identity. 
 
 Ticks wake the coordinator for a bounded reconciliation; they do not meter all task progress. Honor any minimum cadence, including “only every N minutes.” Event wakes require corresponding authority. Record attempted, delivered, and completed checks separately: a busy skip or transport acknowledgement is not completed supervision.
 
+Changing cadence recomputes the stored next due time from the latest attempt or completion under the new interval. It preserves pending wake identities and event requests; a pending pass still needs completion, and queued events remain subject to the new minimum cadence.
+
 After a full reconciliation, record its wake completion. A full manual check can consume a pending catch-up and reset the next eligible check. A short status reply cannot. Coalesce missed ticks into one catch-up. Promise another automatic check only after the scheduler is observed running; delivery evidence is stronger than an intended due time.
 
 Automatic completion preserves event wakes received after dispatch for the next minimum-cadence-eligible tick. A full manual reconciliation consumes the currently queued catch-up; use manual completion only after including that catch-up in the check.

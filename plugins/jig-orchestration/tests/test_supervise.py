@@ -375,6 +375,44 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(runtime.health(self.run, at + timedelta(seconds=1))["alert"], "already_attempted")
         notify.assert_called_once()
 
+    def test_cadence_reconfiguration_updates_due_time_and_health_together(self):
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 3600})
+        runtime.complete(self.run, "manual", self.now)
+        self.configure_scheduler(self.config["scheduler"])
+        self.assertEqual(runtime.parse_time(Engine.read(self.run)["scheduler"]["next_due_at"]),
+                         self.now + timedelta(seconds=60))
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            wake = runtime.tick(self.run, self.now + timedelta(seconds=60))
+        self.assertEqual(wake["status"], "delivered")
+        runtime.complete(self.run, wake["wake_id"], self.now + timedelta(seconds=61))
+        Engine.heartbeat(self.run, runtime.timestamp(self.now + timedelta(seconds=181)))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=181))["status"], "healthy")
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 3600})
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=182))["status"], "not_due")
+        call.assert_not_called()
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=182))["status"], "healthy")
+        self.assertEqual(runtime.parse_time(Engine.read(self.run)["scheduler"]["next_due_at"]),
+                         self.now + timedelta(seconds=3661))
+
+    def test_cadence_change_preserves_pending_events_and_latest_attempt_minimum(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            wake = runtime.tick(self.run, self.now)
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=10))
+        self.configure_scheduler({**self.config["scheduler"], "minimum_cadence_seconds": 240})
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["pending_action_id"], wake["wake_id"])
+        self.assertIsNotNone(schedule["wake_requested_at"])
+        self.assertEqual(runtime.parse_time(schedule["next_due_at"]), self.now + timedelta(seconds=240))
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=241))["status"], "awaiting_reconciliation")
+        call.assert_not_called()
+        runtime.complete(self.run, wake["wake_id"], self.now + timedelta(seconds=250))
+        self.configure_scheduler(self.config["scheduler"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=309))["status"], "minimum_cadence")
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=310))["status"], "delivered")
+
     def test_progress_health_respects_minimum_and_initial_run_without_attempt(self):
         self.configure_scheduler({**self.config["scheduler"], "minimum_cadence_seconds": 240})
         runtime.complete(self.run, "manual", self.now)

@@ -18,7 +18,7 @@ import posixpath
 import stat
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 class StateError(ValueError):
@@ -473,6 +473,15 @@ class Engine:
                                 if k not in {"cadence_seconds", "minimum_cadence_seconds", "busy_timeout_seconds", "notifier_argv", "notification_authorized", "enabled"}}
                 require(old_identity == new_identity, "unsettled", "stop scheduler before rebinding its endpoint")
             if "scheduler" in fields:
+                settings = candidate["scheduler"]
+                if any(settings.get(key) != config.get("scheduler", {}).get(key)
+                       for key in ("cadence_seconds", "minimum_cadence_seconds")):
+                    cadence = settings.get("cadence_seconds", 1200)
+                    interval = max(cadence, settings.get("minimum_cadence_seconds", cadence))
+                    previous = [instant(state["scheduler"][key]) for key in ("last_attempt_at", "last_completed_at")
+                                if state["scheduler"].get(key)]
+                    state["scheduler"]["next_due_at"] = (
+                        (max(previous) + timedelta(seconds=interval)).isoformat() if previous else None)
                 state["scheduler"]["enabled"] = candidate["scheduler"]["enabled"]
                 state["scheduler"]["version"] += 1
             state["config"] = candidate
