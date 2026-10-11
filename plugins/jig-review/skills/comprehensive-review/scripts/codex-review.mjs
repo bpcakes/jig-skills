@@ -66,16 +66,34 @@ async function renderPrompt(codexBin, { cwd, privateHome, overrides, deadlineAt,
 }
 
 // Skills are listed as "(file: rN/relative/SKILL.md)" under a roots table of
-// "- `rN` = `absolute root`" lines.
+// "- `rN` = `absolute root`" lines. Anything else is unrecognized: an entry
+// that cannot be resolved cannot be disabled, so it must fail isolation rather
+// than pass as "no ambient skills".
+const SKILL_ROOTS_HEADING = "### Skill roots";
+const SKILL_LIST_HEADING = "### Available skills";
 function listedSkills(text) {
   const roots = new Map();
   for (const match of text.matchAll(/^- `(r\d+)` = `(.+)`$/gm)) roots.set(match[1], match[2]);
   const files = [];
-  for (const match of text.matchAll(/\(file: (r\d+)\/([^)]+)\)/g)) {
-    const root = roots.get(match[1]);
-    files.push(root ? path.join(root, match[2]) : `${match[1]}/${match[2]}`);
+  const unrecognized = [];
+  for (const match of text.matchAll(/\(file: ([^)]+)\)/g)) {
+    const reference = match[1];
+    const rooted = /^(r\d+)\/(.+)$/.exec(reference);
+    if (rooted && roots.has(rooted[1])) files.push(path.join(roots.get(rooted[1]), rooted[2]));
+    else if (path.isAbsolute(reference)) files.push(path.normalize(reference));
+    else unrecognized.push(reference);
   }
-  return files;
+  // Every entry under the skill list must carry a file reference.
+  const listStart = text.indexOf(SKILL_LIST_HEADING);
+  if (listStart >= 0) {
+    const listEnd = text.indexOf("</skills_instructions>", listStart);
+    const section = text.slice(listStart + SKILL_LIST_HEADING.length, listEnd >= 0 ? listEnd : undefined);
+    for (const line of section.split("\n")) {
+      if (line.startsWith("- ") && !/\(file: [^)]+\)/.test(line)) unrecognized.push(line.trim());
+    }
+  }
+  if (!text.includes(SKILL_ROOTS_HEADING)) unrecognized.push("no skill roots table");
+  return { files, unrecognized };
 }
 
 function within(file, directory) {
@@ -92,7 +110,7 @@ function ambientSkills(text, privateHome) {
   } catch {
     // The directory is created before rendering; fall back to the given path.
   }
-  return [...new Set(listedSkills(text).filter((file) => {
+  return [...new Set(listedSkills(text).files.filter((file) => {
     let real = file;
     try {
       real = realpathSync(file);
@@ -123,8 +141,14 @@ function isolationError(message) {
   return Object.assign(new Error(`Codex isolation incomplete: ${message}`), { providerError: `Codex isolation incomplete: ${message}` });
 }
 
+function assertRecognizedSkills(text) {
+  const { unrecognized } = listedSkills(text);
+  if (unrecognized.length) throw isolationError(`Codex listed skills in an unrecognized format and they cannot be disabled: ${unrecognized.join(", ")}`);
+}
+
 // Ask Codex what it would load, disable all of it, then prove that only its own
-// embedded skills and no AGENTS.md instructions remain. Fails closed.
+// embedded skills and no AGENTS.md instructions remain. Fails closed, including
+// when the rendering uses a format this adapter cannot interpret.
 async function isolate(codexBin, context) {
   let baseline;
   try {
@@ -132,6 +156,7 @@ async function isolate(codexBin, context) {
   } catch (error) {
     throw classifyFailure(error, Buffer.alloc(0));
   }
+  assertRecognizedSkills(baseline);
   const overrides = isolationOverrides(ambientSkills(baseline, context.privateHome));
   let verification;
   try {
@@ -139,6 +164,7 @@ async function isolate(codexBin, context) {
   } catch (error) {
     throw classifyFailure(error, Buffer.alloc(0));
   }
+  assertRecognizedSkills(verification);
   const leftover = ambientSkills(verification, context.privateHome);
   if (leftover.length) throw isolationError(`Codex still lists skills outside the private home: ${leftover.join(", ")}`);
   if (instructionsLoaded(verification)) throw isolationError("AGENTS.md instructions still load.");

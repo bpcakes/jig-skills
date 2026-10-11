@@ -53,7 +53,7 @@ async function workingTreeFingerprint(repo) {
 // honoring skills.config and project_doc_max_bytes unless told to ignore them.
 // Other invocations record argv, prompt, and environment, then write the report
 // to the --output-last-message path.
-function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "", report = "No actionable findings from Codex.", writeReport = true, ignoreSkillsConfig = false, keepDocs = false } = {}) {
+function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "", report = "No actionable findings from Codex.", writeReport = true, ignoreSkillsConfig = false, keepDocs = false, skillEntryFormat = "rooted" } = {}) {
   const file = path.join(directory, name);
   writeFileSync(file, [
     "#!/usr/bin/env node",
@@ -72,7 +72,8 @@ function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "",
     "  const lines = ['<skills_instructions>', '### Skill roots'];",
     "  roots.forEach((root, index) => lines.push('- `r' + index + '` = `' + root + '`'));",
     "  lines.push('### Available skills');",
-    "  roots.forEach((root, index) => { for (const skill of skillFiles(root)) { if (index === 2 && skill.includes('/.system/')) continue; if (disabled.has(skill)) continue; const description = (readFileSync(skill, 'utf8').match(/^description: (.*)$/m) ?? [, 'none'])[1]; lines.push('- ' + path.basename(path.dirname(skill)) + ': ' + description + ' (file: r' + index + '/' + path.relative(root, skill) + ')'); } });",
+    `  const entryFormat = ${JSON.stringify(skillEntryFormat)};`,
+    "  roots.forEach((root, index) => { for (const skill of skillFiles(root)) { if (index === 2 && skill.includes('/.system/')) continue; if (disabled.has(skill)) continue; const description = (readFileSync(skill, 'utf8').match(/^description: (.*)$/m) ?? [, 'none'])[1]; const reference = entryFormat === 'absolute' ? skill : entryFormat === 'bare' ? null : 'r' + index + '/' + path.relative(root, skill); lines.push('- ' + path.basename(path.dirname(skill)) + ': ' + description + (reference ? ' (file: ' + reference + ')' : '')); } });",
     "  lines.push('</skills_instructions>');",
     "  const messages = [{ type: 'message', role: 'developer', content: [{ type: 'input_text', text: lines.join('\\n') }] }];",
     "  const agents = path.join(process.cwd(), 'AGENTS.md');",
@@ -329,15 +330,40 @@ test("transcript text never classifies a failure; only Codex's structured error 
 
 test("rendered prompts are parsed into absolute skill paths, ambient skills, and instruction presence", () => {
   const text = [
-    "### Skill roots", "- `r0` = `/home/u/.agents/skills`", "- `r1` = `/tmp/private/skills/.system`", "- `r2` = `/srv/repo/.codex/skills`",
-    "### Available skills", "- user: U (file: r0/user/SKILL.md)", "- sys: S (file: r1/sys/SKILL.md)", "- deep: D (file: r2/a/b/c/deep/SKILL.md)", "- orphan: O (file: r9/orphan/SKILL.md)",
+    "<skills_instructions>", "### Skill roots", "- `r0` = `/home/u/.agents/skills`", "- `r1` = `/tmp/private/skills/.system`", "- `r2` = `/srv/repo/.codex/skills`",
+    "### Available skills", "- user: U (file: r0/user/SKILL.md)", "- sys: S (file: r1/sys/SKILL.md)", "- deep: D (file: r2/a/b/c/deep/SKILL.md)", "- absolute: A (file: /opt/skills/abs/SKILL.md)",
+    "</skills_instructions>", "- unrelated bullet after the section",
   ].join("\n");
-  assert.deepEqual(listedSkills(text), ["/home/u/.agents/skills/user/SKILL.md", "/tmp/private/skills/.system/sys/SKILL.md", "/srv/repo/.codex/skills/a/b/c/deep/SKILL.md", "r9/orphan/SKILL.md"]);
-  assert.deepEqual(ambientSkills(text, "/tmp/private"), ["/home/u/.agents/skills/user/SKILL.md", "/srv/repo/.codex/skills/a/b/c/deep/SKILL.md", "r9/orphan/SKILL.md"]);
+  const listed = listedSkills(text);
+  assert.deepEqual(listed.files, ["/home/u/.agents/skills/user/SKILL.md", "/tmp/private/skills/.system/sys/SKILL.md", "/srv/repo/.codex/skills/a/b/c/deep/SKILL.md", "/opt/skills/abs/SKILL.md"]);
+  assert.deepEqual(listed.unrecognized, []);
+  assert.deepEqual(ambientSkills(text, "/tmp/private"), ["/home/u/.agents/skills/user/SKILL.md", "/opt/skills/abs/SKILL.md", "/srv/repo/.codex/skills/a/b/c/deep/SKILL.md"]);
+  // Entries this adapter cannot resolve are reported, never silently dropped.
+  const odd = [
+    "<skills_instructions>", "### Skill roots", "- `r0` = `/home/u/.agents/skills`", "### Available skills",
+    "- orphan: O (file: r9/orphan/SKILL.md)", "- relative: R (file: skills/relative/SKILL.md)", "- bare: B has no file reference", "</skills_instructions>",
+  ].join("\n");
+  assert.deepEqual(listedSkills(odd).unrecognized, ["r9/orphan/SKILL.md", "skills/relative/SKILL.md", "- bare: B has no file reference"]);
+  assert.deepEqual(listedSkills("no skills section at all").unrecognized, ["no skill roots table"]);
   assert.equal(instructionsLoaded("# AGENTS.md instructions for /srv/repo\n<INSTRUCTIONS>x</INSTRUCTIONS>"), true);
   assert.equal(instructionsLoaded("no instructions here"), false);
   assert.deepEqual(isolationOverrides([]), ["-c", "project_doc_max_bytes=0"]);
   assert.deepEqual(isolationOverrides(["/b/SKILL.md", "/a/SKILL.md", "/a/SKILL.md"]), ["-c", "project_doc_max_bytes=0", "-c", 'skills.config=[{path="/a/SKILL.md",enabled=false},{path="/b/SKILL.md",enabled=false}]']);
+});
+
+test("isolation fails closed when Codex lists skills in an unrecognized format", async (t) => {
+  const f = await adapterFixture(t);
+  const odd = fakeProvider(f.scratch, "odd-format-codex.mjs", { skillEntryFormat: "bare" });
+  let failure;
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: odd }), (error) => { failure = error; return true; });
+  assert.match(failure.message, /unrecognized format and they cannot be disabled/);
+  assert.equal(failureResult(failure).retryable, false);
+  assert.ok(!existsSync(f.capturePath), "the provider never started");
+  // Absolute file references are recognized and disabled like rooted ones.
+  const absolute = fakeProvider(f.scratch, "absolute-format-codex.mjs", { skillEntryFormat: "absolute" });
+  await runCodexReview(f.parse(), { codexBin: absolute });
+  const skills = f.captured().argv.find((arg) => arg.startsWith("skills.config="));
+  for (const file of [f.repoSkill, f.deepSkill, f.codexSkill, f.userSkill]) assert.ok(skills.includes(`{path=${JSON.stringify(file)},enabled=false}`), file);
 });
 
 test("isolation fails closed when Codex still lists ambient skills or instructions", async (t) => {

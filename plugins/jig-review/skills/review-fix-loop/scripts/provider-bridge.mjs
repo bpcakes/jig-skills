@@ -9,9 +9,25 @@ import { assertResult } from "./assignment-schema.mjs";
 import { reviewAdapterTimeout } from "./review-timeouts.mjs";
 
 const RUNNERS = Object.freeze({ claude: runClaudeReview, codex: runCodexReview, cursor: runCursorReview });
+// A report that is not valid JSON, or not a valid result, is a formatting
+// failure of one attempt, not a provider error: its text (which may quote
+// repository content) must not drive permanent-failure classification.
+function reportError(message) {
+  return Object.assign(new Error(message), { providerError: "", reportError: true });
+}
 export function parseReport(assignment, report) {
   const text = report.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/, "$1");
-  return assertResult(assignment, JSON.parse(text));
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw reportError(`Provider report is not JSON: ${error.message}`);
+  }
+  try {
+    return assertResult(assignment, parsed);
+  } catch (error) {
+    throw reportError(error.message);
+  }
 }
 export async function reviewAssignment(assignment, dependencies = {}) {
   if (assignment?.role !== "review" || !Object.hasOwn(RUNNERS, assignment.provider)) throw new Error("Bridge requires a Claude, Codex, or Cursor review assignment.");

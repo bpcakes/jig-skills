@@ -115,6 +115,13 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
   } });
   assert.deepEqual(result, vote(a));
   assert.throws(() => parseReport(a, JSON.stringify({ ...vote(a), fingerprint: "wrong" })), /Malformed/);
+  // Report formatting failures stay retryable even when the report text quotes a permanent-failure phrase.
+  for (const report of ["ENOENT: no such file quota exceeded", JSON.stringify({ ...vote(a), fingerprint: "wrong authentication failed" })]) {
+    let failure;
+    assert.throws(() => parseReport(a, report), (error) => { failure = error; return true; });
+    assert.equal(failure.providerError, "");
+    assert.equal(failureResult(failure).retryable, undefined, report);
+  }
 });
 
 test("bridge marks only recognized permanent errors non-retryable", () => {
