@@ -16,7 +16,7 @@ EOF
 
 is_codex_only_skill() {
     case "$1" in
-        comprehensive-review|review-fix-loop)
+        comprehensive-review|review-fix-loop|herdr-orchestrate)
             return 0
             ;;
         *)
@@ -38,6 +38,7 @@ find_skill_source() {
 
 required_dependency() {
     case "$1" in
+        herdr-orchestrate) printf '%s\n' review-fix-loop ;;
         review-fix-loop) printf '%s\n' comprehensive-review ;;
         comprehensive-review) printf '%s\n' review-fix-loop ;;
         audit-common) ;;
@@ -186,12 +187,30 @@ for dependency in review-fix-loop comprehensive-review audit-common; do
     fi
 done
 
+# A dependency skipped because one of its own dependencies is incompatible
+# cannot support a new dependent. Propagate before copying any directories.
+while :; do
+    added=0
+    for skill in "$@"; do
+        case " $skipped_dependents " in *" $skill "*) continue ;; esac
+        dependency=$(required_dependency "$skill")
+        if [ -z "$dependency" ]; then continue; fi
+        case " $skipped_dependents " in
+            *" $dependency "*)
+                skipped_dependents="$skipped_dependents $skill"
+                added=1
+                ;;
+        esac
+    done
+    if [ "$added" -eq 0 ]; then break; fi
+done
+
 mkdir -p "$dest"
 
 for skill in "$@"; do
     case " $skipped_dependents " in
         *" $skill "*)
-            printf 'Skipping %s: existing %s differs from this checkout; continuing with other skills.\n' "$skill" "$(required_dependency "$skill")" >&2
+            printf 'Skipping %s: required %s is incompatible or unavailable; continuing with other skills.\n' "$skill" "$(required_dependency "$skill")" >&2
             continue
             ;;
     esac

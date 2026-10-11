@@ -1,0 +1,510 @@
+"""Behavioral tests with isolated state; no Herdr, tracker, or GitHub access."""
+
+import copy
+import json
+import multiprocessing
+import os
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "skills" / "herdr-orchestrate" / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+import state as state_module
+from state import Engine, StateError
+
+
+def concurrent_reserve(run_dir, task_id, version, queue):
+    try:
+        result = Engine.apply(run_dir, {"action_id": "parallel-" + task_id, "op": "reserve",
+                                       "expected_policy": 1, "task_id": task_id, "expected_task": version,
+                                       "kind": "implement", "unit": "implementation", "refs": {}})
+        queue.put(result.get("reservation_id"))
+    except StateError as exc:
+        queue.put(exc.code)
+
+
+class EngineTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.repo = self.base / "source"
+        self.repo.mkdir()
+        self.run = self.base / "private-run"
+        self.serial = 0
+        self.config = {
+            "repository": {"path": str(self.repo), "target": "main"},
+            "scope": {"task_ids": ["A", "B", "C"]},
+            "tracker": {"kind": "bead", "authority": "canonical-ref"},
+            "hosts": {"local": {"slots": 1, "worktree_root": "/worktrees", "endpoint": {"session": "owned"}},
+                      "remote": {"slots": 1, "worktree_root": "/remote-worktrees", "endpoint": {"profile": "verified"}}},
+            "actors": {"worker-a": {"role": "driver", "task_ids": ["A"], "host": "local", "helper_route": True}},
+            "authority": sorted(Engine.ACTIONS), "unfinished_task_cap": None, "limits": [],
+            "scheduler": {"enabled": True},
+        }
+        Engine.initialize(self.run, self.config)
+
+    def proof(self, settled=False):
+        result = {"ref": "/evidence/receipt.json", "observed_at": "2026-10-11T12:00:00+00:00"}
+        if settled:
+            result["all_jobs_settled"] = True
+        return result
+
+    def request(self, op, task_id=None, **fields):
+        current = Engine.read(self.run)
+        self.serial += 1
+        req = {"action_id": f"action-{self.serial}", "op": op, "expected_policy": current["policy_version"], **fields}
+        if task_id:
+            req["task_id"] = task_id
+            if task_id in current["tasks"]:
+                req["expected_task"] = current["tasks"][task_id]["version"]
+        return req
+
+    def apply(self, op, task_id=None, caller="coordinator", **fields):
+        return Engine.apply(self.run, self.request(op, task_id, **fields), caller=caller)
+
+    def admit(self, task_id="A", host="local", **changes):
+        claim = {**self.proof(), "authority": "canonical-ref", "task_id": task_id, "owner": "tracker-actor",
+                 "confirmed": True, "ready": True, "unpublished": False}
+        values = {"host": host, "driver": "worker-a" if task_id == "A" else "coordinator",
+                  "worktree": self.config["hosts"][host]["worktree_root"] + "/" + task_id,
+                  "branch": "task/" + task_id, "claim": claim}
+        values.update(changes)
+        return self.apply("admit", task_id, **values)
+
+    def reserve(self, task_id="A", kind="implement", refs=None, caller="coordinator"):
+        return self.apply("reserve", task_id, kind=kind, unit=Engine.UNITS[kind], refs=refs or {}, caller=caller)
+
+    def settle(self, reservation_id, task_id="A", refs=None):
+        return self.apply("settle", task_id, reservation_id=reservation_id, refs=refs or {}, evidence=self.proof(True))
+
+    def assert_error(self, code, fn, *args, **kwargs):
+        with self.assertRaises(StateError) as ctx:
+            fn(*args, **kwargs)
+        self.assertEqual(ctx.exception.code, code)
+
+    def reset(self, **changes):
+        self.config.update(changes)
+        self.run = self.base / f"private-run-{self.serial}"
+        self.serial += 1
+        Engine.initialize(self.run, self.config)
+
+    def test_private_external_state_and_unsupported_capabilities(self):
+        self.assertEqual(self.run.stat().st_mode & 0o777, 0o700)
+        self.assertEqual((self.run / "state.json").stat().st_mode & 0o777, 0o600)
+        self.assert_error("location", Engine.initialize, self.repo / "run", self.config)
+        bad = copy.deepcopy(self.config)
+        bad["hard_spending_cap"] = 0
+        self.assert_error("unsupported", Engine.initialize, self.base / "cost", bad)
+        bad = copy.deepcopy(self.config)
+        bad["limits"] = [{"id": "unsupported", "unit": "dollars", "scope": "run", "max": 5, "enforced": True}]
+        self.assert_error("unsupported", Engine.initialize, self.base / "cost2", bad)
+        other_source = self.base / "other-source"
+        other_source.mkdir()
+        (other_source / ".git").mkdir()
+        (other_source / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        self.assert_error("location", Engine.initialize, other_source / "state", self.config)
+        self.run.chmod(0o755)
+        self.assert_error("permissions", Engine.read, self.run)
+
+    def test_same_action_is_idempotent_but_reused_payload_is_rejected(self):
+        self.admit()
+        req = self.request("reserve", "A", kind="repair", unit="source_repair", refs={})
+        first = Engine.apply(self.run, req)
+        self.assertEqual(Engine.apply(self.run, req), first)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"], {"source_repair": 1})
+        altered = {**req, "kind": "review", "unit": "review"}
+        self.assert_error("duplicate", Engine.apply, self.run, altered)
+        self.assertEqual(Engine.action(self.run, req["action_id"])["result"], first)
+
+    def test_write_ahead_recovery_covers_crash_after_state_before_receipt(self):
+        self.admit()
+        req = self.request("reserve", "A", kind="implement", unit="implementation", refs={})
+        real_write = state_module.write_atomic
+
+        def crash_action_write(path, value):
+            if path.parent.name == "actions":
+                raise OSError("simulated process interruption")
+            return real_write(path, value)
+
+        with patch.object(state_module, "write_atomic", side_effect=crash_action_write):
+            with self.assertRaises(OSError):
+                Engine.apply(self.run, req)
+        self.assertTrue((self.run / "transaction.json").exists())
+        restored = Engine.read(self.run)
+        self.assertEqual(restored["tasks"]["A"]["counters"]["implementation"], 1)
+        replay = Engine.apply(self.run, req)
+        self.assertEqual(replay["version"], restored["version"])
+        self.assertFalse((self.run / "transaction.json").exists())
+
+    def test_failed_intent_storage_prevents_state_mutation(self):
+        self.admit()
+        before = Engine.read(self.run)
+        req = self.request("reserve", "A", kind="implement", unit="implementation", refs={})
+        with patch.object(state_module, "write_atomic", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                Engine.apply(self.run, req)
+        self.assertEqual(Engine.read(self.run), before)
+
+    def test_claim_scope_and_checkout_ownership(self):
+        claim = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor",
+                 "confirmed": False, "ready": True, "unpublished": False}
+        self.assert_error("claim", self.admit, claim=claim)
+        claim.update(confirmed=True, ready=False)
+        self.assert_error("claim", self.admit, claim=claim)
+        self.assert_error("scope", self.admit, "outside")
+        self.assert_error("location", self.admit, worktree=str(self.repo))
+        self.admit()
+        self.assert_error("ownership", self.admit)
+
+    def test_lexical_checkout_aliases_cannot_duplicate_admission_or_handoff(self):
+        self.admit("A", worktree="/worktrees/shared/.")
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["worktree"], "/worktrees/shared")
+        self.assert_error("ownership", self.admit, "B", worktree="/worktrees/shared")
+        self.assert_error("ownership", self.admit, "B", worktree="/worktrees/unused/../shared/")
+        self.admit("B", host="remote")
+        self.assert_error("ownership", self.apply, "handoff", "B", host="local", driver="coordinator",
+                          worktree="/worktrees/shared/.", branch="task/B", identity={"agent_id": "new"},
+                          source={**self.proof(), "published": True, "revision": "H1"}, evidence=self.proof(True))
+        self.apply("handoff", "B", host="local", driver="coordinator", worktree="/worktrees/free/.", branch="task/B",
+                   identity={"agent_id": "new"}, source={**self.proof(), "published": True, "revision": "H1"}, evidence=self.proof(True))
+        self.assertEqual(Engine.read(self.run)["tasks"]["B"]["worktree"], "/worktrees/free")
+
+    def test_configuration_normalizes_paths_and_protected_main_alias_is_rejected(self):
+        hosts = copy.deepcopy(self.config["hosts"])
+        hosts["local"]["worktree_root"] = str(self.base) + "/."
+        self.reset(repository={"path": str(self.repo) + "/.", "target": "main"}, hosts=hosts)
+        current = Engine.read(self.run)
+        self.assertEqual(current["config"]["repository"]["path"], str(self.repo))
+        self.assertEqual(current["config"]["hosts"]["local"]["worktree_root"], str(self.base))
+        self.assert_error("ownership", self.admit, worktree=str(self.repo) + "/.")
+
+    def test_pre_admission_claim_uncertainty_cannot_admit_or_repeat(self):
+        intent = self.apply("claim_intent", "A", target={"authority": "canonical-ref", "owner": "tracker-actor"},
+                            evidence=self.proof())
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="unknown", receipt=self.proof())
+        self.assert_error("uncertain", self.admit)
+        self.assert_error("uncertain", self.apply, "claim_intent", "A",
+                          target={"authority": "canonical-ref", "owner": "tracker-actor"}, evidence=self.proof())
+        claim = {**self.proof(), "authority": "canonical-ref", "owner": "tracker-actor", "task_id": "A",
+                 "confirmed": True, "unpublished": False, "ready": True}
+        self.apply("control", control="pause")
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="confirmed", receipt=claim)
+        self.apply("control", control="resume")
+        self.admit(claim=claim)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["claim"], claim)
+
+    def test_concurrent_hosts_compete_for_one_slot_at_authority(self):
+        self.admit("A")
+        self.admit("B")
+        current = Engine.read(self.run)
+        context = multiprocessing.get_context("fork")
+        queue = context.Queue()
+        children = [context.Process(target=concurrent_reserve, args=(str(self.run), task_id,
+                    current["tasks"][task_id]["version"], queue)) for task_id in ("A", "B")]
+        for child in children:
+            child.start()
+        for child in children:
+            child.join(10)
+            self.assertEqual(child.exitcode, 0)
+        results = [queue.get(timeout=1) for _ in children]
+        self.assertEqual(results.count("capacity"), 1)
+        self.assertEqual(sum(t["slot"] is not None for t in Engine.read(self.run)["tasks"].values()), 1)
+
+    def test_parked_tasks_retain_wip_and_resume_waits_for_slot(self):
+        self.reset(unfinished_task_cap=2)
+        self.admit("A")
+        self.admit("B")
+        first = self.reserve()
+        self.assert_error("unsettled", self.apply, "park", "A", evidence=self.proof(True))
+        self.settle(first["reservation_id"])
+        self.apply("park", "A", evidence=self.proof(True))
+        self.reserve("B")
+        self.assert_error("capacity", self.reserve, "A")
+        self.assert_error("wip", self.admit, "C")
+        task = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(task["claim"]["owner"], "tracker-actor")
+        self.assertEqual(task["counters"]["implementation"], 1)
+
+    def test_finish_current_resume_and_scheduler_controls_are_independent(self):
+        self.admit()
+        self.apply("control", control="finish_current")
+        self.apply("control", control="pause")
+        self.assert_error("paused", self.reserve)
+        self.apply("control", control="resume")
+        self.reserve()
+        self.assert_error("admission", self.admit, "B")
+        current = Engine.read(self.run)
+        self.assertEqual(current["controls"]["frozen_tasks"], ["A"])
+        self.assertTrue(current["scheduler"]["enabled"])
+
+    def test_configuration_changes_keep_counts_ownership_and_need_safe_boundary(self):
+        self.admit()
+        reservation = self.reserve(kind="repair")
+        hosts = copy.deepcopy(self.config["hosts"])
+        hosts["local"]["slots"] = 2
+        self.apply("configure", fields={"hosts": hosts}, evidence=self.proof())
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"], {"source_repair": 1})
+        hosts["local"]["endpoint"] = {"session": "replacement"}
+        self.assert_error("unsettled", self.apply, "configure", fields={"hosts": hosts}, evidence=self.proof())
+        self.assert_error("invalid", self.apply, "configure", fields={"scope": {"task_ids": ["B"]}}, evidence=self.proof())
+        self.settle(reservation["reservation_id"])
+        self.apply("park", "A", evidence=self.proof(True))
+        self.apply("configure", fields={"hosts": hosts, "limits": [
+            {"id": "repair-cap", "unit": "source_repair", "scope": "task", "max": 1, "enforced": True}]}, evidence=self.proof())
+        self.assert_error("budget", self.reserve, kind="repair")
+        self.apply("control", control="finish_current")
+        self.apply("control", control="resume")
+        self.assert_error("admission", self.admit, "B")
+        self.apply("control", control="reopen_admission", evidence=self.proof())
+        self.admit("B")
+
+    def test_cancel_requires_settlement_and_preserves_task_hold(self):
+        self.admit()
+        reservation = self.reserve()
+        self.apply("control", "A", control="hold", hold_id="user-hold", reason="await decision", actions=["merge"])
+        self.apply("control", control="cancel")
+        self.assert_error("unsettled", self.apply, "control", control="resume")
+        self.settle(reservation["reservation_id"])
+        self.apply("control", control="resume")
+        self.assertIn("user-hold", Engine.read(self.run)["tasks"]["A"]["holds"])
+        self.assert_error("held", self.reserve, kind="merge")
+
+    def test_stale_policy_task_and_scheduler_requests_are_fenced(self):
+        self.admit()
+        req = self.request("reserve", "A", kind="implement", unit="implementation", refs={})
+        self.apply("control", control="pause")
+        self.assert_error("stale_policy", Engine.apply, self.run, req)
+        self.apply("control", control="resume")
+        req = self.request("reserve", "A", kind="implement", unit="implementation", refs={})
+        self.apply("observe", "A", fields={"next_action": "inspect"}, evidence=self.proof())
+        self.assert_error("stale_task", Engine.apply, self.run, req)
+        self.apply("scheduler", expected_scheduler=0, fields={"heartbeat_at": "2026-10-11T12:00:00Z"})
+        self.assert_error("stale_scheduler", self.apply, "scheduler", expected_scheduler=0, fields={"enabled": False})
+        self.assert_error("invalid", self.apply, "scheduler", expected_scheduler=1, fields={"heartbeat_at": 12})
+        self.assert_error("invalid", self.apply, "scheduler", expected_scheduler=1, fields={"enabled": "yes"})
+
+    def test_driver_cannot_modify_authority_other_tasks_or_scheduler(self):
+        self.admit()
+        self.admit("B")
+        self.assert_error("forbidden", self.apply, "control", "A", caller="worker-a", control="resume")
+        self.assert_error("forbidden", self.apply, "observe", "B", caller="worker-a", fields={"next_action": "edit"}, evidence=self.proof())
+        self.assert_error("forbidden", self.apply, "scheduler", "A", caller="worker-a", expected_scheduler=0, fields={"enabled": False})
+        self.assert_error("invalid", Engine.apply, self.run, {**self.request("park", "A"), "caller": "coordinator"})
+        self.assert_error("invalid", self.apply, "observe", "A", caller="worker-a", fields={"driver": "attacker"}, evidence=self.proof())
+
+    def test_unknown_dispatch_keeps_slot_and_count_until_reconciled(self):
+        self.admit()
+        reservation = self.reserve()
+        self.apply("delegate", "A", executor="worker-a", actions=["implement"])
+        target = {"host": "local", "session": "owned", "agent_id": "native-123"}
+        intent = self.apply("intent", "A", caller="worker-a", kind="implement", reservation_id=reservation["reservation_id"],
+                            target=target, evidence=self.proof())
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="unknown", receipt=self.proof())
+        self.assert_error("uncertain", self.settle, reservation["reservation_id"])
+        self.assert_error("unsettled", self.apply, "park", "A", evidence=self.proof(True))
+        self.assert_error("unsettled", self.reserve)
+        self.apply("control", control="pause")
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="not_started", receipt=self.proof())
+        self.settle(reservation["reservation_id"])
+        self.apply("park", "A", evidence=self.proof(True))
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"]["implementation"], 1)
+
+    def test_current_delegation_required_after_policy_change(self):
+        self.admit()
+        reservation = self.reserve()
+        self.apply("delegate", "A", executor="worker-a", actions=["implement"])
+        self.apply("control", control="finish_current")
+        self.assert_error("authority", self.apply, "intent", "A", caller="worker-a", kind="implement",
+                          reservation_id=reservation["reservation_id"], target={"agent_id": "registered"}, evidence=self.proof())
+
+    def test_attempt_limits_survive_successor_and_do_not_block_verification(self):
+        self.reset(limits=[{"id": "repairs", "unit": "source_repair", "scope": "task", "max": 1, "enforced": True}])
+        self.admit()
+        old = {"controller_id": "controller", "run_id": "old"}
+        self.apply("observe", "A", fields={"refs": old}, evidence=self.proof())
+        repair = self.reserve(kind="repair", refs=old)
+        self.assert_error("identity", self.settle, repair["reservation_id"], refs={"run_id": "wrong"})
+        self.settle(repair["reservation_id"], refs=old)
+        new = {"controller_id": "controller", "run_id": "successor"}
+        self.apply("observe", "A", fields={"refs": new}, evidence=self.proof(),
+                   successor={"previous_refs": old, "evidence": self.proof(True)})
+        self.assert_error("budget", self.reserve, kind="repair", refs=new)
+        self.assert_error("budget", self.apply, "reserve", "A", kind="repair", unit="validation", refs=new)
+        self.reserve(kind="validate", refs=new)
+
+    def test_launch_cutoff_does_not_prevent_receipts_and_settlement(self):
+        self.reset(launch_cutoff="2000-01-01T00:00:00Z")
+        self.admit()
+        self.assert_error("deadline", self.reserve)
+        self.apply("observe", "A", fields={"next_action": "explain deadline"}, evidence=self.proof())
+
+    def test_push_limit_cannot_be_bypassed_or_reuse_consumed_reservation(self):
+        self.reset(limits=[{"id": "pushes", "unit": "push", "scope": "task", "max": 1, "enforced": True}])
+        self.admit()
+        reservation = self.reserve(kind="push")
+        target = {"remote": "origin", "branch": "task/A", "head": "H1"}
+        self.assert_error("budget", self.apply, "intent", "A", kind="push", target=target, evidence=self.proof())
+        intent = self.apply("intent", "A", kind="push", reservation_id=reservation["reservation_id"],
+                            target=target, evidence=self.proof())
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded", receipt=self.proof())
+        self.assert_error("budget", self.apply, "intent", "A", kind="push", reservation_id=reservation["reservation_id"],
+                          target=target, evidence=self.proof())
+        self.settle(reservation["reservation_id"])
+        self.assert_error("budget", self.reserve, kind="push")
+
+    def test_deadline_between_reservation_and_dispatch_blocks_external_action(self):
+        self.admit()
+        reservation = self.reserve(kind="push")
+        self.apply("configure", fields={"launch_cutoff": "2000-01-01T00:00:00Z"}, evidence=self.proof())
+        self.assert_error("deadline", self.apply, "intent", "A", kind="push", reservation_id=reservation["reservation_id"],
+                          target={"branch": "task/A"}, evidence=self.proof())
+        self.settle(reservation["reservation_id"])
+
+    def test_tightened_task_and_run_limits_fence_previously_reserved_attempt(self):
+        for scope in ("task", "run"):
+            with self.subTest(scope=scope):
+                limit = {"id": "repairs", "unit": "source_repair", "scope": scope, "max": 2, "enforced": True}
+                self.reset(limits=[limit])
+                self.admit()
+                reservation = self.reserve(kind="repair")
+                self.apply("configure", fields={"limits": [{**limit, "max": 0}]}, evidence=self.proof())
+                self.apply("delegate", "A", executor="worker-a", actions=["repair"])
+                self.assert_error("budget", self.apply, "intent", "A", caller="worker-a", kind="repair",
+                                  reservation_id=reservation["reservation_id"], target={"agent_id": "worker-a"}, evidence=self.proof())
+                current = Engine.read(self.run)
+                self.assertEqual(current["tasks"]["A"]["counters"]["source_repair"], 1)
+                self.assertEqual(current["counters"]["source_repair"], 1)
+                self.assertIsNone(current["tasks"]["A"]["pending_intent"])
+                self.apply("configure", fields={"limits": [{**limit, "max": 1}]}, evidence=self.proof())
+                self.apply("delegate", "A", executor="worker-a", actions=["repair"])
+                self.apply("intent", "A", caller="worker-a", kind="repair", reservation_id=reservation["reservation_id"],
+                           target={"agent_id": "worker-a"}, evidence=self.proof())
+
+    def test_staging_race_park_retention_and_release_during_pause(self):
+        self.admit("A")
+        self.admit("B")
+        self.apply("staging", "A", expected_owner=None, expected_generation=0, to_task="A",
+                   purpose="acceptance", release_condition="cleanup receipt", evidence=self.proof())
+        self.apply("park", "A", evidence=self.proof(True))
+        self.assertEqual(Engine.read(self.run)["staging"]["owner"], "A")
+        self.assert_error("ownership", self.apply, "staging", "B", expected_owner=None, expected_generation=0,
+                          to_task="B", purpose="other", release_condition="cleanup", evidence=self.proof())
+        self.assert_error("unsettled", self.apply, "staging", "A", expected_owner="A", expected_generation=1,
+                          to_task="B", purpose="acceptance", release_condition="cleanup", evidence=self.proof())
+        self.apply("control", control="pause")
+        self.apply("staging", "A", expected_owner="A", expected_generation=1, to_task=None, evidence=self.proof(True))
+        self.assertIsNone(Engine.read(self.run)["staging"]["owner"])
+
+    def test_deployment_requires_owned_environment_and_current_staging_generation(self):
+        self.admit("A")
+        self.admit("B")
+        self.apply("staging", "B", expected_owner=None, expected_generation=0, to_task="B",
+                   purpose="acceptance", release_condition="cleanup receipt", evidence=self.proof())
+        reservation = self.reserve(kind="deploy")
+        self.apply("delegate", "A", executor="worker-a", actions=["deploy"])
+        target = {"environment": "shared-staging", "staging_generation": 1, "revision": "published-head"}
+        self.assert_error("ownership", self.apply, "intent", "A", caller="worker-a", kind="deploy",
+                          reservation_id=reservation["reservation_id"], target=target, evidence=self.proof())
+        self.assertEqual(Engine.read(self.run)["staging"]["owner"], "B")
+        self.apply("staging", "B", expected_owner="B", expected_generation=1, to_task="A",
+                   purpose="acceptance", release_condition="cleanup receipt", evidence=self.proof(True))
+        self.assert_error("ownership", self.apply, "intent", "A", caller="worker-a", kind="deploy",
+                          reservation_id=reservation["reservation_id"], target=target, evidence=self.proof())
+        self.assert_error("ownership", self.apply, "intent", "A", caller="worker-a", kind="deploy",
+                          reservation_id=reservation["reservation_id"], target={"environment": "shared-staging"}, evidence=self.proof())
+        self.assert_error("identity", self.apply, "intent", "A", caller="worker-a", kind="deploy",
+                          reservation_id=reservation["reservation_id"],
+                          target={"environment": "unmanaged", "staging_generation": 2}, evidence=self.proof())
+        self.apply("intent", "A", caller="worker-a", kind="deploy", reservation_id=reservation["reservation_id"],
+                   target={**target, "staging_generation": 2}, evidence=self.proof())
+
+    def test_closure_requires_actual_owner_and_published_acceptance(self):
+        self.admit()
+        receipt = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor",
+                   "status": "closed", "criteria_met": True, "acceptance_ref": "/evidence/acceptance", "unpublished": True}
+        self.assert_error("closure", self.apply, "close", "A", receipt=receipt)
+        receipt.update(unpublished=False, owner="another-actor")
+        self.assert_error("closure", self.apply, "close", "A", receipt=receipt)
+        receipt["owner"] = "tracker-actor"
+        self.apply("close", "A", receipt=receipt)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "closed")
+
+    def test_reopening_preserves_closed_history_and_counts_and_fences_uncertainty(self):
+        self.admit()
+        execution = self.reserve(kind="repair")
+        self.settle(execution["reservation_id"])
+        receipt = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor",
+                   "status": "closed", "criteria_met": True, "acceptance_ref": "/proof/acceptance", "unpublished": False}
+        self.apply("close", "A", receipt=receipt)
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        intent = self.apply("reopen_intent", "A", target=target, evidence=self.proof())
+        self.apply("reopen_outcome", "A", intent_id=intent["action_id"], target=target, status="unknown", receipt=self.proof())
+        self.assert_error("closed", self.reserve, kind="repair")
+        self.apply("control", control="pause")
+        self.apply("reopen_outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded",
+                   receipt={**receipt, "status": "open"})
+        task = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(task["counters"]["source_repair"], 1)
+        self.assertEqual(task["closure_history"], [receipt])
+        self.assertEqual(task["phase"], "admitted")
+
+    def test_relocation_requires_settlement_and_preserves_exact_prior_evidence(self):
+        self.admit()
+        refs = {"controller_id": "old-controller", "run_id": "old-run"}
+        self.apply("observe", "A", fields={"refs": refs}, evidence=self.proof())
+        execution = self.reserve(kind="repair", refs=refs)
+        target = {"host": "remote", "driver": "coordinator", "worktree": "/remote-worktrees/A", "branch": "task/A",
+                  "identity": {"session": "remote", "agent_id": "owned-remote"},
+                  "source": {**self.proof(), "revision": "published-head", "published": True}, "evidence": self.proof(True)}
+        self.assert_error("unsettled", self.apply, "handoff", "A", **target)
+        self.settle(execution["reservation_id"], refs=refs)
+        self.apply("park", "A", evidence=self.proof(True))
+        self.apply("handoff", "A", **target)
+        task = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(task["host"], "remote")
+        self.assertEqual(task["counters"]["source_repair"], 1)
+        self.assertEqual(task["refs"], refs)
+        self.assertIsNone(task["delegation"])
+        self.assertEqual(task["last_handoff"]["previous"]["host"], "local")
+
+    def test_merge_gate_binds_exact_candidate_run_and_none_mode_applicability(self):
+        self.admit()
+        refs = {"controller_id": "controller", "run_id": "review-run", "review_base": "B0", "review_head": "H2"}
+        self.apply("observe", "A", fields={"refs": refs}, evidence=self.proof())
+        reservation = self.reserve(kind="review", refs=refs)
+        self.settle(reservation["reservation_id"], refs=refs)
+        target = {"repository": str(self.repo), "base": "main", "pr": 10, "head": "H2"}
+        gates = {"complete": True, "validation": True, "checks": True, "feedback": True,
+                 "findings": True, "target_current": True, "clean": True, **refs,
+                 "review_head": "H1", "checkout_head": "H2", "pr_head": "H2", "review_base": "B0", "commit_mode": "per-round"}
+        self.assert_error("gate", self.apply, "intent", "A", kind="merge", target=target, gates=gates, evidence=self.proof())
+        gates.update(review_head="H2", run_id="some-other-run")
+        self.assert_error("identity", self.apply, "intent", "A", kind="merge", target=target, gates=gates, evidence=self.proof())
+        gates.update(run_id="review-run", review_base="different-base")
+        self.assert_error("identity", self.apply, "intent", "A", kind="merge", target=target, gates=gates, evidence=self.proof())
+        gates.update(review_base="B0", review_head="different-head", checkout_head="different-head", pr_head="different-head")
+        self.assert_error("identity", self.apply, "intent", "A", kind="merge", target={**target, "head": "different-head"},
+                          gates=gates, evidence=self.proof())
+        gates.update(review_head="H2", checkout_head="H2", pr_head="H2")
+        gates.update(run_id="review-run", commit_mode="none")
+        self.assert_error("gate", self.apply, "intent", "A", kind="merge", target=target, gates=gates, evidence=self.proof())
+        gates["source_mapping_applicable"] = True
+        intent = self.apply("intent", "A", kind="merge", target=target, gates=gates, evidence=self.proof())
+        self.apply("control", control="pause")
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded",
+                   receipt={**self.proof(), "head": "H2", "merge_commit": "M3"})
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "merged")
+        self.apply("control", control="resume")
+        self.reserve(kind="validate", refs=refs)
+        task = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(task["phase"], "validate")
+        self.assertEqual(task["merged_prs"]["10"]["head"], "H2")
+        self.assertEqual(task["merged_prs"]["10"]["merge_commit"], "M3")
+
+
+if __name__ == "__main__":
+    unittest.main()

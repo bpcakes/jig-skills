@@ -1,0 +1,20 @@
+{
+  "name": "jig-orchestration",
+  "version": "0.1.0",
+  "description": "Coordinate scoped Herdr tasks across machines through tracker claims, review, GitHub PRs, and acceptance.",
+  "author": { "name": "Jig" },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": ["herdr", "beads", "beadroll", "github", "orchestration", "codex-skills"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jig Orchestration",
+    "shortDescription": "Herdr task delivery across machines",
+    "longDescription": "Codex coordination for a named task set or epic using registered Herdr endpoints, Beads Rust or Beadroll, and GitHub. Persists execution slots, work controls, action identities, and delivery evidence. Requires separately installed jig-review skills for review drivers and Herdr on participating machines; startup checks capabilities without installing or upgrading dependencies.",
+    "developerName": "Jig",
+    "category": "Coding",
+    "capabilities": ["Read", "Write", "Network"],
+    "defaultPrompt": ["Use Herdr to deliver this task batch through GitHub PRs"]
+  }
+}

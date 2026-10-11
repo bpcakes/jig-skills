@@ -162,10 +162,102 @@ test("all-skills installs include the Codex loop and filter Claude orchestration
   assert.equal(claude.status, 0, claude.stderr);
   assert.equal(existsSync(path.join(claudeDestination, "review-fix-loop")), false);
   assert.equal(existsSync(path.join(claudeDestination, "comprehensive-review")), false);
+  assert.equal(existsSync(path.join(claudeDestination, "herdr-orchestrate")), false);
   assert.equal(existsSync(path.join(claudeDestination, "rust-error-handling-review/SKILL.md")), true);
   const rejected = spawnSync("sh", [installer, "claude", "--dest", claudeDestination, "review-fix-loop"], { encoding: "utf8" });
   assert.equal(rejected.status, 1);
   assert.match(rejected.stderr, /Unsupported for Claude direct install: review-fix-loop/);
+});
+
+test("orchestration installation includes both usable review entrypoints and its complete helper directory", t => {
+  const { destination, install } = fixture(t);
+  const result = install("herdr-orchestrate");
+  assert.equal(result.status, 0, result.stderr);
+  assertInstalledParser(destination);
+  for (const relative of ["SKILL.md", "scripts/supervise.py", "scripts/state.py", "references/recovery.md", "references/trackers.md"]) {
+    assert.equal(existsSync(path.join(destination, "herdr-orchestrate", relative)), true, relative);
+  }
+  const help = spawnSync("python3", ["-B", path.join(destination, "herdr-orchestrate/scripts/supervise.py"), "--help"], { encoding: "utf8" });
+  assert.equal(help.status, 0, help.stderr);
+});
+
+for (const dependency of ["review-fix-loop", "comprehensive-review"]) {
+  test(`orchestration refuses incompatible ${dependency} before copying, including --force`, t => {
+    const { destination, install } = fixture(t);
+    mkdirSync(destination, { recursive: true });
+    cpSync(path.join(repo, "plugins/jig-review/skills", dependency), path.join(destination, dependency), { recursive: true });
+    const marker = path.join(destination, dependency, "custom.txt");
+    writeFileSync(marker, "keep custom dependency\n");
+    for (const args of [["herdr-orchestrate"], ["--force", "herdr-orchestrate"]]) {
+      const result = install(...args);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, /No skills were changed/);
+      assert.deepEqual(readdirSync(destination), [dependency]);
+      assert.equal(readFileSync(marker, "utf8"), "keep custom dependency\n");
+    }
+    const replaced = install("--force", "herdr-orchestrate", "review-fix-loop", "comprehensive-review");
+    assert.equal(replaced.status, 0, replaced.stderr);
+    assert.equal(existsSync(marker), false);
+    assertInstalledParser(destination);
+  });
+
+  test(`all-skills install skips orchestration through incompatible ${dependency}`, t => {
+    const { destination, install } = fixture(t);
+    mkdirSync(path.join(destination, dependency), { recursive: true });
+    writeFileSync(path.join(destination, dependency, "SKILL.md"), "keep custom dependency\n");
+    const result = install();
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /Skipping herdr-orchestrate:.*review-fix-loop/);
+    assert.equal(existsSync(path.join(destination, "herdr-orchestrate")), false);
+    assert.equal(existsSync(path.join(destination, "rust-error-handling-review/SKILL.md")), true);
+    assert.equal(readFileSync(path.join(destination, dependency, "SKILL.md"), "utf8"), "keep custom dependency\n");
+  });
+}
+
+test("force replacing orchestration preserves matching automatic review copies", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("herdr-orchestrate").status, 0);
+  const identities = Object.fromEntries(["review-fix-loop", "comprehensive-review"].map(name => [name, statSync(path.join(destination, name))]));
+  writeFileSync(path.join(destination, "herdr-orchestrate/custom.txt"), "replace this\n");
+  const result = install("--force", "herdr-orchestrate");
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(path.join(destination, "herdr-orchestrate/custom.txt")), false);
+  for (const [name, identity] of Object.entries(identities)) {
+    assert.equal(statSync(path.join(destination, name)).ino, identity.ino);
+    assert.equal(statSync(path.join(destination, name)).ctimeMs, identity.ctimeMs);
+  }
+});
+
+test("orchestration is rejected for Claude before unrelated requested skills change", t => {
+  const { destination } = fixture(t);
+  const result = spawnSync("sh", [installer, "claude", "--dest", destination, "rust-error-handling-review", "herdr-orchestrate"], { encoding: "utf8" });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Unsupported for Claude direct install: herdr-orchestrate/);
+  assert.equal(existsSync(destination), false);
+});
+
+test("explicit destination provisions only the selected orchestration profile", t => {
+  const { destination } = fixture(t);
+  const siblingHome = path.join(path.dirname(destination), "other codex home");
+  const result = spawnSync("sh", [installer, "codex", "--dest", destination, "herdr-orchestrate"], {
+    encoding: "utf8", env: { ...process.env, CODEX_HOME: siblingHome },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(siblingHome), false);
+  assert.equal(existsSync(path.join(destination, "herdr-orchestrate/SKILL.md")), true);
+  assertInstalledParser(destination);
+});
+
+test("orchestration default destination follows the selected CODEX_HOME", t => {
+  const { destination } = fixture(t);
+  const profileHome = path.join(path.dirname(destination), "selected codex home");
+  const result = spawnSync("sh", [installer, "codex", "herdr-orchestrate"], {
+    encoding: "utf8", env: { ...process.env, CODEX_HOME: profileHome },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(destination), false);
+  assert.equal(existsSync(path.join(profileHome, "skills/herdr-orchestrate/SKILL.md")), true);
+  assertInstalledParser(path.join(profileHome, "skills"));
 });
 
 test("all-skills installs skip an incompatible loop and preserve existing copies", async (t) => {

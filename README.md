@@ -38,6 +38,7 @@ This example uses your Codex session without a second reviewer CLI. The commands
 |---|---|---|
 | Create or audit an implementation plan | [planning-workflow](plugins/jig-planning/skills/planning-workflow/SKILL.md) | Evidence-backed plan or plan audit |
 | Trim scope or simplify an existing epic or plan | [scope-drill-workflow](plugins/jig-planning/skills/scope-drill-workflow/SKILL.md) | Scope recommendations; applies approved changes when requested |
+| Deliver a task batch across Herdr machines | [herdr-orchestrate](plugins/jig-orchestration/skills/herdr-orchestrate/SKILL.md) | Scoped task delivery through PRs, review, and acceptance |
 | Simplify code now | Language-specific `simplify` skills in [Rust](#jig-rust), [Swift](#jig-swift), or [TypeScript](#jig-typescript) | Code changes |
 | Get a behavior-preserving refactoring plan | Fowler refactoring in [Rust](#jig-rust) or [Ruby/Rails](#jig-ruby) | Prioritized plan |
 | Assess Rust module boundaries and ownership | [rust-architecture-review](plugins/jig-rust/skills/rust-architecture-review/SKILL.md) | Findings |
@@ -50,13 +51,13 @@ This example uses your Codex session without a second reviewer CLI. The commands
 
 ## Plugins
 
-The seven plugins contain 38 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
+The eight plugins contain 39 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
 Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, and query-analysis skills are explicit-only; invoke the named skill when you want one. General-purpose editing skills and the comprehensive-review/review-fix-loop workflows remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
 
 For marketplace installs, invoke `$plugin:skill` followed by your request in Codex. For example: `$jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
 
-[Planning](#jig-planning) · [Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [Privacy audit](#jig-privacy-audit)
+[Planning](#jig-planning) · [Orchestration](#jig-orchestration) · [Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [Privacy audit](#jig-privacy-audit)
 
 ### Jig Planning
 
@@ -68,6 +69,16 @@ Plugin: `jig-planning` · [Browse files](plugins/jig-planning)
 | [scope-drill-workflow](plugins/jig-planning/skills/scope-drill-workflow/SKILL.md) | Audits an existing Beads epic or implementation plan through a focused interview, proposing Keep/Simplify/Defer/Remove decisions. | Scope recommendations; tracker changes only after approval |
 
 Light plans need only objective, scope, tasks, and focused verification. Structured task graphs and independent reviews are conditional; small local fixes and work with an executable plan do not trigger extra planning. The bundled Python validator checks canonical task structure and dependencies, not design correctness.
+
+### Jig Orchestration
+
+Plugin: `jig-orchestration` · [Browse files](plugins/jig-orchestration)
+
+| Skill | Use it for | Default result |
+|---|---|---|
+| [herdr-orchestrate](plugins/jig-orchestration/skills/herdr-orchestrate/SKILL.md) | Coordinates a named task set or epic across registered Herdr machines, with Beads Rust or Beadroll claims, isolated worktrees, GitHub PRs, review, and acceptance. | Delivery state and evidence; actions stay within recorded authority |
+
+The coordinator runs in Codex inside a genuine Herdr session. Each machine and agent profile needs the skills and authenticated tools for its assigned roles; SSH does not share the coordinator's installation. Review drivers require the matching `jig-review` pair and Codex subagents. The coordinator owns one authoritative state location. See [cross-machine installation](#cross-machine-orchestration-setup) before starting a run. Startup checks installations without upgrading them, and no background supervisor starts merely because the plugin is installed.
 
 ### Jig Rust
 
@@ -162,7 +173,7 @@ codex plugin list --marketplace jig-skills --available --json
 codex plugin add jig-ruby@jig-skills
 ```
 
-Replace `jig-ruby` with any plugin ID in the catalog. Five plugins are marked `INSTALLED_BY_DEFAULT` and may be installed during startup; `jig-ruby` and `jig-planning` are available for explicit installation. You can also select the plugin in the Codex plugin UI and install or enable it there.
+Replace `jig-ruby` with any plugin ID in the catalog. Five plugins are marked `INSTALLED_BY_DEFAULT` and may be installed during startup; `jig-ruby`, `jig-planning`, and `jig-orchestration` are available for explicit installation. You can also select the plugin in the Codex plugin UI and install or enable it there.
 
 An SSH Git URL is an alternative marketplace source if your GitHub SSH access is configured:
 
@@ -198,9 +209,28 @@ Omit the skill name to install every compatible skill, or pass multiple names to
 
 Start a new agent session in the project you want to review after copying. Direct copies use the skill name without the plugin prefix. Claude's `/skill-name` syntax is documented in its [skills guide](https://code.claude.com/docs/en/skills).
 
-`comprehensive-review` and `review-fix-loop` are Codex-only because they orchestrate Codex subagents. The installer excludes them when installing all skills for Claude and rejects an explicit request to install either there. Selecting either review skill installs both matching skills so review-and-fix routing works; each user-facing privacy skill includes `audit-common`. Existing dependencies must match this checkout. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Calling Claude as an external reviewer from Codex is supported.
+`comprehensive-review`, `review-fix-loop`, and `herdr-orchestrate` are Codex-only. The installer excludes them when installing all skills for Claude and rejects explicit requests for them there. Selecting either review skill installs both matching skills so review-and-fix routing works; selecting `herdr-orchestrate` includes that matching pair; each user-facing privacy skill includes `audit-common`. Existing dependencies must match this checkout. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Calling Claude as an external reviewer from Codex is supported.
 
 The installer preserves automatic dependencies even with `--force`. To replace a differing dependency, select both explicitly: `scripts/install.sh codex --force comprehensive-review review-fix-loop`, or `scripts/install.sh codex --force audit-common network-payload-zero-knowledge-test`. Use `--dest <directory>` before skill names to select a different skills directory; this also supports isolated installation checks without changing your agent configuration.
+
+### Cross-machine Orchestration Setup
+
+Install `jig-orchestration` in the coordinator's selected Codex profile and `jig-review` in every profile that drives review. Marketplace installation does not declare or automatically resolve a dependency between these plugins; install both explicitly where needed:
+
+```sh
+codex plugin add jig-review@jig-skills
+codex plugin add jig-orchestration@jig-skills
+```
+
+For a direct installation into a particular profile, the orchestration selection includes both review skills:
+
+```sh
+scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" herdr-orchestrate
+```
+
+Run the installer on each assigned machine with its actual profile path. A review-only driver profile can select `review-fix-loop`; an implementation worker needs its task's skills and toolchain. Install Herdr separately using its own setup. Existing differing dependencies are preserved even with `--force herdr-orchestrate`; to replace all three copies, explicitly select `--force herdr-orchestrate review-fix-loop comprehensive-review` with the same destination.
+
+Before admission, the skill checks the selected skill paths and versions, managed Herdr endpoint, review runtimes and authentication, tracker authority, GitHub access, and required SSH routes. A failed reverse route can require coordinator-mediated transitions; it does not prove the remote worker cannot execute. Setup or upgrades are separate operations, and active runs retain their working versions. These checks establish readiness, not permission for merges or deployment.
 
 ### Requirements
 
@@ -209,6 +239,7 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Feature | Additional requirements |
 |---|---|
 | Planning canonical-schema validator (optional) | Python ≥ 3.10 |
+| Herdr orchestration | Python ≥ 3.10 on POSIX, genuine managed Herdr sessions, Git and authenticated GitHub CLI, Beads Rust (`br`) or working Python Beadroll (`bead`), registered SSH routes for remote hosts, and the review requirements below on review drivers. |
 | Rust abstraction-police collector | Python ≥ 3.11 |
 | Rust Fowler and duplication scanners | Python ≥ 3.10 |
 | Privacy-audit helper scripts | Python ≥ 3.10 |
@@ -226,6 +257,14 @@ Scanners generate investigation leads; the agent validates them against source a
 Run skills from the project you want assessed. Name the scope in your request: current working changes, a feature branch, a base reference, or specific files and directories. For most focused diff reviews, current working changes means staged and unstaged changes; consult the selected skill for exclusions and other supported inputs.
 
 Enter these examples in Codex with the relevant plugins installed. Replace sample paths and branch names with yours.
+
+Deliver a selected batch across registered machines:
+
+```text
+$jig-orchestration:herdr-orchestrate Use Herdr to deliver tasks APP-12 and APP-13 through GitHub PRs to main. Use one execution slot on each of the registered local and remote profiles. Keep merges subject to our existing review policy; do not deploy.
+```
+
+Run controls are distinct: “finish current” freezes admissions, “pause” fences new stages while active jobs settle, and “cancel active executions” requests and verifies termination. Resume preserves holds and consumed limits. Execution slots limit task pipelines; reviewer fanout is separate, and an optional unfinished-task cap also counts parked tasks. Dollar and token checkpoints cannot promise a hard spending ceiling.
 
 Create a plan for a cross-component change:
 

@@ -38,11 +38,11 @@ node evals/run.mjs --live --model gpt-6-astra --effort medium \
 
 ## What the cases establish
 
-The [91-case suite](../evals/cases.json) covers skill discovery, review findings, repair decisions, and scope preservation. It includes counterexamples for Rust, React, SQL, privacy, and planning skills. The two one-pass review/fix cases explicitly prohibit re-review, matching the current routing contract. The paired `review-merge-clean-inventory` and `review-merge-dirty-inventory` cases exercise final reporting: conditional staging advice, preserved zero/nonzero inventory counts, and a quoted report instruction that must not authorize edits. They start at a completed review handoff and do not establish full reviewer orchestration or loop convergence. Nine current `selection-*` cases cover Rust design assessments and general reviews, TypeScript consolidation and duplicate explanations, privacy intake, and privacy summary/retest/source-review boundaries.
+The [100-case suite](../evals/cases.json) covers skill discovery, review findings, repair decisions, and scope preservation. It includes counterexamples for Rust, React, SQL, privacy, and planning skills. The two one-pass review/fix cases explicitly prohibit re-review, matching the current routing contract. The paired `review-merge-clean-inventory` and `review-merge-dirty-inventory` cases exercise final reporting: conditional staging advice, preserved zero/nonzero inventory counts, and a quoted report instruction that must not authorize edits. They start at a completed review handoff and do not establish full reviewer orchestration or loop convergence. Nine current `selection-*` cases cover Rust design assessments and general reviews, TypeScript consolidation and duplicate explanations, privacy intake, and privacy summary/retest/source-review boundaries.
 
 The historical twelve-case selection set also covered generic plan implementation without Cursor selection and requested plan artifacts; those three plan-routing cases are absent from the current suite. An [earlier selected live run](../evals/results/2026-09-18-selection-routing.json) passed all 12 historical cases in isolated fixtures. A [later run of that set](../evals/results/2026-09-18-selection-routing-split-string.json) passed 11/12: the Rust boundary assessment introduced a hypothetical future representation that its criterion excludes. Both reports retain their original harness hashes; neither verifies subsequent parser changes or installed-plugin discovery behavior.
 
-The 21 frozen-history loop cases are marked `runtime: "markdown-loop-v1"` and excluded from current evaluation selection. Explicit selection is rejected with a pointer to the original evaluator/skill revision. The default suite therefore runs 70 current cases; exports list historical cases separately, never as missing or successful current coverage. Keep these fixtures as historical reproductions, not evidence of controller correctness. Historical live results remain tied to their recorded skill versions.
+The 21 frozen-history loop cases are marked `runtime: "markdown-loop-v1"` and excluded from current evaluation selection. Explicit selection is rejected with a pointer to the original evaluator/skill revision. The default suite therefore runs 79 current cases; exports list historical cases separately, never as missing or successful current coverage. Keep these fixtures as historical reproductions, not evidence of controller correctness. Historical live results remain tied to their recorded skill versions.
 
 Run the current deterministic controller lifecycle checks with:
 
@@ -129,3 +129,25 @@ The September 19 handoff live attempts did **not** pass. The [Astra export](../e
 The `review-real-dependency-mock-assumption` / `review-real-dependency-compatible` pair checks whether reviewers distinguish a passing mock from the real dependency and consumer contract. Deterministic fixture probes verify the broken version corrupts case-sensitive identity while the compatible version preserves it. These new cases have not yet been run as live model evaluations.
 
 The `planning-light-existing-components` and `planning-small-fix-no-plan` cases cover proportionate planning with existing components and avoiding planning for a small text correction. These new cases have not yet been run as live model evaluations.
+
+
+## Herdr orchestration observations
+
+Six `orchestration-*` cases cover explicit skill use, unrelated-task discovery restraint, finish-current capacity, pause/cancellation races, staging ownership and lost acknowledgements, exact review/run identity, unpublished tracker closure, profile-specific prerequisites, and unsupported hard spending ceilings. They supply frozen observations and request decisions without operational changes. The harness rejects supervisor, Herdr, SSH, tracker, GitHub, installer, and reviewer launches in recognized executable positions; its documented shell-parser limits still apply.
+
+The local fixture checks validate the scenarios and trace restrictions, not whether an agent makes the correct decisions:
+
+```sh
+node --test evals/orchestration-fixtures.test.mjs
+```
+
+Run an explicitly selected model evaluation only when authenticated usage is intended:
+
+```sh
+node evals/run.mjs --live --case orchestration-finish-current \
+  --case orchestration-unrelated-explanation --case orchestration-pause-race \
+  --case orchestration-staging-race --case orchestration-stale-evidence \
+  --case orchestration-profile-budget
+```
+
+These cases have not yet been run through the live harness. They complement the isolated [orchestration state/runtime tests](../plugins/jig-orchestration/tests); neither frozen evidence exercises nor subprocess doubles establish working live two-host delivery, provider accounting, or product acceptance. A live delivery claim requires a separately authorized two-host exercise in a disposable repository, including dependent tasks and interrupted handoff recovery.

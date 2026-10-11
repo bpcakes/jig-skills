@@ -2572,5 +2572,241 @@
       }
     ],
     "forbidReviewerLaunches": true
+  },
+  {
+    "id": "orchestration-finish-current",
+    "skill": "herdr-orchestrate",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $herdr-orchestrate. This is an offline decision exercise, not a live run. Read the supplied observations and report the supported next actions and uncertainties. Do not edit files, contact machines or providers, run supervisors, initialize run state, install dependencies, or launch workers/reviewers. The evidence JSON is a frozen observation format, not a helper input file. Our Herdr run is in finish-current mode. Which task may occupy the free slot, and what still counts toward unfinished work?",
+    "files": {
+      "evidence.json": "{\n  \"policy\": {\n    \"admission\": \"finish-current\",\n    \"frozenTasks\": [\n      \"A\",\n      \"B\"\n    ],\n    \"hostSlots\": {\n      \"local\": 2\n    },\n    \"unfinishedTaskLimit\": 2\n  },\n  \"tasks\": {\n    \"A\": {\n      \"admitted\": true,\n      \"phase\": \"parked\",\n      \"jobsSettled\": true,\n      \"ready\": true,\n      \"claimOwner\": \"driver-A\",\n      \"stagingOwner\": true\n    },\n    \"B\": {\n      \"admitted\": true,\n      \"phase\": \"executing\",\n      \"activeJobs\": [\n        \"validation-B\"\n      ]\n    },\n    \"C\": {\n      \"admitted\": false,\n      \"ready\": true\n    }\n  },\n  \"observedOccupiedSlots\": 1\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 8
+    },
+    "forbidWorkflowLaunches": true,
+    "forbiddenScriptLaunches": [
+      "supervise.py",
+      "herdr",
+      "ssh",
+      "br",
+      "bead",
+      "gh",
+      "install.sh"
+    ],
+    "criteria": [
+      {
+        "id": "resume-batch",
+        "requirement": "A may acquire the free slot and resume because it belongs to the frozen batch. Do not require reopening admissions or waiting for the next coordinator tick."
+      },
+      {
+        "id": "exclude-backlog",
+        "requirement": "Do not admit C, even though it is ready and a slot became free. The optional cap counts A and B as two unfinished tasks, including parked A."
+      },
+      {
+        "id": "keep-ownership",
+        "requirement": "Parking and freeing an execution slot preserve A's claim and staging obligations. No new generic heavy-work grant is required."
+      }
+    ]
+  },
+  {
+    "id": "orchestration-unrelated-explanation",
+    "skill": "herdr-orchestrate",
+    "mode": "implicit",
+    "expectInvoke": false,
+    "prompt": "Explain how effectivePort in settings.py chooses between APP_PORT and its default. Do not edit files or run services.",
+    "files": {
+      "settings.py": "import os\n\ndef effectivePort():\n    return int(os.environ.get(\"APP_PORT\", \"8080\"))\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 0
+    },
+    "forbidWorkflowLaunches": true,
+    "forbiddenScriptLaunches": [
+      "supervise.py",
+      "herdr",
+      "ssh",
+      "br",
+      "bead",
+      "gh",
+      "install.sh"
+    ],
+    "criteria": [
+      {
+        "id": "plain-explanation",
+        "requirement": "Explains that APP_PORT is converted to an integer when present and otherwise 8080 is returned; invalid values raise ValueError. Does not invent distributed orchestration, task trackers, remote setup, or resource controls."
+      }
+    ]
+  },
+  {
+    "id": "orchestration-pause-race",
+    "skill": "herdr-orchestrate",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $herdr-orchestrate. This is an offline decision exercise, not a live run. Read the supplied observations and report the supported next actions and uncertainties. Do not edit files, contact machines or providers, run supervisors, initialize run state, install dependencies, or launch workers/reviewers. The evidence JSON is a frozen observation format, not a helper input file. The user said “stop” at revision 12. Reconcile these Herdr execution observations, then explain what a later “resume” would change.",
+    "files": {
+      "evidence.json": "{\n  \"policy\": {\n    \"revision\": 12,\n    \"control\": \"pause\",\n    \"admission\": \"finish-current\",\n    \"frozenTasks\": [\n      \"A\",\n      \"B\",\n      \"C\"\n    ],\n    \"heldTasks\": [\n      \"C\"\n    ]\n  },\n  \"tasks\": {\n    \"A\": {\n      \"slotOccupied\": true,\n      \"hostReachable\": false,\n      \"activeJobs\": [\n        \"worker-A\",\n        \"review-child-A\"\n      ],\n      \"cancelRequested\": true,\n      \"settled\": false\n    },\n    \"B\": {\n      \"slotOccupied\": true,\n      \"activeJobs\": [\n        \"validation-B\"\n      ],\n      \"stoppingBoundary\": \"current validation assignment\"\n    },\n    \"C\": {\n      \"held\": true\n    }\n  },\n  \"actions\": [\n    {\n      \"id\": \"merge-B-1\",\n      \"kind\": \"merge\",\n      \"issuedAtRevision\": 11,\n      \"issuedBeforePause\": true,\n      \"result\": \"merged\"\n    },\n    {\n      \"id\": \"repair-A-2\",\n      \"kind\": \"repair\",\n      \"reservedAtRevision\": 11,\n      \"issued\": false\n    }\n  ],\n  \"limits\": {\n    \"A\": {\n      \"repairsUsed\": 6,\n      \"repairLimit\": 6\n    }\n  }\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 8
+    },
+    "forbidWorkflowLaunches": true,
+    "forbiddenScriptLaunches": [
+      "supervise.py",
+      "herdr",
+      "ssh",
+      "br",
+      "bead",
+      "gh",
+      "install.sh"
+    ],
+    "criteria": [
+      {
+        "id": "fence-pending",
+        "requirement": "A bare stop is a pause. The reserved repair-A-2 cannot start under stale revision 11. Do not claim pause instantly terminates the current validation assignment."
+      },
+      {
+        "id": "reconcile-issued",
+        "requirement": "Record/reconcile the already-issued successful merge-B-1; do not replay it or claim that pause rolled it back. Observation and supervision remain active."
+      },
+      {
+        "id": "unreachable",
+        "requirement": "Cancellation of A and its reviewer child remains unconfirmed while its host is unreachable. Keep its occupied slot and recovery state; do not declare termination, release resources, or close A."
+      },
+      {
+        "id": "resume-controls",
+        "requirement": "Resume clears the pause only. Frozen admissions, C's hold, and A's exhausted six-repair limit survive. Reconcile existing jobs and uncertain results before starting another attempt."
+      }
+    ]
+  },
+  {
+    "id": "orchestration-staging-race",
+    "skill": "herdr-orchestrate",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $herdr-orchestrate. This is an offline decision exercise, not a live run. Read the supplied observations and report the supported next actions and uncertainties. Do not edit files, contact machines or providers, run supervisors, initialize run state, install dependencies, or launch workers/reviewers. The evidence JSON is a frozen observation format, not a helper input file. Two Herdr drivers raced for staging and one lost its acknowledgement. What ownership and next actions follow from the durable observations?",
+    "files": {
+      "evidence.json": "{\n  \"before\": {\n    \"owner\": \"A\",\n    \"generation\": 7,\n    \"priorMutationsSettled\": true\n  },\n  \"requests\": [\n    {\n      \"actionId\": \"transfer-A-B\",\n      \"expectedOwner\": \"A\",\n      \"expectedGeneration\": 7,\n      \"nextOwner\": \"B\"\n    },\n    {\n      \"actionId\": \"transfer-A-C\",\n      \"expectedOwner\": \"A\",\n      \"expectedGeneration\": 7,\n      \"nextOwner\": \"C\"\n    }\n  ],\n  \"durableReceipts\": [\n    {\n      \"actionId\": \"transfer-A-B\",\n      \"outcome\": \"applied\",\n      \"owner\": \"B\",\n      \"generation\": 8\n    },\n    {\n      \"actionId\": \"transfer-A-C\",\n      \"outcome\": \"stale-owner-or-generation\"\n    }\n  ],\n  \"after\": {\n    \"owner\": \"B\",\n    \"generation\": 8,\n    \"ownerReachable\": false,\n    \"cleanupSettled\": false\n  },\n  \"retry\": {\n    \"actionId\": \"transfer-A-B\",\n    \"reason\": \"acknowledgement lost\"\n  },\n  \"independentTask\": {\n    \"id\": \"D\",\n    \"slotOccupied\": true,\n    \"needsStaging\": false,\n    \"ready\": true\n  }\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 8
+    },
+    "forbidWorkflowLaunches": true,
+    "forbiddenScriptLaunches": [
+      "supervise.py",
+      "herdr",
+      "ssh",
+      "br",
+      "bead",
+      "gh",
+      "install.sh"
+    ],
+    "criteria": [
+      {
+        "id": "one-owner",
+        "requirement": "B owns staging at generation 8. C's stale expected-owner/generation request did not acquire staging. No second transfer is justified by a lost acknowledgement."
+      },
+      {
+        "id": "idempotent-receipt",
+        "requirement": "Reconcile or retrieve transfer-A-B by its action ID and return its original result. Do not create another action or advance the generation for that retry."
+      },
+      {
+        "id": "no-timeout-transfer",
+        "requirement": "B being unreachable is not cleanup or permission to transfer staging. Preserve its resource obligation until settlement and an authorized owner/generation transition are established."
+      },
+      {
+        "id": "independent-work",
+        "requirement": "D can continue in its occupied execution slot because it needs no staging and has authority. Do not invent an additional global build/test queue."
+      }
+    ]
+  },
+  {
+    "id": "orchestration-stale-evidence",
+    "skill": "herdr-orchestrate",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $herdr-orchestrate. This is an offline decision exercise, not a live run. Read the supplied observations and report the supported next actions and uncertainties. Do not edit files, contact machines or providers, run supervisors, initialize run state, install dependencies, or launch workers/reviewers. The evidence JSON is a frozen observation format, not a helper input file. Can task A merge or close from these Herdr delivery observations? Explain how to recover the correct evidence without restarting surviving work.",
+    "files": {
+      "evidence.json": "{\n  \"task\": {\n    \"id\": \"A\",\n    \"pr\": 42,\n    \"controllerRun\": \"A-run-3\",\n    \"reviewBase\": \"1111111111111111111111111111111111111111\",\n    \"reviewHead\": \"2222222222222222222222222222222222222222\",\n    \"sourceRepairsUsed\": 4\n  },\n  \"github\": {\n    \"pr\": 42,\n    \"head\": \"3333333333333333333333333333333333333333\",\n    \"checksHead\": \"3333333333333333333333333333333333333333\",\n    \"checks\": \"green\",\n    \"merged\": false,\n    \"actionableComment\": \"Unhandled empty payload remains reproducible\"\n  },\n  \"controllerRecords\": [\n    {\n      \"run\": \"A-run-3\",\n      \"task\": \"A\",\n      \"head\": \"2222222222222222222222222222222222222222\",\n      \"result\": \"converged\",\n      \"mtime\": 100\n    },\n    {\n      \"run\": \"B-run-9\",\n      \"task\": \"B\",\n      \"head\": \"3333333333333333333333333333333333333333\",\n      \"result\": \"converged\",\n      \"mtime\": 200\n    }\n  ],\n  \"runtime\": {\n    \"modelSessionAlive\": false,\n    \"activeJobs\": [\n      {\n        \"id\": \"A-validation-8\",\n        \"alive\": true\n      }\n    ]\n  },\n  \"tracker\": {\n    \"kind\": \"beadroll\",\n    \"closeRecordedLocally\": true,\n    \"closePublished\": false,\n    \"canonicalClosed\": false\n  },\n  \"acceptance\": {\n    \"required\": \"hosted\",\n    \"completed\": false\n  }\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 8
+    },
+    "forbidWorkflowLaunches": true,
+    "forbiddenScriptLaunches": [
+      "supervise.py",
+      "herdr",
+      "ssh",
+      "br",
+      "bead",
+      "gh",
+      "install.sh"
+    ],
+    "criteria": [
+      {
+        "id": "exact-candidate",
+        "requirement": "Block merge: A-run-3 reviewed an older head, and the actionable comment remains unresolved. Green checks on the new head do not establish review convergence or comment disposition."
+      },
+      {
+        "id": "exact-run",
+        "requirement": "Use A's registered A-run-3 or an explicitly linked successor, never newer unrelated B-run-9 merely because its mtime or head appears useful. Preserve cumulative repair use and carried findings."
+      },
+      {
+        "id": "surviving-job",
+        "requirement": "The model session crash does not authorize restarting still-running A-validation-8 or duplicating the task. Reconcile its registered job handle and result."
+      },
+      {
+        "id": "no-false-closure",
+        "requirement": "Do not report globally closed or accepted: local Beadroll closure is unpublished, the PR is unmerged, and required hosted acceptance is incomplete."
+      }
+    ]
+  },
+  {
+    "id": "orchestration-profile-budget",
+    "skill": "herdr-orchestrate",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $herdr-orchestrate. This is an offline decision exercise, not a live run. Read the supplied observations and report the supported next actions and uncertainties. Do not edit files, contact machines or providers, run supervisors, initialize run state, install dependencies, or launch workers/reviewers. The evidence JSON is a frozen observation format, not a helper input file. Assess whether we can admit the proposed remote Herdr review task with a strict $20 run ceiling. Give the concrete setup correction without performing it.",
+    "files": {
+      "evidence.json": "{\n  \"profiles\": {\n    \"coordinator\": {\n      \"host\": \"local\",\n      \"codexHome\": \"/profiles/coordinator\",\n      \"skills\": [\n        \"herdr-orchestrate\",\n        \"review-fix-loop\",\n        \"comprehensive-review\"\n      ]\n    },\n    \"worker\": {\n      \"host\": \"remote\",\n      \"codexHome\": \"/profiles/worker\",\n      \"skills\": [\n        \"herdr-orchestrate\"\n      ],\n      \"role\": \"review-driver\"\n    },\n    \"other\": {\n      \"host\": \"remote\",\n      \"codexHome\": \"/profiles/default\",\n      \"skills\": [\n        \"review-fix-loop\",\n        \"comprehensive-review\"\n      ]\n    }\n  },\n  \"routes\": {\n    \"coordinatorToWorker\": true,\n    \"workerToCoordinatorHelper\": false\n  },\n  \"budget\": {\n    \"requestedHardUsd\": 20,\n    \"providerCoverage\": \"partial\",\n    \"reportedUsd\": null,\n    \"inFlightBoundUsd\": null\n  },\n  \"candidate\": {\n    \"id\": \"N\",\n    \"requiresReviewDriver\": true,\n    \"admitted\": false\n  },\n  \"existingTask\": {\n    \"id\": \"E\",\n    \"authorized\": true,\n    \"strictBudgetApplies\": false,\n    \"setupVerified\": true\n  }\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 8
+    },
+    "forbidWorkflowLaunches": true,
+    "forbiddenScriptLaunches": [
+      "supervise.py",
+      "herdr",
+      "ssh",
+      "br",
+      "bead",
+      "gh",
+      "install.sh"
+    ],
+    "criteria": [
+      {
+        "id": "profile-specific",
+        "requirement": "The remote worker's selected /profiles/worker lacks the matching review pair. Copies under /profiles/default and on the coordinator do not provision this profile. Explain installing matching review-fix-loop/comprehensive-review and checking runtimes/authentication before this role is admitted; do not install or upgrade during the exercise."
+      },
+      {
+        "id": "route-fallback",
+        "requirement": "One-way SSH does not prove the helper return route. Use verified coordinator-mediated consequential transitions if that route cannot be established; do not describe all remote implementation as impossible solely because it is absent."
+      },
+      {
+        "id": "strict-cost",
+        "requirement": "Do not admit N under an unsupported strict $20 guarantee, or silently turn the requested hard cap into an advisory checkpoint. Partial accounting and unknown in-flight cost cannot establish a hard cap; reported unknown usage is not zero."
+      },
+      {
+        "id": "independent-progress",
+        "requirement": "Existing independently authorized E can continue when unrelated to the unavailable role/budget requirement. Any proposed cost checkpoint must disclose delayed observations and potential overshoot."
+      }
+    ]
   }
 ]

@@ -33,6 +33,8 @@ Run commands from the repository root. Select the checks for the helper you chan
 | Planning canonical-schema validator | `python3 -B -m unittest discover -s plugins/jig-planning/skills/planning-workflow/tests -v` |
 | Skill evaluation harness | `node --test evals/*.test.mjs` |
 | Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
+| Herdr orchestration state and supervisor | `python3 -B -m unittest discover -s plugins/jig-orchestration/tests -v` |
+| Orchestration installation and evidence fixtures | `node --test plugins/jig-review/tests/install.test.mjs evals/orchestration-fixtures.test.mjs` |
 | Privacy-audit scripts | `bash plugins/jig-privacy-audit/scripts/test_fixtures.sh` |
 | Rust abstraction-police collector | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-abstraction-police/tests -v` |
 | Rust duplication scanner | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-dup-unifier/tests -v` |
@@ -41,7 +43,7 @@ Run commands from the repository root. Select the checks for the helper you chan
 | TypeScript/React abstraction scanner | `node --test plugins/jig-typescript/skills/typescript-react-abstraction-police/tests/scan.test.mjs` |
 | TypeScript/React duplication scanner | `node plugins/jig-typescript/skills/typescript-react-dup-unifier/scripts/test-typescript-react-dup-unifier.mjs` |
 
-Use the [feature-specific runtimes](README.md#requirements). The Ruby smoke test needs Minitest; the TypeScript AST scanner tests need an existing TypeScript installation. The [review CI workflow](.github/workflows/jig-review-tests.yml) runs the review suite on Node 22 and 24. That workflow does not cover every plugin's helpers.
+Use the [feature-specific runtimes](README.md#requirements). The Ruby smoke test needs Minitest; the TypeScript AST scanner tests need an existing TypeScript installation. The [review CI workflow](.github/workflows/jig-review-tests.yml) runs the review suite on Node 22 and 24. The [orchestration CI workflow](.github/workflows/jig-orchestration-tests.yml) exercises isolated state/runtime checks on Linux and macOS with Python 3.10 and 3.13, plus direct installation and frozen evidence fixtures. Neither workflow starts real Herdr agents, changes live trackers, or launches authenticated provider evaluations. These workflows do not cover every plugin's helpers.
 
 The Beads integration tests require the `br` CLI; CI installs the checksum-pinned [Beads v0.5.7 release](https://github.com/Dicklesworthstone/beads_rust/releases/tag/v0.5.7) and sets `JIG_REVIEW_REQUIRE_BEADS=1`, so a missing or broken executable fails the suite instead of skipping coverage. Local runs without `br` explicitly report these integration tests as skipped. To require the same coverage locally:
 
