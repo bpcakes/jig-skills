@@ -151,10 +151,10 @@ def managed_guard(settings):
 def herdr_call(settings, args):
     managed_guard(settings)
     command = [settings.get("herdr_binary", "herdr"), "--session", settings["session"], *args]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=25, check=False)
-    if result.returncode:
-        raise RuntimeErrorDetail("herdr_failed", f"Herdr {args[0:2]} failed with exit {result.returncode}; inspect the registered endpoint")
     try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=25, check=False)
+        if result.returncode:
+            raise RuntimeErrorDetail("herdr_failed", f"Herdr {args[0:2]} failed with exit {result.returncode}; inspect the registered endpoint")
         response = json.loads(result.stdout)
         if not isinstance(response, dict) or response.get("error"):
             raise ValueError("Invalid response or API error")

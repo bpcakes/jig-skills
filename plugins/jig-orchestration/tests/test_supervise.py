@@ -171,6 +171,56 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(call.call_count, 2)
         self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
 
+    def test_supervisor_survives_undecodable_herdr_streams(self):
+        for operation in ("get", "prompt"):
+            for fd in (1, 2):
+                with self.subTest(operation=operation, stream=fd):
+                    run = self.root / f"decode-{operation}-{fd}"
+                    fake = self.root / f"herdr-{operation}-{fd}"
+                    calls = self.root / f"calls-{operation}-{fd}"
+                    reply = json.dumps({"result": self.response()})
+                    fake.write_text(
+                        "#!/usr/bin/env python3\nimport os,sys\n"
+                        f"with open({str(calls)!r}, 'a') as log: log.write(sys.argv[4] + '\\n')\n"
+                        f"if sys.argv[4] == {operation!r}: os.write({fd}, bytes([255]))\n"
+                        f"else: print({reply!r})\n")
+                    fake.chmod(0o700)
+                    Engine.initialize(run, {**self.config, "scheduler": {
+                        **self.config["scheduler"], "herdr_binary": str(fake)}})
+                    outcomes = []
+
+                    def next_iteration(_):
+                        if len(outcomes) == 1 and operation == "get":
+                            # Restore a healthy endpoint for the next lookup.
+                            reply = json.dumps({"result": self.response("working")})
+                            fake.write_text(
+                                "#!/usr/bin/env python3\n"
+                                f"with open({str(calls)!r}, 'a') as log: log.write('get\\n')\n"
+                                f"print({reply!r})\n")
+                            runtime.scheduler_patch(run, lambda _: {
+                                "last_attempt_at": None, "next_due_at": None})
+                        elif len(outcomes) == 2:
+                            runtime.scheduler_patch(run, lambda _: {"enabled": False})
+
+                    with patch.object(runtime.time, "sleep", side_effect=next_iteration), \
+                            patch.object(runtime, "output", side_effect=outcomes.append):
+                        result = runtime.supervise(run)
+                    self.assertEqual(result["status"], "scheduler_stopped")
+                    schedule = Engine.read(run)["scheduler"]
+                    if operation == "get":
+                        self.assertEqual([item["status"] for item in outcomes],
+                                         ["endpoint_unavailable", "busy"])
+                        self.assertFalse(schedule.get("pending_action_id"))
+                        self.assertIsNone(schedule["failure"])
+                        self.assertEqual(calls.read_text().splitlines(), ["get", "get"])
+                    else:
+                        self.assertEqual([item["status"] for item in outcomes],
+                                         ["delivery_unconfirmed", "awaiting_reconciliation"])
+                        self.assertEqual(schedule["delivery_status"], "unconfirmed")
+                        self.assertEqual(schedule["pending_action_id"], outcomes[0]["wake_id"])
+                        self.assertEqual(outcomes[1]["wake_id"], outcomes[0]["wake_id"])
+                        self.assertEqual(calls.read_text().splitlines(), ["get", "prompt"])
+
     def test_concurrent_scheduler_rebind_cannot_dispatch_old_endpoint(self):
         def change_binding(settings, args):
             self.schedule(enabled=False)
