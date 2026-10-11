@@ -1,7 +1,7 @@
 import { readBrief, reviewGuidance } from "../skills/comprehensive-review/scripts/review-brief.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -83,7 +83,7 @@ function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "",
     "let prompt = '';",
     "for await (const chunk of process.stdin) prompt += chunk;",
     "let home = null;",
-    "try { home = { path: process.env.CODEX_HOME, entries: readdirSync(process.env.CODEX_HOME).sort(), authLink: readlinkSync(process.env.CODEX_HOME + '/auth.json') }; } catch (error) { home = { path: process.env.CODEX_HOME, error: error.code }; }",
+    "try { home = { path: process.env.CODEX_HOME, entries: readdirSync(process.env.CODEX_HOME).sort(), authLink: readlinkSync(process.env.CODEX_HOME + '/auth.json'), authResolves: existsSync(process.env.CODEX_HOME + '/auth.json') }; } catch (error) { home = { path: process.env.CODEX_HOME, error: error.code }; }",
     "writeFileSync(process.env.FAKE_CODEX_CAPTURE, JSON.stringify({ argv, prompt, env: process.env, home }));",
     `if (${JSON.stringify(stdout)}) process.stdout.write(${JSON.stringify(stdout)});`,
     `if (${JSON.stringify(stderr)}) process.stderr.write(${JSON.stringify(stderr)});`,
@@ -225,6 +225,7 @@ test("the adapter runs Codex directly with a scrubbed environment and shell-orie
   assert.ok(captured.home.entries.includes("auth.json"), JSON.stringify(captured.home.entries));
   for (const name of ["AGENTS.md", "config.toml"]) assert.ok(!captured.home.entries.includes(name), name);
   assert.equal(captured.home.authLink, path.join(f.sourceHome, "auth.json"));
+  assert.equal(captured.home.authResolves, true);
   assert.ok(captured.argv.includes("project_doc_max_bytes=0"));
   const skills = captured.argv.find((arg) => arg.startsWith("skills.config="));
   for (const file of [f.repoSkill, f.deepSkill, f.codexSkill, f.userSkill]) assert.ok(skills.includes(`{path=${JSON.stringify(file)},enabled=false}`), file);
@@ -412,4 +413,39 @@ test("the installed Codex CLI renders no ambient instructions or skills after th
   assert.deepEqual(ambientSkills(isolated, privateHome), []);
   assert.equal(instructionsLoaded(isolated), false);
   assert.ok(!ambient.includes("PROBE_HOME_AGENTS") && !ambient.includes("PROBE_HOME_SKILL"), "the private home never exposes the selected home's instructions or skills");
+});
+
+test("a relative CODEX_HOME is resolved against the launch directory before linking credentials", async (t) => {
+  const f = await adapterFixture(t);
+  // Codex resolves a relative CODEX_HOME against its working directory, which is the reviewed repository.
+  const relativeHome = path.join(f.repo, ".codex-relative-home");
+  mkdirSync(relativeHome);
+  writeFileSync(path.join(relativeHome, "auth.json"), JSON.stringify({ OPENAI_API_KEY: "relative-key" }));
+  withEnvironment(t, { CODEX_HOME: ".codex-relative-home" });
+  const expectedFingerprint = await workingTreeFingerprint(f.repo);
+  const options = { ...f.parse(), expectedFingerprint };
+  const fakeCodex = fakeProvider(f.scratch, "relative-codex.mjs");
+  await runCodexReview(options, { codexBin: fakeCodex });
+  const captured = f.captured();
+  assert.equal(captured.home.authLink, path.join(realpathSync(relativeHome), "auth.json"));
+  assert.equal(captured.home.authResolves, true, "the private home's credential link must resolve");
+  rmSync(relativeHome, { recursive: true, force: true });
+  withEnvironment(t, { CODEX_HOME: "missing-relative-home" });
+  const missing = { ...f.parse(), expectedFingerprint: await workingTreeFingerprint(f.repo) };
+  await assert.rejects(runCodexReview(missing, { codexBin: fakeCodex }), /the selected Codex home has no auth\.json/);
+});
+
+test("an oversized final event cannot turn transcript into a startup diagnostic", async (t) => {
+  const f = await adapterFixture(t);
+  // One event larger than the retained tail displaces every parseable line.
+  const huge = JSON.stringify({ type: "item.completed", item: { type: "command_execution", aggregated_output: "x".repeat(3 * 1024 * 1024) + " quota exceeded" } });
+  const noisy = fakeProvider(f.scratch, "oversized-codex.mjs", { exitCode: 1, stdout: JSON.stringify({ type: "thread.started" }) + "\n" + huge + "\n", stderr: "quota exceeded ENOENT\n" });
+  let failure;
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: noisy }), (error) => { failure = error; return true; });
+  assert.equal(failure.providerError, "", failure.message);
+  assert.equal(failureResult(failure).retryable, undefined, "transcript text must not disable the provider");
+  // The explicit flag overrides an unparseable tail; without it the tail decides.
+  const tail = Buffer.from("not json at all");
+  assert.equal(classifyFailure(Object.assign(new Error("codex exited with 1: quota exceeded"), { stderr: "quota exceeded" }), tail, true).providerError, "");
+  assert.equal(classifyFailure(Object.assign(new Error("codex exited with 1: quota exceeded"), { stderr: "quota exceeded" }), tail).providerError, "quota exceeded");
 });

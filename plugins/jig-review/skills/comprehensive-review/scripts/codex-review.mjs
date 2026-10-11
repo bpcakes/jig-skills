@@ -163,8 +163,11 @@ if [ "\${1:-}" != "exec" ]; then
   exec "$real" "$@"
 fi
 source_home="\${CODEX_HOME:-$HOME/.codex}"
+# Codex resolves a relative CODEX_HOME against its working directory; the symlink
+# lives elsewhere, so the credential path must be absolute before linking.
+source_home="$(cd "$source_home" 2>/dev/null && pwd -P)" || source_home=""
 private="$JIG_REVIEW_PRIVATE_HOME"
-if [ ! -f "$source_home/auth.json" ]; then
+if [ -z "$source_home" ] || [ ! -f "$source_home/auth.json" ]; then
   printf 'codex-review: the selected Codex home has no auth.json; ${MISSING_CREDENTIALS} (not logged in, or keyring storage)\n' >&2
   exit 1
 fi
@@ -223,14 +226,17 @@ function structuredErrors(events) {
     .filter((message) => typeof message === "string" && message.trim());
 }
 
-// Only Codex's own error events classify a failure. Once a thread has started,
-// stderr and the rest of the event stream are transcript, including command
-// output quoted from the repository, so a mentioned "quota exceeded" or ENOENT
-// there must not disable the provider. Before any event exists, stderr is the
-// launcher's or CLI's startup diagnostic and remains the failure message.
-function classifyFailure(error, transcript) {
+// Only Codex's own error events classify a failure. Once Codex has started
+// writing its event stream, stderr and the rest of that stream are transcript,
+// including command output quoted from the repository, so a mentioned "quota
+// exceeded" or ENOENT there must not disable the provider. Before any output
+// exists, stderr is the launcher's or CLI's startup diagnostic and remains the
+// failure message. `started` is tracked from the first stdout byte so an
+// oversized final event that displaces every parseable event from the bounded
+// tail cannot turn transcript back into a startup diagnostic.
+function classifyFailure(error, transcript, started = null) {
   const events = parseEvents(transcript);
-  if (!events.length) {
+  if (!(started ?? events.length > 0)) {
     error.providerError = error.stderr || error.message;
     return error;
   }
@@ -455,6 +461,7 @@ async function runCodexReview(options, dependencies = {}) {
     });
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     let transcript = Buffer.alloc(0);
+    let started = false;
     try {
       await runCommand(launch.command, launch.args, {
         cwd: scope.repoRoot,
@@ -462,19 +469,19 @@ async function runCodexReview(options, dependencies = {}) {
         timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
         maxBuffer: MAX_CODEX_OUTPUT_BYTES,
         overflow: "truncate",
-        onStdout: (chunk) => { transcript = tailBuffer(transcript, chunk, MAX_TRANSCRIPT_TAIL_BYTES); },
+        onStdout: (chunk) => { if (chunk.length) started = true; transcript = tailBuffer(transcript, chunk, MAX_TRANSCRIPT_TAIL_BYTES); },
         signal,
         env: gitEnvironment(environment),
       });
     } catch (error) {
-      throw classifyFailure(error, transcript);
+      throw classifyFailure(error, transcript, started);
     }
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
     let report;
     try {
       report = parseCodexResult(lastMessagePath);
     } catch (error) {
-      throw classifyFailure(error, transcript);
+      throw classifyFailure(error, transcript, started);
     }
     return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
   } finally {
