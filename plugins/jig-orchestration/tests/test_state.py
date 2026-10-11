@@ -682,6 +682,23 @@ class EngineTests(unittest.TestCase):
                 self.apply("control", control="resume")
                 self.reserve(kind="repair")
 
+    def test_repeating_finish_current_preserves_closed_members_without_adding_excluded_tasks(self):
+        for task_id in ("A", "B", "C"):
+            self.admit(task_id)
+        receipt = {**self.proof(), "authority": "canonical-ref", "owner": "tracker-actor",
+                   "status": "closed", "criteria_met": True, "acceptance_ref": "/proof", "unpublished": False}
+        self.apply("close", "C", receipt={**receipt, "task_id": "C"})
+        self.apply("control", control="finish_current")
+        self.apply("close", "A", receipt={**receipt, "task_id": "A"})
+        self.apply("control", control="finish_current")
+        self.assertEqual(Engine.read(self.run)["controls"]["frozen_tasks"], ["A", "B"])
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        self.assert_error("admission", self.apply, "reopen_intent", "C", target=target, evidence=self.proof())
+        intent = self.apply("reopen_intent", "A", target=target, evidence=self.proof())
+        self.apply("reopen_outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded",
+                   receipt={**receipt, "task_id": "A", "status": "open"})
+        self.reserve("A", kind="repair")
+
     def test_delegated_closure_intent_binds_target_and_completion_before_authorization(self):
         self.admit()
         reservation = self.reserve(kind="close")

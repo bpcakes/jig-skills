@@ -102,7 +102,7 @@ def scheduler_config(config, schedule=None):
             "busy_timeout_seconds": busy_timeout}
 
 
-def scheduler_patch(run_dir, build):
+def scheduler_patch(run_dir, build, check_heartbeat=False):
     """Recompute the update on a version race; never replay an external effect."""
     for _ in range(5):
         current = Engine.read(run_dir)
@@ -114,11 +114,13 @@ def scheduler_patch(run_dir, build):
             "expected_policy": current["policy_version"],
             "expected_scheduler": current["scheduler"].get("version", 0), "fields": fields,
         }
+        if check_heartbeat:
+            request["expected_heartbeat"] = current["scheduler"].get("heartbeat_at")
         try:
             Engine.apply(run_dir, request, caller="coordinator")
             return Engine.read(run_dir)
         except StateError as exc:
-            if exc.code not in {"stale_scheduler", "stale_policy"}:
+            if exc.code not in {"stale_scheduler", "stale_policy", "stale_heartbeat"}:
                 raise
     raise RuntimeErrorDetail("concurrent_update", "Scheduler state changed repeatedly; retry the state operation")
 
@@ -395,7 +397,7 @@ def health(run_dir, now=None):
             decision.update(notice=notice, claim=claim)
             return {"health_alerts": alerts, "alerted_failure_id": failure["id"], "last_alert": claim}
 
-        scheduler_patch(run_dir, prepare)
+        scheduler_patch(run_dir, prepare, check_heartbeat=True)
         if "claim" not in decision:
             return decision["result"]
         notice, claim = decision["notice"], decision["claim"]

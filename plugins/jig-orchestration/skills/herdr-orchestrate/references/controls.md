@@ -19,6 +19,8 @@ Pausing/cancelling work keeps supervision and health alerts running. Stopping th
 
 Apply authorized configuration changes with `configure` and their instruction/capability evidence. This preserves tasks, findings, and consumed counters. Capacity reductions below current occupancy require settlement first; rebinding an active host/runtime requires parking its tasks. Explicit `reopen_admission` changes the admission policy with instruction evidence. Neither configuration changes nor resume imply that instruction.
 
+Repeating finish-current preserves the existing frozen batch, including members that have since closed and may need regression recovery. A new batch is captured only after admission has explicitly reopened.
+
 ## Execution slots
 
 One slot covers one executing task pipeline on its host, including implementation, review, and validation. Acquire it through a locked, version-checked helper transition before dispatch or resumption. Reviewer fanout is separately configured and can create multiple model sessions per pipeline.

@@ -472,7 +472,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=242))["alert"], "transport_accepted")
 
     def test_health_claim_rechecks_stop_revocation_rebinding_and_recovery(self):
-        for change in ("stop", "revoke", "rebind", "recover"):
+        for change in ("stop", "revoke", "rebind", "recover", "recover-versioned"):
             with self.subTest(change=change):
                 self.run = self.root / change
                 Engine.initialize(self.run, self.config)
@@ -493,6 +493,12 @@ class RuntimeTests(unittest.TestCase):
                             self.configure_scheduler({**settings, "notifier_argv": None, "notification_authorized": False})
                         elif change == "rebind":
                             self.configure_scheduler({**settings, "notifier_argv": [sys.executable, "-c", program, str(new_notice)]})
+                        elif change == "recover":
+                            # The real tick writes separate liveness evidence
+                            # without advancing the scheduler's CAS version.
+                            version = Engine.read(self.run)["scheduler"]["version"]
+                            Engine.heartbeat(self.run, runtime.timestamp(self.now))
+                            self.assertEqual(Engine.read(self.run)["scheduler"]["version"], version)
                         else:
                             self.schedule(heartbeat_at=runtime.timestamp(self.now))
                     return real_apply(run_dir, request, caller)
@@ -510,6 +516,7 @@ class RuntimeTests(unittest.TestCase):
                     self.assertEqual(result["alert"], "local_evidence_only")
                 else:
                     self.assertEqual(result["status"], "healthy")
+                    self.assertNotIn("last_alert", Engine.read(self.run)["scheduler"])
 
     def test_health_reconciles_notification_already_claimed_before_stop(self):
         notices = self.root / "notices"

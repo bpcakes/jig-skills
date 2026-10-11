@@ -562,10 +562,11 @@ class Engine:
             require(target is not None, "missing", "task is not admitted")
             if control == "finish_current":
                 require(task is None, "invalid", "finish_current is a run admission policy")
+                if target["admission"] != "finish_current":
+                    target["frozen_tasks"] = [t["id"] for t in state["tasks"].values()
+                                              if t["phase"] != "closed"
+                                              or (t["pending_intent"] or {}).get("kind") == "reopen"]
                 target["admission"] = "finish_current"
-                target["frozen_tasks"] = [t["id"] for t in state["tasks"].values()
-                                          if t["phase"] != "closed"
-                                          or (t["pending_intent"] or {}).get("kind") == "reopen"]
             elif control == "reopen_admission":
                 require(task is None, "invalid", "reopen_admission is a run admission policy")
                 evidence(req.get("evidence"))
@@ -597,6 +598,14 @@ class Engine:
         if op == "scheduler":
             require(req.get("expected_scheduler") == state["scheduler"]["version"],
                     "stale_scheduler", "current scheduler version is required")
+            if "expected_heartbeat" in req:
+                # Heartbeats deliberately avoid journal/version churn. Compare
+                # their separate evidence under the same lock as the claim.
+                heartbeat_path = run_dir / "heartbeat.json"
+                heartbeat = (read_json(heartbeat_path).get("heartbeat_at")
+                             if heartbeat_path.exists() else state["scheduler"].get("heartbeat_at"))
+                require(req["expected_heartbeat"] == heartbeat,
+                        "stale_heartbeat", "heartbeat changed before the scheduler update")
             changes = req.get("fields", {})
             require(isinstance(changes, dict) and changes and set(changes) <= Engine.SCHEDULER_FIELDS,
                     "invalid", "unsupported scheduler fields")
