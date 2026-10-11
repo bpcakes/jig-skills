@@ -104,8 +104,9 @@ const localEnvironment = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "L
   "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "JAVA_HOME", "GOPATH", "GOENV", "GOCACHE", "GOMODCACHE",
   "CARGO_HOME", "CARGO_TARGET_DIR", "RUSTUP_HOME", "RUSTC", "RUSTFLAGS", "NVM_DIR", "VIRTUAL_ENV", "PYENV_ROOT", "UV_CACHE_DIR",
   "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"];
-const providerEnvironment = { claude: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"],
-  codex: ["OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME"], cursor: ["CURSOR_API_KEY"] };
+// JIG_LAUNCHER_BIN names the Jig executable for launcher-selected homes.
+const providerEnvironment = { claude: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "JIG_LAUNCHER_BIN"],
+  codex: ["OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME", "JIG_LAUNCHER_BIN"], cursor: ["CURSOR_API_KEY"] };
 export function commandEnvironment(request, inherited = process.env) {
   const names = new Set([...localEnvironment, ...(request.environmentFrom ?? []),
     ...(request.role === "review" ? providerEnvironment[request.assignment.provider] ?? [] : [])]);

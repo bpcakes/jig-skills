@@ -63,3 +63,10 @@ test("entrypoint works through a symlink", t => {
   symlinkSync(fileURLToPath(new URL("../skills/review-fix-loop/scripts/loop-options.mjs", import.meta.url)), link);
   assert.equal(JSON.parse(execFileSync(process.execPath, [link], { encoding: "utf8" })).maxRounds, 3);
 });
+
+test("Codex runtime and launcher selections reach the loop's review options", () => {
+  const o = parseArgs(["--reviewers", "claude,codex", "--codex-launcher", "auto", "--claude-launcher", "home:work"]);
+  assert.equal(o.review.codex.runtime, "cli"); assert.equal(o.review.codex.launcher, "auto"); assert.equal(o.review.claude.launcher, "home:work");
+  assert.equal(parseArgs([]).review.codex.runtime, "native");
+  assert.throws(() => parseArgs(["--codex-runtime", "native", "--codex-launcher", "auto"]), /omit --codex-runtime/);
+});

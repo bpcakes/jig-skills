@@ -17,6 +17,7 @@ import { isExcludedPath } from "../../comprehensive-review/scripts/review-exclus
 import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
+import { launchExecutable } from "../../comprehensive-review/scripts/provider-launch.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
@@ -199,10 +200,21 @@ function assertLegacyAdmission(root, runsRoot) {
   catch (error) { throw activeReferenceError(active, reference.directory, error); }
   if (!isSettled(prior)) throw new Error(`Resume the active run: ${reference.directory}`);
 }
+// Codex without a command is the host's native subagent unless the reviewer entry
+// or --codex-runtime selects the bundled CLI bridge. Claude and Cursor without a
+// command always use the bundled bridge.
+const BUNDLED_EXECUTABLES = Object.freeze({ claude: "claude", codex: "codex", cursor: "cursor-agent" });
+function bridged(provider, options) {
+  if (provider.command) return false;
+  if (provider.id !== "codex") return true;
+  return (provider.runtime ?? options.review.codex?.runtime) === "cli";
+}
 function configure(options, config) {
-  const reviewers = (config.reviewers ?? options.review.reviewers.map(id => ({ id }))).map(provider =>
-    provider.command || provider.id === "codex" ? provider : { ...provider, bundled: true,
-      command: [process.execPath, fileURLToPath(new URL("./provider-bridge.mjs", import.meta.url)), provider.id] });
+  const reviewers = (config.reviewers ?? options.review.reviewers.map(id => ({ id }))).map(provider => {
+    if (provider.runtime !== undefined && (provider.id !== "codex" || !["native", "cli"].includes(provider.runtime))) throw new Error("runtime applies only to the codex reviewer and must be native or cli.");
+    return bridged(provider, options) ? { ...provider, bundled: true,
+      command: [process.execPath, fileURLToPath(new URL("./provider-bridge.mjs", import.meta.url)), provider.id] } : provider;
+  });
   if (!reviewers.length || new Set(reviewers.map(p => p.id)).size !== reviewers.length) throw new Error("Reviewer capabilities must have unique provider IDs.");
   for (const provider of reviewers) {
     if (!options.review.reviewers.includes(provider.id)) throw new Error(`Unselected provider: ${provider.id}`);
@@ -1397,8 +1409,12 @@ async function advanceLocked(run) {
     }
     if (run.phase === "INIT") transition(run, "PREFLIGHT", "Contract and scope pinned.");
     else if (run.phase === "PREFLIGHT") {
-      run.capabilities = run.config.reviewers.map(p => ({ ...p, available: p.command
-        ? executableCommand({ role: "review", assignment: { provider: p.id }, cwd: run.root, command: p.bundled ? [p.id === "claude" ? "claude" : "cursor-agent"] : p.command, environmentFrom: run.config.environmentFrom?.review }) : p.id === "codex" }));
+      run.capabilities = run.config.reviewers.map(p => {
+        const request = { role: "review", assignment: { provider: p.id }, cwd: run.root, environmentFrom: run.config.environmentFrom?.review };
+        // Bundled bridges start the provider CLI, or the Jig launcher that selects its home.
+        const command = p.bundled ? [launchExecutable(p.id, run.options.review[p.id]?.launcher ?? "none", BUNDLED_EXECUTABLES[p.id], commandEnvironment(request))] : p.command;
+        return { ...p, available: p.command ? executableCommand({ ...request, command }) : p.id === "codex" };
+      });
       const unavailable = run.options.explicitReviewers ? run.options.review.reviewers.filter(id => !run.capabilities.some(p => p.id === id && p.available)) : [];
       if (unavailable.length) { transition(run, "REVIEW_INCOMPLETE", `Explicitly selected providers are unavailable: ${unavailable.join(", ")}. Install their CLI or configure a command.`, { unavailable }); return run; }
       if (run.options.reviewPolicy === "strict" && run.capabilities.filter(p => p.available).length < 2) {

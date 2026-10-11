@@ -118,9 +118,46 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
 });
 
 test("bridge marks only recognized permanent errors non-retryable", () => {
-  for (const error of ["authentication failed", "quota exceeded", "usage limit reached"]) assert.equal(failureResult(new Error(error)).retryable, false);
+  for (const error of ["authentication failed", "quota exceeded", "usage limit reached",
+    "jig exited with 1: No eligible Claude home with fresh subscription headroom; inspect `jig claude homes --usage` or pass HOME explicitly",
+    "jig exited with 2: error: unexpected argument '--auto' found"]) assert.equal(failureResult(new Error(error)).retryable, false);
   assert.equal(failureResult(new Error("temporary capacity exceeded")).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("timed out"), { timedOut: true })).execution, "uncertain");
+});
+
+test("codex bridge forwards launcher and model controls but not the controller's runtime decision", async () => {
+  const a = { id: "001-review", role: "review", provider: "codex", repository: "/repo", fingerprint: "pinned",
+    providerOptions: { model: "gpt-5-codex", effort: "high", runtime: "cli", launcher: "auto" },
+    scope: { scope: "working-tree", includeWorkingTree: false },
+    contract: { acceptanceCriteria: [{ id: "value" }], requiredValidation: [{ id: "unit" }] } };
+  a.resultSchema = resultSchema(a);
+  const result = await reviewAssignment(a, { runner: async (options, dependencies) => {
+    assert.equal(options.model, "gpt-5-codex"); assert.equal(options.effort, "high"); assert.equal(options.launcher, "auto");
+    assert.equal(Object.hasOwn(options, "runtime"), false); assert.ok(dependencies.promptSuffix.includes('"resultSchema"'));
+    return dependencies.parseReport(JSON.stringify(vote(a)));
+  } });
+  assert.deepEqual(result, vote(a));
+  await assert.rejects(reviewAssignment({ ...a, provider: "gemini" }), /Claude, Codex, or Cursor/);
+});
+
+test("launcher-selected bundled bridges preflight the Jig executable instead of the provider CLI", async t => {
+  const f = fixture(t);
+  const previous = process.env.JIG_LAUNCHER_BIN;
+  t.after(() => { if (previous == null) delete process.env.JIG_LAUNCHER_BIN; else process.env.JIG_LAUNCHER_BIN = previous; });
+  const args = ["--reviewers", "claude,codex", "--claude-launcher", "auto", "--codex-launcher", "auto"];
+  process.env.JIG_LAUNCHER_BIN = "/missing/jig-launcher";
+  let run = await f.start({}, args);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.match(JSON.stringify(run.outcome), /claude, codex/);
+  assert.ok(run.capabilities.every(p => p.bundled && p.available === false));
+  process.env.JIG_LAUNCHER_BIN = process.execPath;
+  run = await f.start({}, args);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["claude", true, true], ["codex", true, true]]);
+  await assert.rejects(f.start({ reviewers: [{ id: "claude", runtime: "cli" }] }, ["--reviewers", "claude"]), /runtime applies only to the codex reviewer/);
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "subagent" }] }, ["--reviewers", "codex"]), /must be native or cli/);
 });
 
 test("evidence declarations reject broad paths and policy files", () => {
