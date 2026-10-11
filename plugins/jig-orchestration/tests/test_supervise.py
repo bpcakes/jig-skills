@@ -446,6 +446,54 @@ class RuntimeTests(unittest.TestCase):
         received = [json.loads(line)["failure"]["id"] for line in notices.read_text().splitlines()]
         self.assertEqual(received, [first["id"], second["id"], third["id"]])
 
+    def test_manual_completion_preserves_endpoint_incident_and_notification_history(self):
+        for legacy in (False, True):
+            with self.subTest(legacy=legacy):
+                run = self.root / ("legacy-outage" if legacy else "outage")
+                config = {**self.config, "scheduler": {**self.config["scheduler"],
+                          "notifier_argv": ["/bin/true"], "notification_authorized": True}}
+                Engine.initialize(run, config)
+                with patch.object(runtime, "herdr_call", return_value=self.response("blocked")), \
+                        patch.object(runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as notify:
+                    failure = runtime.tick(run, self.now)["failure"]
+                    if legacy:
+                        failure = {"id": "endpoint-coordinator_blocked", "at": failure["at"], "reason": failure["reason"]}
+                        runtime.scheduler_patch(run, lambda _: {"failure": failure})
+                    self.assertEqual(runtime.health(run, self.now)["alert"], "transport_accepted")
+                    alert = Engine.read(run)["scheduler"]["last_alert"]
+                    runtime.complete(run, "manual", self.now + timedelta(seconds=1))
+                    self.assertEqual(Engine.read(run)["scheduler"]["failure"], failure)
+                    self.assertEqual(runtime.health(run, self.now + timedelta(seconds=1))["alert"], "already_attempted")
+                    repeated = runtime.tick(run, self.now + timedelta(seconds=61))["failure"]
+                    self.assertEqual(repeated["id"], failure["id"])
+                    runtime.complete(run, "manual", self.now + timedelta(seconds=62))
+                    repeated = runtime.tick(run, self.now + timedelta(seconds=122))["failure"]
+                    self.assertEqual(repeated["id"], failure["id"])
+                    self.assertEqual(runtime.health(run, self.now + timedelta(seconds=122))["alert"], "already_attempted")
+                    self.assertEqual(Engine.read(run)["scheduler"]["last_alert"], alert)
+                    self.assertEqual(notify.call_count, 1)
+
+    def test_verified_endpoint_recovery_survives_manual_completion_during_lookup(self):
+        for status in ("working", "idle", "done"):
+            with self.subTest(status=status):
+                run = self.root / ("recovered-" + status)
+                Engine.initialize(run, self.config)
+                runtime.scheduler_patch(run, lambda _: {"failure": {
+                    "id": "endpoint-outage", "code": "coordinator_blocked", "at": runtime.timestamp(self.now)}})
+                def lookup(settings, args):
+                    self.assertEqual(args[1], "get")
+                    runtime.complete(run, "manual", self.now + timedelta(seconds=1))
+                    return self.response(status)
+                with patch.object(runtime, "herdr_call", side_effect=lookup) as call:
+                    result = runtime.tick(run, self.now)
+                self.assertEqual(call.call_count, 1)
+                self.assertEqual(result["status"], "busy" if status == "working" else "reconciliation_completed")
+                schedule = Engine.read(run)["scheduler"]
+                self.assertIsNone(schedule["failure"])
+                self.assertIsNone(schedule.get("pending_action_id"))
+                self.assertEqual(schedule["delivery_status"], "completed")
+                self.assertEqual(runtime.health(run, self.now + timedelta(seconds=1))["status"], "healthy")
+
     def test_health_notifier_nonstart_retries_after_repair_with_backoff(self):
         notifier = self.root / "notifier"
         delivered = self.root / "delivered"

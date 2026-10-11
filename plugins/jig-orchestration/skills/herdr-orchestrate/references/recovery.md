@@ -32,6 +32,8 @@ Only proved notifier non-start (missing executable or permission denial) is auto
 
 Repeated endpoint failures with the same cause retain one incident ID and alert budget until recovery is observed. A later failure starts a new incident even if the health timer never polled during the healthy interval. Continuous failure does not generate a new notice on every tick.
 
+A manual full reconciliation does not establish endpoint recovery and retains any endpoint failure and its alert history. Only an identity-verified lookup with a working, idle, or done coordinator clears that failure, including when a concurrent manual check already consumed the scheduled pass.
+
 Busy skips remain valid until `busy_timeout_seconds` elapses (default: three effective check intervals). Beyond that, health reports a stable busy-timeout alert even while the scheduler heartbeat remains current. Configure a longer interval for expected long work; the alert does not cancel or replace the active coordinator. A full reconciliation or a new dispatched wake resets the busy interval.
 
 The independent health invocation must actually be installed/configured under scheduling authority; the managed process cannot detect and report its own total disappearance. Without an alert channel, disclose local evidence only. This covers managed-process/server failure while the host survives; v1 does not monitor host loss. Transport acceptance does not prove the user read or answered an alert.

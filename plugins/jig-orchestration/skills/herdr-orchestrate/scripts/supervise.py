@@ -175,6 +175,11 @@ def enabled(state, settings):
     return state["scheduler"].get("enabled", settings.get("enabled", False)) is True
 
 
+def endpoint_failure(schedule):
+    failure = schedule.get("failure") or {}
+    return failure if failure.get("id", "").startswith("endpoint-") else None
+
+
 def tick(run_dir, now=None):
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "delivery.lock"):
@@ -205,6 +210,14 @@ def tick(run_dir, now=None):
             actual = herdr_call(settings, ["agent", "get", settings["agent"]["name"]])["agent"]
             verify_identity(actual, settings["agent"])
             status = actual.get("agent_status", "unknown")
+            if status not in {"working", "idle", "done"}:
+                raise RuntimeErrorDetail("coordinator_" + str(status),
+                    f"Coordinator at {settings['session']}/{settings['agent']['pane_id']} is {status}; inspect its original pane")
+            def recovered(current):
+                if scheduler_config(current["config"], current["scheduler"]) != settings:
+                    return None
+                return {"failure": None} if endpoint_failure(current["scheduler"]) else None
+            scheduler_patch(run_dir, recovered)  # Verified recovery survives a concurrent manual completion.
             if status == "working":
                 def busy(current):
                     if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
@@ -213,9 +226,6 @@ def tick(run_dir, now=None):
                             "busy_since_at": current["scheduler"].get("busy_since_at") or timestamp(now)}
                 scheduler_patch(run_dir, busy)
                 return {"status": "busy", "agent_status": status}
-            if status not in {"idle", "done"}:
-                raise RuntimeErrorDetail("coordinator_" + str(status),
-                    f"Coordinator at {settings['session']}/{settings['agent']['pane_id']} is {status}; inspect its original pane")
         except (RuntimeErrorDetail, OSError, subprocess.TimeoutExpired, KeyError, TypeError) as exc:
             code = str(getattr(exc, "code", type(exc).__name__))
             def failed(current):
@@ -303,7 +313,8 @@ def complete(run_dir, wake_id, now=None):
                 "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
                 "last_completed_wake_id": pending or schedule.get("last_completed_wake_id"),
                 "next_due_at": timestamp(now + timedelta(seconds=interval)),
-                "wake_requested_at": None, "wake_reason": None, "failure": None, "busy_since_at": None}
+                "wake_requested_at": None, "wake_reason": None,
+                "failure": endpoint_failure(schedule), "busy_since_at": None}
     state = scheduler_patch(run_dir, finish)
     return {"status": "completed", "last_completed_at": state["scheduler"].get("last_completed_at"),
             "next_due_at": state["scheduler"].get("next_due_at")}
