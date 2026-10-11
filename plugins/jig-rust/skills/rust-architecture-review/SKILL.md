@@ -1,6 +1,7 @@
 ---
 name: rust-architecture-review
 description: Review Rust architecture when the user explicitly requests an architecture or structural design assessment of modules, crates, dependencies, ownership, or public APIs. Do not select for routine coding, bug fixes, explanations, or general code reviews without an architectural focus.
+disable-model-invocation: true
 ---
 
 # Rust Architecture Review

@@ -58,3 +58,28 @@ test('the Claude Code CLI validates the marketplace and every listed plugin', {
     assert.equal(result.status, 0, `${target}\n${result.stdout}${result.stderr}`);
   }
 });
+
+const skills = plugins.flatMap(plugin => readdirSync(path.join(repo, 'plugins', plugin, 'skills'))
+  .map(skill => `plugins/${plugin}/skills/${skill}`)).sort();
+
+// Codex reads agents/openai.yaml; Claude Code reads the SKILL.md frontmatter. Both default to implicit invocation.
+function codexAllowsImplicitInvocation(skill) {
+  const file = path.join(repo, skill, 'agents/openai.yaml');
+  const match = existsSync(file) && readFileSync(file, 'utf8').match(/^\s+allow_implicit_invocation:\s*(true|false)\s*$/m);
+  return match ? match[1] === 'true' : true;
+}
+
+function claudeAllowsImplicitInvocation(skill) {
+  const frontmatter = read(`${skill}/SKILL.md`).match(/^---\n([\s\S]*?)\n---\n/);
+  assert.ok(frontmatter, `${skill}: SKILL.md frontmatter`);
+  const match = frontmatter[1].match(/^disable-model-invocation:\s*(true|false)\s*$/m);
+  return match ? match[1] === 'false' : true;
+}
+
+test('every skill applies the same implicit-invocation policy in Codex and Claude Code', () => {
+  const explicitOnly = skills.filter(skill => !codexAllowsImplicitInvocation(skill));
+  assert.ok(explicitOnly.length > 0, 'expected explicit-only skills');
+  for (const skill of skills) {
+    assert.equal(claudeAllowsImplicitInvocation(skill), codexAllowsImplicitInvocation(skill), skill);
+  }
+});

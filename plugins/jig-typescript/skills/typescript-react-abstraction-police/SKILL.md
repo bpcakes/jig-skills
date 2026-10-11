@@ -6,6 +6,7 @@ metadata:
   version: "1.0.0"
   category: "code-review"
   language: "typescript-react"
+disable-model-invocation: true
 ---
 
 # Abstraction Police: TypeScript + React

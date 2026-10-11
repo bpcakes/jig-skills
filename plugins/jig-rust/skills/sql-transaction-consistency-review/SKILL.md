@@ -1,6 +1,7 @@
 ---
 name: sql-transaction-consistency-review
 description: Review SQL-backed Rust changes for transaction atomicity, races, isolation, retries, and side effects around commit.
+disable-model-invocation: true
 ---
 
 # SQL Transaction Consistency Review

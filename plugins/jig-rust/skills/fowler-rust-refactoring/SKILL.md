@@ -1,6 +1,7 @@
 ---
 name: fowler-rust-refactoring
 description: Assess Rust refactoring opportunities and produce a behavior-preserving plan when the user requests a refactoring assessment or plan. Excludes routine implementation and general code review.
+disable-model-invocation: true
 ---
 
 # Fowler Rust Refactoring

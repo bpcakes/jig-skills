@@ -1,6 +1,7 @@
 ---
 name: react-state-data-flow-review
 description: Review React state ownership and data flow for drift, invalid async states, and cache or server/client inconsistencies.
+disable-model-invocation: true
 ---
 
 # React State Data Flow Review

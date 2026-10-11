@@ -1,6 +1,7 @@
 ---
 name: react-test-quality-review
 description: Review React tests for behavioral coverage, assertion strength, async interactions, mocking, and regression confidence.
+disable-model-invocation: true
 ---
 
 # React Test Quality Review

@@ -1,6 +1,7 @@
 ---
 name: rust-security-boundary-review
 description: Review Rust auth, secrets, untrusted-input sinks, and browser credential boundaries; excludes general security audits.
+disable-model-invocation: true
 ---
 
 # Rust Security Boundary Review

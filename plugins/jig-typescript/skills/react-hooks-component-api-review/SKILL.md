@@ -1,6 +1,7 @@
 ---
 name: react-hooks-component-api-review
 description: Review React component and hook API design when the user requests an assessment of props, callbacks, controlled state, or consumer contracts. Excludes routine UI changes and general code review.
+disable-model-invocation: true
 ---
 
 # React Component and Hook API Review

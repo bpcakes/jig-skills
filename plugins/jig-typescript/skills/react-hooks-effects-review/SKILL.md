@@ -1,6 +1,7 @@
 ---
 name: react-hooks-effects-review
 description: Review React hooks, Effects, and refs for stale closures, lifecycle, cleanup, dependency, and render-purity bugs.
+disable-model-invocation: true
 ---
 
 # React Hooks and Effects Review

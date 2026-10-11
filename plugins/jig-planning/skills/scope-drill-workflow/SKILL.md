@@ -164,8 +164,8 @@ Batch only a few independent questions when the user prefers it. Do not ask a
 child question whose parent decision is unresolved.
 
 Use the host's structured user-input tool when it is actually available and
-permitted in the current mode (for example, `AskUserQuestion` or
-`request_user_input`). Inspect its schema. Do not invent calls or switch modes
+permitted in the current mode (`AskUserQuestion` in Claude Code,
+`request_user_input` in Codex). Inspect its schema. Do not invent calls or switch modes
 just to obtain a tool. Without one, ask the same question in normal chat and stop
 to await the answer. A missing tool, skipped answer, or silence is not consent.
 
