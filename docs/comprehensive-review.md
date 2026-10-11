@@ -10,7 +10,7 @@ The default reviewers are Claude Code and Codex. Cursor is optional. Review-only
 
 Install `jig-review` using the [marketplace instructions](../README.md#install-with-codex). You need Node.js 22 or newer and a Codex host with subagents. External adapters support Linux, macOS, and Windows through WSL.
 
-Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`. These passes consume provider usage. A native Codex-only review does not need any external CLI. With `--claude-launcher auto` or `--codex-launcher auto`, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
+Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries only the selected account's `auth.json`. These passes consume provider usage. A native Codex-only review does not need any external CLI. With `--claude-launcher auto` or `--codex-launcher auto`, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
 
 Enter these prompts in Codex from the repository being reviewed:
 
