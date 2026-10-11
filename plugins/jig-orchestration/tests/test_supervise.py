@@ -337,6 +337,24 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(result["local_inventory_ok"])
         self.assertEqual(sum(not item["ok"] for item in result["installations"]), 2)
 
+    def test_coordinator_requires_herdr_skill_in_selected_profile(self):
+        profile = {"id": "coordinator", "agent_home": str(self.root / "custom-home"), "skill_paths": {}}
+        self.config["hosts"]["local"]["profiles"] = [profile]
+        for skill in ("herdr-orchestrate", "herdr"):
+            directory = self.root / skill
+            directory.mkdir()
+            (directory / "SKILL.md").write_text("---\nname: " + skill + "\n---\n")
+            profile["skill_paths"][skill] = str(directory)
+        with patch.object(runtime.shutil, "which", return_value="/fixture/tool"), patch.object(
+                runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "tool 99.0", "")):
+            result = runtime.preflight(self.config, "local")
+            self.assertTrue(result["local_inventory_ok"])
+            del profile["skill_paths"]["herdr"]
+            result = runtime.preflight(self.config, "local")
+        self.assertFalse(result["local_inventory_ok"])
+        self.assertEqual(result["missing_role_skills"], ["herdr"])
+        self.assertEqual([item["skill"] for item in result["installations"] if not item["ok"]], ["herdr"])
+
     def test_cli_uses_fake_endpoint_and_restarts_without_duplicate_prompt(self):
         fake = self.root / "fake-herdr"
         log = self.root / "calls.jsonl"

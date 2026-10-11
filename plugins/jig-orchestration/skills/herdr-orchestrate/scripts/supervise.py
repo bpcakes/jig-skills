@@ -419,7 +419,7 @@ def preflight(config, host_id):
         profile_roles = profile.get("roles", roles)
         wanted = set(profile.get("required_skills", []))
         if "coordinator" in profile_roles:
-            wanted.add("herdr-orchestrate")
+            wanted.update({"herdr-orchestrate", "herdr"})
         if "review" in profile_roles:
             wanted.update({"review-fix-loop", "comprehensive-review"})
         for skill in sorted(wanted):
@@ -436,7 +436,7 @@ def preflight(config, host_id):
             installations.append(item)
     required_skills = set()
     if "coordinator" in roles:
-        required_skills.add("herdr-orchestrate")
+        required_skills.update({"herdr-orchestrate", "herdr"})
     if "review" in roles:
         required_skills.update({"review-fix-loop", "comprehensive-review"})
     observed_skills = {item["skill"] for item in installations if item["ok"]}

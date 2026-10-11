@@ -30,9 +30,10 @@ A minimal configuration shape is:
       "profiles": [{
         "id": "selected-codex-profile",
         "agent_home": "/home/user/.codex-selected",
-        "required_skills": ["herdr-orchestrate", "comprehensive-review", "review-fix-loop"],
+        "required_skills": ["herdr-orchestrate", "herdr", "comprehensive-review", "review-fix-loop"],
         "skill_paths": {
           "herdr-orchestrate": "/home/user/.codex-selected/skills/herdr-orchestrate",
+          "herdr": "/home/user/.codex-selected/skills/herdr",
           "comprehensive-review": "/home/user/.codex-selected/skills/comprehensive-review",
           "review-fix-loop": "/home/user/.codex-selected/skills/review-fix-loop"
         }
@@ -49,7 +50,7 @@ A minimal configuration shape is:
 
 Replace example paths/authority/scope with established facts; a syntactically valid config is not a verified setup. Expand an epic into its authorized task IDs at initialization. Add registered remote hosts with their exact endpoint/profile contract. `preflight` inventories the selected host entry **on the current machine**; run it in each actual host/profile environment. It checks versions and installed skill paths/digests. Authentication, matching review-pair compatibility, remote routes, and control behavior require separate receipts. Optional profile `expected_skill_hashes` maps skill names to pinned full-directory digests.
 
-Profiles inherit host `roles` unless they provide their own `roles` list. A review profile must contain both review skills itself; splitting the pair between homes does not satisfy its inventory. A coordinator profile requires `herdr-orchestrate`. Other `required_skills` add the task-specific inventory.
+Profiles inherit host `roles` unless they provide their own `roles` list. A review profile must contain both review skills itself; splitting the pair between homes does not satisfy its inventory. A coordinator profile requires `herdr-orchestrate` and `herdr`. Other `required_skills` add the task-specific inventory.
 
 An independently acting driver has an `actors` entry such as `{"worker-a":{"role":"driver","task_ids":["example-A"],"host":"local","helper_route":true}}`. Set `helper_route` true only after the restricted reverse route is verified; otherwise the coordinator mediates consequential transitions. Models, tool versions, acceptance contracts, review policy/fanout, and capability receipts remain configuration context for the driver; the helper does not invent executable adapters from those fields.
 

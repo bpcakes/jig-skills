@@ -16,6 +16,20 @@ Install dependencies in the agent home/profile actually selected for each role. 
 
 Both machines need the review pair if both drive review. Installing only `SKILL.md` or only one review skill is insufficient. The orchestration state and scheduler remain on one coordinator. Read the installed review controller's requirements: current repository versions require Node 22+, Git 2.42+, Linux `flock`/`/proc` or the documented macOS Python/process support. Do not infer supported versions from a similarly named executable.
 
+The coordinator and any other agent that controls Herdr need its skill in the selected profile. A coding-only worker does not. Install the Herdr binary separately using Herdr's own setup. From a `jig-skills` checkout, direct installation exports that binary's matching skill using `herdr --skill` and installs it alongside the orchestration skill and review pair:
+
+```sh
+scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" herdr-orchestrate
+```
+
+Use the actual profile's skills directory; without `--dest`, the Codex destination is `${CODEX_HOME:-$HOME/.codex}/skills`. Marketplace installation of `jig-orchestration` does not run this installer or install its dependencies. Install `jig-review` where required and export the Herdr skill separately into the controlling profile:
+
+```sh
+scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" herdr
+```
+
+The export uses the local binary without network access or binary installation. Explicitly selecting `herdr` or `herdr-orchestrate` fails before copying skills if `herdr --skill` is unavailable or unusable; an all-skills installation warns, skips orchestration and continues with unrelated skills. Matching automatic dependencies are preserved. A differing Herdr skill needs explicit replacement with `--force herdr herdr-orchestrate` for a direct orchestration install, or `--force herdr` for a plugin-based install. `--force herdr-orchestrate` alone cannot replace it. Explicitly select differing review dependencies too if those need replacement. Perform these updates during setup, preserving versions needed by active runs.
+
 Check actual skill paths/content versions, executable paths and versions, selected profiles/models, project dependencies, authenticated GitHub repository access, tracker access, and working directories. Do not print secrets. The helper's `preflight` is a local path/version check, not proof of remote installation, reviewer authentication, provider availability, or successful hosted acceptance. Obtain those receipts using each selected environment before dependent work.
 
 Record canonical checkout/worktree-root paths verified on the host that owns them, including symlink resolution. The helper normalizes lexical POSIX aliases such as a trailing `/.`; it cannot resolve remote symlinks on the coordinator. Check that each physical checkout has one writer and is outside protected main working trees before admission or handoff.
