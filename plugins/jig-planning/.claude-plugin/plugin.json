@@ -1,0 +1,17 @@
+{
+  "name": "jig-planning",
+  "version": "0.2.0",
+  "description": "Evidence-backed implementation planning and scope reduction for existing epics and plans.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "planning",
+    "architecture",
+    "migrations",
+    "scope-reduction"
+  ]
+}

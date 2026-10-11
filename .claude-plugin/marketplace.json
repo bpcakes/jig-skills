@@ -1,0 +1,46 @@
+{
+  "name": "jig-skills",
+  "description": "Focused skills for implementation planning, code review, refactoring, and privacy audits.",
+  "owner": {
+    "name": "Jig",
+    "url": "https://github.com/bpcakes/jig-skills"
+  },
+  "plugins": [
+    {
+      "name": "jig-rust",
+      "source": "./plugins/jig-rust",
+      "description": "Rust simplification, Fowler-style refactoring assessments, duplicate-abstraction analysis, source reorganization, architecture and abstraction-boundary review, async concurrency review, security-boundary review, SQLx query safety review, SQL transaction consistency review, error handling review, and test quality review skills.",
+      "category": "Coding"
+    },
+    {
+      "name": "jig-swift",
+      "source": "./plugins/jig-swift",
+      "description": "Swift 6 iOS refinement skill for behavior-preserving SwiftUI, UIKit, and concurrency-aware cleanup.",
+      "category": "Coding"
+    },
+    {
+      "name": "jig-typescript",
+      "source": "./plugins/jig-typescript",
+      "description": "TypeScript and React abstraction-boundary audits, duplicate-abstraction analysis, hooks, state/data flow, render performance, test quality, component API, and type-system review skills.",
+      "category": "Coding"
+    },
+    {
+      "name": "jig-privacy-audit",
+      "source": "./plugins/jig-privacy-audit",
+      "description": "Privacy, zero-knowledge, and E2EE audit-support skills for scoped evidence collection and review.",
+      "category": "Coding"
+    },
+    {
+      "name": "jig-ruby",
+      "source": "./plugins/jig-ruby",
+      "description": "Ruby and Rails refactoring assessments and behavior-preserving plans grounded in Fowler's principles.",
+      "category": "Coding"
+    },
+    {
+      "name": "jig-planning",
+      "source": "./plugins/jig-planning",
+      "description": "Evidence-backed implementation planning and scope reduction for existing epics and plans.",
+      "category": "Coding"
+    }
+  ]
+}

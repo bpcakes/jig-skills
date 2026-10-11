@@ -1,0 +1,19 @@
+{
+  "name": "jig-privacy-audit",
+  "version": "0.1.3",
+  "description": "Privacy, zero-knowledge, and E2EE audit-support skills for scoped evidence collection and review.",
+  "author": {
+    "name": "bpcakes"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "privacy",
+    "zero-knowledge",
+    "e2ee",
+    "audit",
+    "cryptography",
+    "security"
+  ]
+}

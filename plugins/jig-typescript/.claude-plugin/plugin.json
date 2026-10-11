@@ -1,0 +1,27 @@
+{
+  "name": "jig-typescript",
+  "version": "0.2.4",
+  "description": "TypeScript and React abstraction-boundary audits, duplicate-abstraction analysis, hooks, state/data flow, render performance, test quality, component API, and type-system review skills.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "typescript",
+    "react",
+    "components",
+    "hooks",
+    "state",
+    "data-flow",
+    "performance",
+    "render-performance",
+    "testing",
+    "test-quality",
+    "effects",
+    "component-api",
+    "review",
+    "types"
+  ]
+}
