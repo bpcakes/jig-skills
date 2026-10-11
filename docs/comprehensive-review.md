@@ -10,7 +10,7 @@ The default reviewers are Claude Code and Codex. Cursor is optional. Review-only
 
 Install `jig-review` using the [marketplace instructions](../README.md#install-with-codex). You need Node.js 22 or newer and a Codex host with subagents. External adapters support Linux, macOS, and Windows through WSL.
 
-Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor. These passes consume provider usage. A Codex-only review does not need either external CLI.
+Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`. These passes consume provider usage. A native Codex-only review does not need any external CLI. With `--claude-launcher auto` or `--codex-launcher auto`, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
 
 Enter these prompts in Codex from the repository being reviewed:
 
@@ -29,6 +29,8 @@ Enter these prompts in Codex from the repository being reviewed:
 | Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-effort high` |
 | Select Astra explicitly | `$jig-review:comprehensive-review --reviewers codex --codex-model gpt-6-astra --codex-effort high` |
 | Use a separate Claude profile | `$jig-review:comprehensive-review --claude-config-dir ~/.claude-appleid` |
+| Spread reviewer usage across accounts | `$jig-review:comprehensive-review --claude-launcher auto --codex-launcher auto` |
+| Run Codex as an independent CLI process | `$jig-review:comprehensive-review --reviewers claude,codex --codex-runtime cli` |
 | Exclude one path for this run | `$jig-review:comprehensive-review --scope branch --exclude-path .agent/` |
 | Exclude several paths | `$jig-review:comprehensive-review --exclude-path .agent/ --exclude-path generated/reports/` |
 
@@ -115,6 +117,7 @@ $jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh 
 |---|---|
 | A selected CLI is missing or unauthenticated | Install and authenticate that CLI through its normal setup, or explicitly select available reviewers with `--reviewers`. |
 | Claude uses the wrong account or profile | Pass `--claude-config-dir ~/.claude-profile-name`; verify that directory already contains the intended Claude Code configuration. |
+| One account keeps hitting its usage limit | Pass `--claude-launcher auto` and `--codex-launcher auto`; Jig picks the home with the most headroom per launch. Inspect candidates with `jig claude homes --usage` or `jig codex homes --usage`. Concurrent reviewers may still share a home. |
 | Branch review refuses a dirty checkout | Keep the user's checkout. Add `--include-working-tree` when the requested scope includes branch and local changes, or choose `--scope working-tree` for pending changes only. For committed-only scope, report the conflict; do not create a temporary worktree or stash local work to bypass it. |
 | A large tracked directory overwhelms review evidence | Add a literal `--exclude-path <directory>` for one run, or commit it to the root `.reviewignore` for permanent policy. |
 | Review stops because there is no diff | Select the intended branch/base, or use a repository-capable focused skill for unchanged code. |

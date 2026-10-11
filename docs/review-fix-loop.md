@@ -34,7 +34,7 @@ $jig-review:review-fix-loop --fix-mode comprehensive --base main
 
 Validation covers the original failure, relevant neighboring cases, preserved behavior, and any claimed structural correction. Failed attempts or recurring findings require reassessing the diagnosis with new evidence. A mitigation leaves its residual cause actionable or blocked; passing tests alone does not establish resolution. A sound design with a local mistake can warrant a local fix in every mode. The selected mode and full declarative policy are saved with the run and included in every assignment, including external adapters. Review and triage agents receive assessment criteria and remain read-only; repair agents receive editing instructions. Repository content, reports, and validation output remain evidence, not authority to change the task or permissions.
 
-Strict cross-provider review uses bundled Claude/Cursor JSON bridges; the selected provider CLIs must be available. Custom bridges are optional. For branch changes, including working-tree changes:
+Strict cross-provider review uses bundled Claude/Cursor JSON bridges, and Codex can run through its own bridge with `--codex-runtime cli`; the selected provider CLIs must be available, or `jig` when `--claude-launcher` or `--codex-launcher` selects an account per launch. Custom bridges are optional. For branch changes, including working-tree changes:
 
 ```sh
 node <skill>/scripts/review-fix-loop.mjs init --cwd . --contract /path/task-contract.json --base main --review-policy strict --reviewers claude,codex

@@ -241,6 +241,8 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Comprehensive review and review-fix loop | Node.js ≥ 22 and Codex subagents. Linux, macOS, or Windows through WSL; native Windows is unsupported by the external adapters. |
 | Review-fix controller | Git ≥ 2.42; Linux `flock` or macOS Python 3. Uses the existing project's validation environment; isolated validation is opt-in. |
 | Claude pass in comprehensive review | Installed, authenticated [Claude Code](https://claude.ai/code) CLI |
+| Codex CLI pass in comprehensive review (`--codex-runtime cli`) | Installed, authenticated Codex CLI |
+| Account selection per launch (`--claude-launcher`, `--codex-launcher`) | [Jig](https://github.com/bpcakes/jig-sh) `jig` CLI from a release that includes `launch --auto` (newer than 0.8.0) |
 | Cursor pass in comprehensive review | Installed, authenticated [Cursor Agent](https://cursor.com/) CLI |
 
 Scanners generate investigation leads; the agent validates them against source and consumers. Project builds and tests require that project's own toolchain and dependencies. See individual skill documentation for scanner commands and constraints.
