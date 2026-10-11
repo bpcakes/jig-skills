@@ -429,6 +429,26 @@ test("all-skills --force replaces a differing dependency and installs a usable l
   assertInstalledParser(destination);
 });
 
+test("all-skills --force preserves a differing Herdr dependency and refreshes unrelated skills", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("herdr-orchestrate", "rust-simplify").status, 0);
+  const herdr = path.join(destination, "herdr/SKILL.md");
+  const orchestration = path.join(destination, "herdr-orchestrate/SKILL.md");
+  const rust = path.join(destination, "rust-simplify/SKILL.md");
+  writeFileSync(herdr, "Herdr skill from a different release\n");
+  writeFileSync(orchestration, "preserve existing orchestration\n");
+  writeFileSync(rust, "old unrelated skill\n");
+  const result = install("--force");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /Skipping herdr-orchestrate/);
+  assert.match(result.stderr, /Skipping herdr:/);
+  assert.equal(readFileSync(herdr, "utf8"), "Herdr skill from a different release\n");
+  assert.equal(readFileSync(orchestration, "utf8"), "preserve existing orchestration\n");
+  assert.equal(readFileSync(rust, "utf8"),
+    readFileSync(path.join(repo, "plugins/jig-rust/skills/rust-simplify/SKILL.md"), "utf8"));
+  assertInstalledParser(destination);
+});
+
 test("all-skills --force replaces a customized privacy dependency", t => {
   const { destination, install } = fixture(t);
   assert.equal(install("audit-common").status, 0);

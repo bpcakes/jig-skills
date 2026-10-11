@@ -7,7 +7,7 @@ Usage: scripts/install.sh codex|claude [--force] [--dest directory] [skill-name.
 
 Installs skills from this repository's plugins into the selected agent's skill directory.
 If no skill names are provided, all compatible skills are installed.
-In that mode, without --force, an incompatible dependency skips only its dependents.
+In that mode, an incompatible dependency skips its dependents unless selected for replacement.
 --dest selects the skills directory directly, overriding the agent default.
 --force replaces selected skills. An automatic dependency is never overwritten;
 name the dependency explicitly with --force to replace a differing copy.
@@ -222,7 +222,7 @@ for dependency in review-fix-loop comprehensive-review audit-common herdr; do
             dependency_target="$dependency_target/SKILL.md"
         fi
         if ! diff -qr "$dependency_source" "$dependency_target" >/dev/null 2>&1; then
-            if [ "$install_all" -eq 1 ] && [ "$force" -eq 0 ]; then
+            if [ "$install_all" -eq 1 ] && { [ "$force" -eq 0 ] || [ "$selected_dependency" -ne 1 ]; }; then
                 skipped_dependents="$skipped_dependents$dependents"
                 if [ "$dependency" = "herdr" ]; then
                     skipped_dependents="$skipped_dependents herdr"

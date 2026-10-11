@@ -235,6 +235,8 @@ Replace the example destination with the selected profile's skills directory. Wi
 
 Explicitly selecting `herdr` or `herdr-orchestrate` requires a working local `herdr --skill`; a missing or unusable command fails before any skill copies change. An all-skills installation warns and skips orchestration when that export is unavailable, while continuing with unrelated skills. No network access is needed for the export.
 
+An all-skills installation also preserves a differing existing Herdr skill and skips orchestration, including with `--force`; unrelated selected skills still update. Replace Herdr through an explicit selection when ready to update that dependency.
+
 Matching automatic dependencies are preserved, including with `--force herdr-orchestrate`. Differing dependencies require explicit replacement: use `--force herdr herdr-orchestrate` to replace the Herdr skill and orchestration skill, or `--force herdr herdr-orchestrate review-fix-loop comprehensive-review` to replace all four, with the same destination. For a plugin installation, refresh only the exported Herdr skill with `scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" --force herdr` after a Herdr upgrade.
 
 Before admission, the skill checks the selected skill paths and versions, managed Herdr endpoint, review runtimes and authentication, tracker authority, GitHub access, and required SSH routes. A failed reverse route can require coordinator-mediated transitions; it does not prove the remote worker cannot execute. Setup or upgrades are separate operations, and active runs retain their working versions. These checks establish readiness, not permission for merges or deployment.
