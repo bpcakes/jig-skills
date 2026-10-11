@@ -427,6 +427,29 @@ class EngineTests(unittest.TestCase):
         self.apply("control", control="reopen_admission", evidence=self.proof())
         self.admit("B")
 
+    def test_configure_cannot_protect_or_rebind_an_admitted_checkout(self):
+        hosts = copy.deepcopy(self.config["hosts"])
+        hosts["remote"]["worktree_root"] = str(self.base.parent)
+        self.reset(hosts=hosts)
+        self.admit("B", host="remote", worktree=str(self.repo))
+        reservation = self.reserve("B")
+        self.settle(reservation["reservation_id"], "B")
+        self.apply("park", "B", evidence=self.proof(True))
+        for change in ({"repository_path": str(self.repo)},
+                       {"repository_path": str(self.repo.parent)},
+                       {"repository_path": str(self.repo / "nested")},
+                       {"roles": ["coordinator"]}):
+            with self.subTest(change=change):
+                candidate = copy.deepcopy(hosts)
+                candidate["remote"].update(change)
+                before = Engine.read(self.run)
+                self.assert_error("ownership", self.apply, "configure", fields={"hosts": candidate}, evidence=self.proof())
+                self.assertEqual(Engine.read(self.run), before)
+        # A nonoverlapping declaration remains configurable and work can resume.
+        hosts["remote"]["repository_path"] = str(self.base / "remote-main")
+        self.apply("configure", fields={"hosts": hosts}, evidence=self.proof())
+        self.reserve("B")
+
     def test_cancel_requires_settlement_and_preserves_task_hold(self):
         self.admit()
         reservation = self.reserve()

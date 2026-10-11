@@ -38,6 +38,8 @@ Admission and relocation reject equal, ancestor, or descendant paths overlapping
 
 Set `repository.host` to the registered host that owns `repository.path`. Other hosts may declare their protected main checkout with `hosts.<id>.repository_path`. For existing configurations without `repository.host`, the helper uses the sole host with the `coordinator` role, then a host named `local`, then the sole registered host. If none identifies the owner, it conservatively protects the repository path on every host until the coordinator role is identified. Verify these bindings on the owning hosts before admission.
 
+Changing host bindings rechecks every retained task checkout against the candidate protection and worktree-root settings before saving. Hand off conflicting checkouts first; parking a task alone does not make an overlapping binding valid. Closed tasks retain this protection because they can be reopened.
+
 Install or upgrade as an explicit setup operation under existing authority. Do not upgrade active controllers merely to match version strings. Retain the runtime required to resume each saved review run.
 
 ## Herdr endpoints

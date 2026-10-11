@@ -448,6 +448,8 @@ class Engine:
             for existing in state["tasks"].values():
                 host = existing["host"]
                 require(host in candidate["hosts"], "ownership", "configuration cannot drop an admitted task's host")
+                if "hosts" in fields:
+                    Engine._worktree({**state, "config": candidate}, host, existing["worktree"], excluding=existing["id"])
                 driver = existing["driver"]
                 if driver != "coordinator":
                     binding = candidate.get("actors", {}).get(driver, {})
