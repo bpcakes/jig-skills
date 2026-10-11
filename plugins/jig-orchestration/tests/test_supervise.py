@@ -106,6 +106,71 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result["status"], "delivery_unconfirmed")
         self.assertEqual(Engine.read(self.run)["scheduler"]["pending_action_id"], result["wake_id"])
 
+    def malformed_responses(self):
+        for value in (None, [], "unexpected", 1, True):
+            yield "response", value, value
+            yield "result", value, {"result": value}
+            yield "agent", value, {"result": {"agent": value}}
+            yield "agent_session", value, {
+                "result": self.response(identity={**self.identity, "agent_session": value})}
+
+    def test_malformed_lookup_records_failure_and_can_recover(self):
+        for field, value, response in self.malformed_responses():
+            with self.subTest(field=field, value=value):
+                self.schedule(last_attempt_at=None, next_due_at=None)
+                reply = subprocess.CompletedProcess([], 0, json.dumps(response), "")
+                with patch.object(runtime.subprocess, "run", return_value=reply) as call:
+                    result = runtime.tick(self.run, self.now)
+                self.assertEqual(result["status"], "endpoint_unavailable")
+                self.assertEqual(call.call_count, 1)
+                self.assertEqual(call.call_args.args[0][3:5], ["agent", "get"])
+                self.assertFalse(Engine.read(self.run)["scheduler"].get("pending_action_id"))
+                self.assertEqual(runtime.health(self.run, self.now)["status"], "unhealthy")
+
+                reply.stdout = json.dumps({"result": self.response("working")})
+                with patch.object(runtime.subprocess, "run", return_value=reply):
+                    recovered = runtime.tick(self.run, self.now + timedelta(seconds=60))
+                self.assertEqual(recovered["status"], "busy")
+                self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+
+    def test_malformed_prompt_acknowledgement_preserves_pending_wake(self):
+        for field, value, response in self.malformed_responses():
+            with self.subTest(field=field, value=value):
+                self.schedule(last_attempt_at=None, last_completed_at=None, next_due_at=None)
+                lookup = subprocess.CompletedProcess([], 0, json.dumps({"result": self.response()}), "")
+                acknowledgement = subprocess.CompletedProcess([], 0, json.dumps(response), "")
+                with patch.object(runtime.subprocess, "run", side_effect=[lookup, acknowledgement]) as call:
+                    result = runtime.tick(self.run, self.now)
+                    later = runtime.tick(self.run, self.now + timedelta(hours=2))
+                self.assertEqual(result["status"], "delivery_unconfirmed")
+                self.assertEqual(later["status"], "awaiting_reconciliation")
+                self.assertEqual(later["wake_id"], result["wake_id"])
+                self.assertEqual(later["delivery_status"], "unconfirmed")
+                self.assertEqual(call.call_count, 2)
+                self.assertEqual(call.call_args.args[0][3:6], ["agent", "prompt", "w1:p1"])
+                self.assertEqual(Engine.read(self.run)["scheduler"]["pending_action_id"], result["wake_id"])
+                runtime.complete(self.run, result["wake_id"], self.now + timedelta(hours=2))
+
+    def test_supervisor_continues_after_malformed_endpoint_output(self):
+        replies = [subprocess.CompletedProcess([], 0, "null", ""),
+                   subprocess.CompletedProcess([], 0, json.dumps({"result": self.response("working")}), "")]
+        outcomes = []
+
+        def next_iteration(_):
+            if len(outcomes) == 1:
+                self.schedule(last_attempt_at=None, next_due_at=None)
+            else:
+                self.schedule(enabled=False)
+
+        with patch.object(runtime.subprocess, "run", side_effect=replies) as call, \
+                patch.object(runtime.time, "sleep", side_effect=next_iteration), \
+                patch.object(runtime, "output", side_effect=outcomes.append):
+            result = runtime.supervise(self.run)
+        self.assertEqual([item["status"] for item in outcomes], ["endpoint_unavailable", "busy"])
+        self.assertEqual(result["status"], "scheduler_stopped")
+        self.assertEqual(call.call_count, 2)
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+
     def test_concurrent_scheduler_rebind_cannot_dispatch_old_endpoint(self):
         def change_binding(settings, args):
             self.schedule(enabled=False)

@@ -156,18 +156,24 @@ def herdr_call(settings, args):
         raise RuntimeErrorDetail("herdr_failed", f"Herdr {args[0:2]} failed with exit {result.returncode}; inspect the registered endpoint")
     try:
         response = json.loads(result.stdout)
-        if response.get("error"):
-            raise ValueError("API error")
+        if not isinstance(response, dict) or response.get("error"):
+            raise ValueError("Invalid response or API error")
+        if not isinstance(response["result"], dict):
+            raise ValueError("Invalid result")
         return response["result"]
     except (ValueError, KeyError, TypeError):
         raise RuntimeErrorDetail("invalid_herdr_response", "Herdr did not return a successful structured result") from None
 
 
 def verify_identity(actual, expected):
+    if not isinstance(actual, dict):
+        raise RuntimeErrorDetail("invalid_herdr_response", "Herdr did not return an agent object")
     for field in ("name", "agent", "pane_id", "terminal_id"):
         if actual.get(field) != expected[field]:
             raise RuntimeErrorDetail("identity_mismatch", f"Coordinator {field} changed; rebind explicitly")
     native = actual.get("agent_session") or {}
+    if not isinstance(native, dict):
+        raise RuntimeErrorDetail("invalid_herdr_response", "Herdr did not return a native session object")
     for field in ("agent", "kind", "value"):
         if native.get(field) != expected["agent_session"][field]:
             raise RuntimeErrorDetail("identity_mismatch", "Coordinator native session changed; rebind explicitly")
