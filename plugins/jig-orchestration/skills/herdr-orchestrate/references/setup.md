@@ -34,6 +34,8 @@ Check actual skill paths/content versions, executable paths and versions, select
 
 Record canonical checkout/worktree-root paths verified on the host that owns them, including symlink resolution. The helper normalizes lexical POSIX aliases such as a trailing `/.`; it cannot resolve remote symlinks on the coordinator. Check that each physical checkout has one writer and is outside protected main working trees before admission or handoff.
 
+Admission and relocation reject equal, ancestor, or descendant paths overlapping the protected repository or another task's checkout on the same host. Similar path prefixes are allowed when they are separate directories; identical paths on different hosts are separate locations. These lexical checks do not replace host-side symlink and physical-checkout verification.
+
 Install or upgrade as an explicit setup operation under existing authority. Do not upgrade active controllers merely to match version strings. Retain the runtime required to resume each saved review run.
 
 ## Herdr endpoints

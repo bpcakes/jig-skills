@@ -177,6 +177,7 @@ class Engine:
         "last_completed_action_id", "wake_requested_at", "wake_reason",
         "last_alert", "busy_since_at", "last_dispatched_action_id", "last_dispatched_at",
         "last_delivered_action_id",
+        "last_completed_wake_id",
     }
 
     @staticmethod
@@ -391,6 +392,18 @@ class Engine:
         task["parked"] = False
 
     @staticmethod
+    def _worktree(state, host, value, excluding=None):
+        worktree = Path(host_path(value))
+        root = Path(state["config"]["hosts"][host]["worktree_root"])
+        require(root in worktree.parents, "location", "worktree must be a child of the registered worktree root")
+        protected = [Path(state["config"]["repository"]["path"])]
+        protected.extend(Path(t["worktree"]) for t in state["tasks"].values()
+                         if t["host"] == host and t["id"] != excluding)
+        require(not any(worktree == path or worktree in path.parents or path in worktree.parents
+                        for path in protected), "ownership", "checkout overlaps a protected or owned checkout")
+        return str(worktree)
+
+    @staticmethod
     def _transition(state, req, caller, task, run_dir):
         op = req["op"]
         config = state["config"]
@@ -512,13 +525,7 @@ class Engine:
                     "wip", "unfinished-task cap reached")
             host = req.get("host")
             require(host in config["hosts"], "invalid", "unregistered host")
-            worktree = host_path(req.get("worktree", ""))
-            root = Path(config["hosts"][host]["worktree_root"])
-            require(nonempty(worktree) and Path(worktree).is_absolute() and ".." not in Path(worktree).parts
-                    and root in Path(worktree).parents, "location", "worktree must be a child of the registered worktree root")
-            require(worktree != config["repository"]["path"]
-                    and all(host_path(t["worktree"]) != worktree or t["host"] != host for t in state["tasks"].values()),
-                    "ownership", "checkout is protected or already owned")
+            worktree = Engine._worktree(state, host, req.get("worktree", ""))
             claim = req.get("claim", {})
             evidence(claim)
             require(claim.get("authority") == config["tracker"]["authority"]
@@ -659,14 +666,8 @@ class Engine:
             require(source.get("published") is True and nonempty(source.get("revision")),
                     "evidence", "handoff requires the verified published source revision")
             host, driver = req.get("host"), req.get("driver")
-            worktree = host_path(req.get("worktree", ""))
             require(host in config["hosts"], "identity", "handoff host is not registered")
-            root = Path(config["hosts"][host]["worktree_root"])
-            require(nonempty(worktree) and Path(worktree).is_absolute() and ".." not in Path(worktree).parts
-                    and root in Path(worktree).parents and worktree != config["repository"]["path"],
-                    "location", "handoff needs an allowed isolated worktree")
-            require(not any(other["id"] != task["id"] and other["host"] == host and host_path(other["worktree"]) == worktree
-                            for other in state["tasks"].values()), "ownership", "handoff checkout is already owned")
+            worktree = Engine._worktree(state, host, req.get("worktree", ""), excluding=task["id"])
             if driver != "coordinator":
                 actor = config.get("actors", {}).get(driver, {})
                 require(actor.get("host") == host and task["id"] in actor.get("task_ids", []),
@@ -887,6 +888,8 @@ class Engine:
                 old = state["tasks"][current["owner"]]
                 require(not old["reservations"] and not old["pending_intent"], "unsettled", "prior staging owner has outstanding work")
             if new_owner is not None:
+                if current["owner"] is not None:
+                    Engine._active(state, old, "deploy")
                 successor = state["tasks"][new_owner]
                 Engine._active(state, successor, "deploy")
                 if caller != "coordinator":

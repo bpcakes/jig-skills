@@ -217,10 +217,15 @@ def tick(run_dir, now=None):
                 raise RuntimeErrorDetail("coordinator_" + str(status),
                     f"Coordinator at {settings['session']}/{settings['agent']['pane_id']} is {status}; inspect its original pane")
         except (RuntimeErrorDetail, OSError, subprocess.TimeoutExpired, KeyError, TypeError) as exc:
-            failure = {"id": "endpoint-" + str(getattr(exc, "code", type(exc).__name__)),
-                       "at": timestamp(now), "reason": str(exc)}
-            scheduler_patch(run_dir, lambda _: {"failure": failure})
-            return {"status": "endpoint_unavailable", "failure": failure}
+            code = str(getattr(exc, "code", type(exc).__name__))
+            def failed(current):
+                previous = current["scheduler"].get("failure") or {}
+                continuing = previous.get("code") == code or previous.get("id") == "endpoint-" + code
+                return {"failure": {"id": previous["id"] if continuing else "endpoint-" + uuid.uuid4().hex,
+                                    "code": code, "at": previous["at"] if continuing else timestamp(now),
+                                    "reason": str(exc)}}
+            recorded = scheduler_patch(run_dir, failed)
+            return {"status": "endpoint_unavailable", "failure": recorded["scheduler"]["failure"]}
 
         wake_id = "wake-" + uuid.uuid4().hex
         def prepare(current):
@@ -286,7 +291,8 @@ def complete(run_dir, wake_id, now=None):
     now = now or datetime.now(timezone.utc)
     def finish(current):
         schedule = current["scheduler"]
-        if schedule.get("last_completed_action_id") == wake_id:
+        if (schedule.get("last_completed_action_id") == wake_id
+                or wake_id != "manual" and schedule.get("last_completed_wake_id") == wake_id):
             return None
         pending = schedule.get("pending_action_id")
         if wake_id != "manual" and pending != wake_id:
@@ -295,6 +301,7 @@ def complete(run_dir, wake_id, now=None):
         interval = max(settings["cadence_seconds"], settings["minimum_cadence_seconds"])
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
                 "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
+                "last_completed_wake_id": pending or schedule.get("last_completed_wake_id"),
                 "next_due_at": timestamp(now + timedelta(seconds=interval)),
                 "wake_requested_at": None, "wake_reason": None, "failure": None, "busy_since_at": None}
     state = scheduler_patch(run_dir, finish)

@@ -185,6 +185,32 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(current["config"]["hosts"]["local"]["worktree_root"], str(self.base))
         self.assert_error("ownership", self.admit, worktree=str(self.repo) + "/.")
 
+    def test_admission_and_handoff_reject_overlapping_checkouts_on_the_same_host(self):
+        hosts = copy.deepcopy(self.config["hosts"])
+        for host in hosts.values():
+            host["worktree_root"] = str(self.base.parent)
+        self.reset(hosts=hosts)
+        owned = self.base / "owned" / "A"
+        self.admit("A", worktree=str(owned))
+        self.admit("B", host="remote", worktree=str(self.base / "away"))
+        target = {"host": "local", "driver": "coordinator", "branch": "task/B",
+                  "identity": {"agent_id": "replacement"}, "evidence": self.proof(True),
+                  "source": {**self.proof(), "published": True, "revision": "H1"}}
+        for path in (str(self.repo), str(self.repo / "nested"), str(self.base),
+                     str(owned), str(owned / "child"), str(owned.parent),
+                     str(owned / "unused" / ".." / "child")):
+            with self.subTest(path=path):
+                before = Engine.read(self.run)
+                self.assert_error("ownership", self.admit, "C", worktree=path)
+                self.assertEqual(Engine.read(self.run), before)
+                self.assert_error("ownership", self.apply, "handoff", "B", worktree=path, **target)
+                self.assertEqual(Engine.read(self.run), before)
+        sibling = str(owned) + "-sibling"
+        self.apply("handoff", "B", worktree=sibling, **target)
+        self.assertEqual(Engine.read(self.run)["tasks"]["B"]["worktree"], sibling)
+        self.admit("C", host="remote", worktree=str(owned))
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["worktree"], str(owned))
+
     def test_pre_admission_claim_uncertainty_cannot_admit_or_repeat(self):
         intent = self.apply("claim_intent", "A", target={"authority": "canonical-ref", "owner": "tracker-actor"},
                             evidence=self.proof())
@@ -527,6 +553,39 @@ class EngineTests(unittest.TestCase):
         self.apply("control", control="pause")
         self.apply("staging", "A", expected_owner="A", expected_generation=1, to_task=None, evidence=self.proof(True))
         self.assertIsNone(Engine.read(self.run)["staging"]["owner"])
+
+    def test_staging_handoff_checks_both_tasks_controls_but_cleanup_release_remains_available(self):
+        for caller in ("coordinator", "worker-a"):
+            for affected in ("A", "B"):
+                for control, actions in (("pause", None), ("cancel", None), ("hold", ["*"]), ("hold", ["deploy"])):
+                    with self.subTest(caller=caller, affected=affected, control=control, actions=actions):
+                        self.reset()
+                        self.admit("A")
+                        self.admit("B")
+                        self.apply("staging", "A", expected_owner=None, expected_generation=0, to_task="A",
+                                   purpose="acceptance", release_condition="cleanup", evidence=self.proof())
+                        fields = {"hold_id": "hold", "reason": "retain staging", "actions": actions} if actions else {}
+                        self.apply("control", affected, control=control, **fields)
+                        self.apply("delegate", "A", executor="worker-a", actions=["deploy"])
+                        before = Engine.read(self.run)
+                        self.assert_error("held" if actions else "paused", self.apply, "staging", "A", caller=caller,
+                                          expected_owner="A", expected_generation=1, to_task="B", purpose="acceptance",
+                                          release_condition="cleanup", evidence=self.proof(True))
+                        self.assertEqual(Engine.read(self.run), before)
+                        self.apply("staging", "A", caller=caller, expected_owner="A", expected_generation=1,
+                                   to_task=None, evidence=self.proof(True))
+                        self.assertIsNone(Engine.read(self.run)["staging"]["owner"])
+                        self.assertEqual(Engine.read(self.run)["staging"]["generation"], 2)
+        self.reset()
+        self.admit("A")
+        self.admit("B")
+        self.apply("staging", "A", expected_owner=None, expected_generation=0, to_task="A",
+                   purpose="acceptance", release_condition="cleanup", evidence=self.proof())
+        self.apply("control", "A", control="hold", hold_id="merge", reason="review", actions=["merge"])
+        self.apply("delegate", "A", executor="worker-a", actions=["deploy"])
+        self.apply("staging", "A", caller="worker-a", expected_owner="A", expected_generation=1, to_task="B",
+                   purpose="acceptance", release_condition="cleanup", evidence=self.proof(True))
+        self.assertEqual(Engine.read(self.run)["staging"]["owner"], "B")
 
     def test_deployment_requires_owned_environment_and_current_staging_generation(self):
         self.admit("A")

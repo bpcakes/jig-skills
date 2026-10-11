@@ -24,9 +24,13 @@ Ticks wake the coordinator for a bounded reconciliation; they do not meter all t
 
 After a full reconciliation, record its wake completion. A full manual check can consume a pending catch-up and reset the next eligible check. A short status reply cannot. Coalesce missed ticks into one catch-up. Promise another automatic check only after the scheduler is observed running; delivery evidence is stronger than an intended due time.
 
+A full manual check records the pending wake it consumed separately from the manual completion ID. A late completion for that most recently consumed wake is a no-op, preserving the manual check's evidence and cadence even if another wake is now pending. Unknown wake IDs still fail; only completing the pending wake can consume it.
+
 An independently configured host timer may call the state-only `wake` or `health` command; neither controls Herdr. With an authorized notification argv/destination, the health check reports overdue heartbeat/delivery or recorded scheduler failure and deduplicates unchanged alerts. A scheduler stop suppresses expected-inactivity alerts; a work pause/cancellation does not. Blocker alerts likewise require an authorized destination and a new actionable change.
 
 Only proved notifier non-start (missing executable or permission denial) is automatically retryable: repair the executable, then the next health call after 60 seconds retries, with at most three total attempts for the same failure. An exhausted budget requires inspection. A nonzero exit may follow an emitted notice; like a timeout or lost acknowledgement, it remains deduplicated and must be inspected before any manual resend. Delivery acknowledgements arriving after a completed coordinator pass retain separate delivery evidence without reopening that pass.
+
+Repeated endpoint failures with the same cause retain one incident ID and alert budget until recovery is observed. A later failure starts a new incident even if the health timer never polled during the healthy interval. Continuous failure does not generate a new notice on every tick.
 
 Busy skips remain valid until `busy_timeout_seconds` elapses (default: three effective check intervals). Beyond that, health reports a stable busy-timeout alert even while the scheduler heartbeat remains current. Configure a longer interval for expected long work; the alert does not cancel or replace the active coordinator. A full reconciliation or a new dispatched wake resets the busy interval.
 
@@ -35,6 +39,8 @@ The independent health invocation must actually be installed/configured under sc
 ## Shared staging
 
 Use one helper-owned record with owner, generation, purpose, deployed revision/configuration, release condition, and evidence references. Grant/release/handoff checks expected owner/generation, current authority and holds, and settlement/cleanup evidence. All participating actors must use this authority; existing environment ownership tooling needs one verified binding instead of competing grants.
+
+A grant to a non-null successor checks both the outgoing and incoming tasks' pause, cancellation, and deployment holds, including for coordinator requests. A settlement-only release to no owner remains available during pause/cancellation or holds after owned work settles; it grants no successor authority.
 
 Acquire the grant before a deployment intent and include its current generation in the managed staging target. The helper rejects deployment by another owner or with a stale generation. This v1 binding covers one shared staging resource; it does not silently permit an unmanaged destination.
 

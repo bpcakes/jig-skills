@@ -339,6 +339,32 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(schedule["last_completed_action_id"].startswith("manual-"))
         self.assertEqual(schedule["delivery_status"], "completed")
         self.assertIsNone(schedule["pending_action_id"])
+        before = Engine.read(self.run)
+        runtime.complete(self.run, wake, self.now + timedelta(seconds=2))
+        self.assertEqual(Engine.read(self.run), before)
+
+    def test_consumed_wake_completion_preserves_later_manual_pass_and_new_pending_wake(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            first = runtime.tick(self.run, self.now)["wake_id"]
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=1))
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=2))
+        before = Engine.read(self.run)
+        runtime.complete(self.run, first, self.now + timedelta(seconds=3))
+        self.assertEqual(Engine.read(self.run), before)
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            second = runtime.tick(self.run, self.now + timedelta(seconds=62))["wake_id"]
+        before = Engine.read(self.run)
+        runtime.complete(self.run, first, self.now + timedelta(seconds=63))
+        self.assertEqual(Engine.read(self.run), before)
+        with self.assertRaises(runtime.RuntimeErrorDetail) as error:
+            runtime.complete(self.run, "unknown", self.now + timedelta(seconds=63))
+        self.assertEqual(error.exception.code, "wrong_wake")
+        self.assertEqual(Engine.read(self.run), before)
+        runtime.complete(self.run, second, self.now + timedelta(seconds=64))
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(schedule["pending_action_id"])
+        self.assertEqual(schedule["last_completed_wake_id"], second)
+        self.assertEqual(schedule["last_completed_action_id"], second)
 
     def test_late_delivery_ack_cannot_replace_a_newer_wake_or_timestamp(self):
         later = self.now + timedelta(seconds=60)
@@ -390,6 +416,35 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(second["alert"], "already_attempted")
         self.assertEqual(call.call_count, 1)
         self.assertEqual(Engine.read(other)["scheduler"]["last_alert"]["status"], "transport_accepted")
+
+    def test_endpoint_alert_deduplicates_one_incident_and_recovers_between_health_polls(self):
+        notifier = self.root / "notifier"
+        notices = self.root / "notices"
+        notifier.write_text('#!/bin/sh\ncat >> "' + str(notices) + '"\n')
+        notifier.chmod(0o755)
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        def tick(status, seconds):
+            with patch.object(runtime, "herdr_call", return_value=self.response(status)):
+                return runtime.tick(self.run, self.now + timedelta(seconds=seconds))
+        first = tick("blocked", 0)["failure"]
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_accepted")
+        repeated = tick("blocked", 60)["failure"]
+        self.assertEqual(repeated["id"], first["id"])
+        self.assertEqual(repeated["at"], first["at"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")
+        self.assertEqual(tick("working", 120)["status"], "busy")
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+        second = tick("blocked", 180)["failure"]
+        self.assertNotEqual(second["id"], first["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=180))["alert"], "transport_accepted")
+        wake = tick("idle", 240)["wake_id"]
+        runtime.complete(self.run, wake, self.now + timedelta(seconds=241))
+        third = tick("blocked", 301)["failure"]
+        self.assertNotIn(third["id"], (first["id"], second["id"]))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=301))["alert"], "transport_accepted")
+        received = [json.loads(line)["failure"]["id"] for line in notices.read_text().splitlines()]
+        self.assertEqual(received, [first["id"], second["id"], third["id"]])
 
     def test_health_notifier_nonstart_retries_after_repair_with_backoff(self):
         notifier = self.root / "notifier"
