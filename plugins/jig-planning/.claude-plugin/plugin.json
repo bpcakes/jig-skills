@@ -1,6 +1,6 @@
 {
   "name": "jig-planning",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Evidence-backed implementation planning and scope reduction for existing epics and plans.",
   "author": {
     "name": "Jig"
