@@ -177,7 +177,7 @@ class Engine:
         "last_completed_action_id", "wake_requested_at", "wake_reason",
         "last_alert", "busy_since_at", "last_dispatched_action_id", "last_dispatched_at",
         "last_delivered_action_id",
-        "last_completed_wake_id",
+        "last_completed_wake_id", "health_alerts",
     }
 
     @staticmethod
@@ -340,6 +340,9 @@ class Engine:
     @staticmethod
     def _active(state, task, kind, launching=False, allow_closed=False, reconciling=False):
         require(allow_closed or task["phase"] != "closed", "closed", "task is closed")
+        if launching and state["controls"]["admission"] == "finish_current":
+            require(task["id"] in state["controls"]["frozen_tasks"],
+                    "admission", "new work must belong to the frozen unfinished batch")
         if not reconciling:
             require(not state["controls"]["paused"] and not task["paused"], "paused", "new work is paused")
             require(not state["controls"]["cancel_requested"] and not task["cancel_requested"],
@@ -560,7 +563,9 @@ class Engine:
             if control == "finish_current":
                 require(task is None, "invalid", "finish_current is a run admission policy")
                 target["admission"] = "finish_current"
-                target["frozen_tasks"] = [t["id"] for t in state["tasks"].values() if t["phase"] != "closed"]
+                target["frozen_tasks"] = [t["id"] for t in state["tasks"].values()
+                                          if t["phase"] != "closed"
+                                          or (t["pending_intent"] or {}).get("kind") == "reopen"]
             elif control == "reopen_admission":
                 require(task is None, "invalid", "reopen_admission is a run admission policy")
                 evidence(req.get("evidence"))
@@ -602,6 +607,9 @@ class Engine:
                     require(type(value) is bool, "invalid", "scheduler.enabled must be boolean")
                 elif field in {"failure", "last_alert"}:
                     require(value is None or isinstance(value, dict), "invalid", "scheduler failure/alert must be an object or null")
+                elif field == "health_alerts":
+                    require(isinstance(value, dict) and all(nonempty(key) and isinstance(alert, dict)
+                            for key, alert in value.items()), "invalid", "health alerts must map incident IDs to receipts")
                 else:
                     require(value is None or isinstance(value, str), "invalid", "scheduler reference/status must be a string or null")
             if "enabled" in changes:
@@ -713,9 +721,6 @@ class Engine:
                     task.setdefault("closure_history", []).append(task.pop("closure"))
                     task["phase"] = "admitted"
                     task["acceptance"] = None
-                    if state["controls"]["admission"] == "finish_current":
-                        if task["id"] not in state["controls"]["frozen_tasks"]:
-                            state["controls"]["frozen_tasks"].append(task["id"])
                 task["last_outcome"] = {**pending, "status": status, "receipt": receipt}
                 task["pending_intent"] = None
             return {"reopen_outcome": status}
@@ -817,6 +822,8 @@ class Engine:
                 require(all(r["kind"] == "merge" for r in task["reservations"].values()),
                         "unsettled", "settle source and review executions before merging")
                 Engine._merge_gate(state, task, req)
+            if kind == "close":
+                Engine._close_gate(state, task, req)
             if kind == "deploy":
                 require(req["target"].get("environment") == "shared-staging", "identity",
                         "v1 deployment target must name the managed shared-staging environment")
@@ -904,6 +911,20 @@ class Engine:
                                 "evidence": req["evidence"]}
             return {"staging": state["staging"]}
         raise StateError("invalid", "unknown operation")
+
+    @staticmethod
+    def _close_gate(state, task, req):
+        target, proof = req["target"], req["evidence"]
+        require(target.get("authority") == state["config"]["tracker"]["authority"]
+                and target.get("task_id") == task["id"] and target.get("owner") == task["claim"]["owner"],
+                "identity", "closure target must name the canonical task, authority and current owner")
+        require(all(key == req.get("reservation_id") and reservation["kind"] == "close"
+                    for key, reservation in task["reservations"].items())
+                and state["staging"]["owner"] != task["id"],
+                "unsettled", "settle other executions and release staging before authorizing closure")
+        evidence(proof, settled=True)
+        require(proof.get("criteria_met") is True and nonempty(proof.get("acceptance_ref")),
+                "closure", "closure authorization requires completed acceptance evidence")
 
     @staticmethod
     def _merge_gate(state, task, req):

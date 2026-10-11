@@ -640,6 +640,88 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(task["closure_history"], [receipt])
         self.assertEqual(task["phase"], "admitted")
 
+    def test_finish_current_rejects_reopening_a_previously_closed_task(self):
+        self.admit("A")
+        self.admit("B")
+        receipt = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor",
+                   "status": "closed", "criteria_met": True, "acceptance_ref": "/proof", "unpublished": False}
+        self.apply("close", "A", receipt=receipt)
+        self.apply("control", control="finish_current")
+        before = Engine.read(self.run)
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        self.assert_error("admission", self.apply, "reopen_intent", "A", target=target, evidence=self.proof())
+        self.assertEqual(Engine.read(self.run), before)
+        self.assertEqual(before["controls"]["frozen_tasks"], ["B"])
+        self.apply("control", control="reopen_admission", evidence=self.proof())
+        intent = self.apply("reopen_intent", "A", target=target, evidence=self.proof())
+        self.apply("reopen_outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded",
+                   receipt={**receipt, "status": "open"})
+        self.reserve("A", kind="repair")
+
+    def test_finish_current_preserves_member_reopening_and_already_issued_reopens(self):
+        for pending_at_freeze in (False, True):
+            with self.subTest(pending_at_freeze=pending_at_freeze):
+                self.reset()
+                self.admit()
+                receipt = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor",
+                           "status": "closed", "criteria_met": True, "acceptance_ref": "/proof", "unpublished": False}
+                target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+                if not pending_at_freeze:
+                    self.apply("control", control="finish_current")
+                self.apply("close", "A", receipt=receipt)
+                intent = self.apply("reopen_intent", "A", target=target, evidence=self.proof())
+                if pending_at_freeze:
+                    self.apply("control", control="finish_current")
+                self.assertEqual(Engine.read(self.run)["controls"]["frozen_tasks"], ["A"])
+                self.apply("reopen_outcome", "A", intent_id=intent["action_id"], target=target,
+                           status="unknown", receipt=self.proof())
+                self.apply("control", control="pause")
+                self.apply("reopen_outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded",
+                           receipt={**receipt, "status": "open"})
+                self.assertEqual(Engine.read(self.run)["controls"]["frozen_tasks"], ["A"])
+                self.apply("control", control="resume")
+                self.reserve(kind="repair")
+
+    def test_delegated_closure_intent_binds_target_and_completion_before_authorization(self):
+        self.admit()
+        reservation = self.reserve(kind="close")
+        self.apply("delegate", "A", executor="worker-a", actions=["close"])
+        target = {"authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor"}
+        proof = {**self.proof(True), "criteria_met": True, "acceptance_ref": "/proof"}
+        def authorize(target=target, proof=proof):
+            return self.apply("intent", "A", caller="worker-a", kind="close",
+                              reservation_id=reservation["reservation_id"], target=target, evidence=proof)
+        before = Engine.read(self.run)
+        for field, bad in (("authority", "foreign-store"), ("task_id", "OUTSIDE-SCOPE"), ("owner", "other-owner")):
+            with self.subTest(field=field):
+                self.assert_error("identity", authorize, target={**target, field: bad})
+                self.assert_error("identity", authorize, target={key: value for key, value in target.items() if key != field})
+                self.assertEqual(Engine.read(self.run), before)
+        for field, code in (("criteria_met", "closure"), ("acceptance_ref", "closure"), ("all_jobs_settled", "unsettled")):
+            with self.subTest(field=field):
+                self.assert_error(code, authorize, proof={key: value for key, value in proof.items() if key != field})
+                self.assertEqual(Engine.read(self.run), before)
+        intent = authorize()
+        receipt = {**proof, **target, "status": "closed", "unpublished": False}
+        self.apply("outcome", "A", caller="worker-a", intent_id=intent["action_id"], target=target,
+                   status="succeeded", receipt=receipt)
+        self.settle(reservation["reservation_id"])
+        self.apply("close", "A", receipt=receipt)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "closed")
+
+    def test_closure_intent_requires_settled_execution_and_released_staging(self):
+        self.admit()
+        work = self.reserve(kind="implement")
+        target = {"authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor"}
+        proof = {**self.proof(True), "criteria_met": True, "acceptance_ref": "/proof"}
+        self.assert_error("unsettled", self.apply, "intent", "A", kind="close", target=target, evidence=proof)
+        self.settle(work["reservation_id"])
+        self.apply("staging", "A", expected_owner=None, expected_generation=0, to_task="A",
+                   purpose="acceptance", release_condition="cleanup", evidence=self.proof())
+        self.assert_error("unsettled", self.apply, "intent", "A", kind="close", target=target, evidence=proof)
+        self.apply("staging", "A", expected_owner="A", expected_generation=1, to_task=None, evidence=self.proof(True))
+        self.apply("intent", "A", kind="close", target=target, evidence=proof)
+
     def test_relocation_requires_settlement_and_preserves_exact_prior_evidence(self):
         self.admit()
         refs = {"controller_id": "old-controller", "run_id": "old-run"}
@@ -779,9 +861,9 @@ class EngineTests(unittest.TestCase):
         for task_id, control in (("A", "pause"), ("B", "cancel")):
             self.admit(task_id)
             reservation = self.reserve(task_id, kind="close")
-            target = {"authority": "canonical-ref", "task_id": task_id}
+            target = {"authority": "canonical-ref", "task_id": task_id, "owner": "tracker-actor"}
             intent = self.apply("intent", task_id, kind="close", reservation_id=reservation["reservation_id"],
-                                target=target, evidence=self.proof())
+                                target=target, evidence={**self.proof(True), "criteria_met": True, "acceptance_ref": "/proof"})
             self.apply("control", control=control)
             receipt = {**self.proof(), "authority": "canonical-ref", "task_id": task_id, "owner": "tracker-actor",
                        "status": "closed", "criteria_met": True, "acceptance_ref": "/proof", "unpublished": False}

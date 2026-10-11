@@ -446,6 +446,117 @@ class RuntimeTests(unittest.TestCase):
         received = [json.loads(line)["failure"]["id"] for line in notices.read_text().splitlines()]
         self.assertEqual(received, [first["id"], second["id"], third["id"]])
 
+    def test_endpoint_alert_history_survives_an_interleaved_heartbeat_incident(self):
+        notices = self.root / "notices"
+        notifier = [sys.executable, "-c", 'import sys; open(sys.argv[1], "a").write(sys.stdin.read())', str(notices)]
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": notifier,
+                                  "notification_authorized": True})
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            first = runtime.tick(self.run, self.now)["failure"]
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_accepted")
+            overdue = runtime.health(self.run, self.now + timedelta(seconds=121))
+            self.assertEqual(overdue["alert"], "transport_accepted")
+            self.assertTrue(overdue["failure"]["id"].startswith("heartbeat-"))
+            repeated = runtime.tick(self.run, self.now + timedelta(seconds=122))["failure"]
+        self.assertEqual(first["id"], repeated["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=122))["alert"], "already_attempted")
+        self.assertEqual([json.loads(line)["failure"]["id"] for line in notices.read_text().splitlines()],
+                         [first["id"], overdue["failure"]["id"]])
+        with patch.object(runtime, "herdr_call", return_value=self.response("working")):
+            runtime.tick(self.run, self.now + timedelta(seconds=182))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=182))["status"], "healthy")
+        self.assertEqual(Engine.read(self.run)["scheduler"]["health_alerts"], {})
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            recurrence = runtime.tick(self.run, self.now + timedelta(seconds=242))["failure"]
+        self.assertNotEqual(recurrence["id"], first["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=242))["alert"], "transport_accepted")
+
+    def test_health_claim_rechecks_stop_revocation_rebinding_and_recovery(self):
+        for change in ("stop", "revoke", "rebind", "recover"):
+            with self.subTest(change=change):
+                self.run = self.root / change
+                Engine.initialize(self.run, self.config)
+                old_notice, new_notice = self.root / (change + "-old"), self.root / (change + "-new")
+                program = 'import sys; open(sys.argv[1], "a").write(sys.stdin.read())'
+                settings = {**self.config["scheduler"], "notifier_argv": [sys.executable, "-c", program, str(old_notice)],
+                            "notification_authorized": True}
+                self.configure_scheduler(settings)
+                real_apply = Engine.apply
+                changed = False
+                def intervene(run_dir, request, caller="coordinator"):
+                    nonlocal changed
+                    if not changed and request.get("fields", {}).get("last_alert", {}).get("status") == "dispatching":
+                        changed = True
+                        if change == "stop":
+                            self.schedule(enabled=False)
+                        elif change == "revoke":
+                            self.configure_scheduler({**settings, "notifier_argv": None, "notification_authorized": False})
+                        elif change == "rebind":
+                            self.configure_scheduler({**settings, "notifier_argv": [sys.executable, "-c", program, str(new_notice)]})
+                        else:
+                            self.schedule(heartbeat_at=runtime.timestamp(self.now))
+                    return real_apply(run_dir, request, caller)
+                with patch.object(Engine, "apply", side_effect=intervene):
+                    result = runtime.health(self.run, self.now)
+                self.assertTrue(changed)
+                self.assertFalse(old_notice.exists())
+                if change == "rebind":
+                    self.assertEqual(result["alert"], "transport_accepted")
+                    self.assertEqual(json.loads(new_notice.read_text())["failure"]["id"], result["failure"]["id"])
+                    self.assertEqual(runtime.health(self.run, self.now)["alert"], "already_attempted")
+                elif change == "stop":
+                    self.assertEqual(result["alert"], "suppressed")
+                elif change == "revoke":
+                    self.assertEqual(result["alert"], "local_evidence_only")
+                else:
+                    self.assertEqual(result["status"], "healthy")
+
+    def test_health_reconciles_notification_already_claimed_before_stop(self):
+        notices = self.root / "notices"
+        settings = {**self.config["scheduler"], "notification_authorized": True,
+                    "notifier_argv": [sys.executable, "-c", 'import sys; open(sys.argv[1], "a").write(sys.stdin.read())', str(notices)]}
+        self.configure_scheduler(settings)
+        real_apply = Engine.apply
+        stopped = False
+        def stop_after_claim(run_dir, request, caller="coordinator"):
+            nonlocal stopped
+            result = real_apply(run_dir, request, caller)
+            if not stopped and request.get("fields", {}).get("last_alert", {}).get("status") == "dispatching":
+                stopped = True
+                self.schedule(enabled=False)
+            return result
+        with patch.object(Engine, "apply", side_effect=stop_after_claim):
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_accepted")
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "suppressed")
+        self.schedule(enabled=True)
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "already_attempted")
+        self.assertEqual(len(notices.read_text().splitlines()), 1)
+
+    def test_health_imports_legacy_notification_evidence_without_replaying(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        self.schedule(alerted_failure_id="heartbeat-None", last_alert={"failure_id": "heartbeat-None",
+                      "status": "dispatching", "attempts": 1, "at": runtime.timestamp(self.now)})
+        with patch.object(runtime.subprocess, "run") as notify:
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "already_attempted")
+        notify.assert_not_called()
+        self.assertEqual(Engine.read(self.run)["scheduler"]["health_alerts"]["heartbeat-None"]["status"], "dispatching")
+
+    def test_interleaved_incident_preserves_not_started_retry_count(self):
+        notifier = self.root / "missing-notifier"
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            runtime.tick(self.run, self.now)
+            first = runtime.health(self.run, self.now)
+            self.assertEqual(first["receipt"]["attempts"], 1)
+            runtime.health(self.run, self.now + timedelta(seconds=121))
+            runtime.tick(self.run, self.now + timedelta(seconds=122))
+        retried = runtime.health(self.run, self.now + timedelta(seconds=122))
+        self.assertEqual(retried["failure"]["id"], first["failure"]["id"])
+        self.assertEqual(retried["receipt"]["attempts"], 2)
+        self.assertEqual(retried["alert"], "not_started")
+
     def test_manual_completion_preserves_endpoint_incident_and_notification_history(self):
         for legacy in (False, True):
             with self.subTest(legacy=legacy):
@@ -537,7 +648,9 @@ class RuntimeTests(unittest.TestCase):
         first = delivered.read_bytes()
         self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")
         self.assertEqual(delivered.read_bytes(), first)
-        self.schedule(alerted_failure_id=None)
+        self.schedule(heartbeat_at=runtime.timestamp(self.now))
+        self.assertEqual(runtime.health(self.run, self.now)["status"], "healthy")
+        self.schedule(heartbeat_at=None)
         with patch.object(runtime.subprocess, "run", side_effect=subprocess.TimeoutExpired("notifier", 20)) as call:
             self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_unconfirmed")
             self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")

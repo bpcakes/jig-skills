@@ -320,50 +320,86 @@ def complete(run_dir, wake_id, now=None):
             "next_due_at": state["scheduler"].get("next_due_at")}
 
 
+def health_failures(schedule, settings, now):
+    """Return active incidents in reporting order, including temporarily hidden ones."""
+    failures = []
+    heartbeat = parse_time(schedule.get("heartbeat_at"))
+    if not heartbeat or now > heartbeat + timedelta(seconds=max(90, settings["cadence_seconds"] * 2)):
+        failures.append({"id": "heartbeat-" + str(schedule.get("heartbeat_at")),
+                         "reason": "Scheduler heartbeat missing or overdue"})
+    if schedule.get("failure"):
+        failures.append(schedule["failure"])
+    attempted = parse_time(schedule.get("last_attempt_at"))
+    if schedule.get("pending_action_id") and attempted and now > attempted + timedelta(seconds=settings["cadence_seconds"] * 2):
+        failures.append({"id": "pending-" + schedule["pending_action_id"],
+                         "reason": "Wake remains unresolved; inspect coordinator execution"})
+    busy_since = parse_time(schedule.get("busy_since_at"))
+    if busy_since and now >= busy_since + timedelta(seconds=settings["busy_timeout_seconds"]):
+        failures.append({"id": "busy-" + schedule["busy_since_at"],
+                         "reason": "Coordinator remains busy beyond the supervision timeout; inspect its registered execution"})
+    return failures
+
+
 def health(run_dir, now=None):
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "health.lock"):
-        state = Engine.read(run_dir)
-        settings = scheduler_config(state["config"], state["scheduler"])
-        if not enabled(state, settings):
-            return {"status": "scheduler_stopped", "alert": "suppressed"}
-        schedule = state["scheduler"]
-        heartbeat = parse_time(schedule.get("heartbeat_at"))
-        failure = schedule.get("failure")
-        if not heartbeat or now > heartbeat + timedelta(seconds=max(90, settings["cadence_seconds"] * 2)):
-            failure = {"id": "heartbeat-" + str(schedule.get("heartbeat_at")),
-                       "reason": "Scheduler heartbeat missing or overdue"}
-        # A live process that never completes/delivers must also be observable.
-        attempted = parse_time(schedule.get("last_attempt_at"))
-        if not failure and schedule.get("pending_action_id") and attempted and now > attempted + timedelta(seconds=settings["cadence_seconds"] * 2):
-            failure = {"id": "pending-" + schedule["pending_action_id"],
-                       "reason": "Wake remains unresolved; inspect coordinator execution"}
-        busy_since = parse_time(schedule.get("busy_since_at"))
-        if not failure and busy_since and now >= busy_since + timedelta(seconds=settings["busy_timeout_seconds"]):
-            failure = {"id": "busy-" + schedule["busy_since_at"],
-                       "reason": "Coordinator remains busy beyond the supervision timeout; inspect its registered execution"}
-        if not failure:
-            if schedule.get("alerted_failure_id"):
-                scheduler_patch(run_dir, lambda _: {"alerted_failure_id": None})
-            return {"status": "healthy"}
-        notice = {"status": "unhealthy", "failure": failure, "run_dir": str(Path(run_dir).resolve())}
-        notifier = settings.get("notifier_argv")
-        if not notifier:
-            return {**notice, "alert": "local_evidence_only"}
-        attempts = 0
-        if schedule.get("alerted_failure_id") == failure["id"]:
-            last = schedule.get("last_alert") or {}
-            if last.get("failure_id") != failure["id"] or last.get("status") != "not_started":
-                return {**notice, "alert": "already_attempted"}
-            attempts = last["attempts"]
-            if attempts >= HEALTH_ALERT_MAX_ATTEMPTS:
-                return {**notice, "alert": "retry_exhausted"}
-            if now < parse_time(last["at"]) + timedelta(seconds=HEALTH_ALERT_RETRY_SECONDS):
-                return {**notice, "alert": "retry_pending"}
-        attempts += 1
-        # Record intent first. A lost notifier acknowledgement is never replayed.
-        scheduler_patch(run_dir, lambda _: {"alerted_failure_id": failure["id"], "last_alert": {
-            "failure_id": failure["id"], "status": "dispatching", "at": timestamp(now), "attempts": attempts}})
+        decision = {}
+        def prepare(current):
+            # This callback is rerun on policy/scheduler conflicts. Only its
+            # successful durable claim can authorize the external notification.
+            decision.clear()
+            schedule = current["scheduler"]
+            settings = scheduler_config(current["config"], schedule)
+            if not enabled(current, settings):
+                decision["result"] = {"status": "scheduler_stopped", "alert": "suppressed"}
+                return None
+            failures = health_failures(schedule, settings, now)
+            active_ids = {failure["id"] for failure in failures}
+            previous = schedule.get("health_alerts", {})
+            if "health_alerts" not in schedule and schedule.get("alerted_failure_id"):
+                # Import the old single-incident record conservatively: lack of
+                # a matching receipt cannot prove that notification never began.
+                legacy_id = schedule["alerted_failure_id"]
+                last = schedule.get("last_alert") or {}
+                previous = {legacy_id: last if last.get("failure_id") == legacy_id else
+                            {"failure_id": legacy_id, "status": "transport_unconfirmed"}}
+            alerts = {key: value for key, value in previous.items() if key in active_ids}
+            fields = {"health_alerts": alerts} if alerts != schedule.get("health_alerts") else {}
+            if not failures:
+                decision["result"] = {"status": "healthy"}
+                if schedule.get("alerted_failure_id"):
+                    fields["alerted_failure_id"] = None
+                return fields or None
+            failure = failures[0]
+            notice = {"status": "unhealthy", "failure": failure, "run_dir": str(Path(run_dir).resolve())}
+            notifier = settings.get("notifier_argv")
+            decision["result"] = {**notice, "alert": "local_evidence_only"}
+            if not notifier:
+                return fields or None
+            last = alerts.get(failure["id"])
+            attempts = 0
+            if last is not None:
+                if last.get("status") != "not_started":
+                    decision["result"]["alert"] = "already_attempted"
+                    return fields or None
+                attempts = last["attempts"]
+                if attempts >= HEALTH_ALERT_MAX_ATTEMPTS:
+                    decision["result"]["alert"] = "retry_exhausted"
+                    return fields or None
+                if now < parse_time(last["at"]) + timedelta(seconds=HEALTH_ALERT_RETRY_SECONDS):
+                    decision["result"]["alert"] = "retry_pending"
+                    return fields or None
+            claim = {"failure_id": failure["id"], "status": "dispatching", "at": timestamp(now),
+                     "attempts": attempts + 1, "notifier_argv": notifier}
+            alerts[failure["id"]] = claim
+            decision.update(notice=notice, claim=claim)
+            return {"health_alerts": alerts, "alerted_failure_id": failure["id"], "last_alert": claim}
+
+        scheduler_patch(run_dir, prepare)
+        if "claim" not in decision:
+            return decision["result"]
+        notice, claim = decision["notice"], decision["claim"]
+        failure, notifier = notice["failure"], claim["notifier_argv"]
         try:
             result = subprocess.run(notifier, input=json.dumps(notice) + "\n", text=True,
                                     capture_output=True, timeout=20, check=False)
@@ -374,8 +410,11 @@ def health(run_dir, now=None):
             receipt = {"failure_id": failure["id"], "at": timestamp(now),
                        "status": "not_started" if isinstance(exc, (FileNotFoundError, PermissionError)) else "transport_unconfirmed",
                        "error": type(exc).__name__}
-        receipt["attempts"] = attempts
-        scheduler_patch(run_dir, lambda _: {"last_alert": receipt})
+        receipt.update(attempts=claim["attempts"], notifier_argv=notifier)
+        def record(current):
+            alerts = {**current["scheduler"].get("health_alerts", {}), failure["id"]: receipt}
+            return {"health_alerts": alerts, "last_alert": receipt}
+        scheduler_patch(run_dir, record)
         return {**notice, "alert": receipt["status"], "receipt": receipt}
 
 

@@ -6,7 +6,7 @@ Keep admission policy, execution pause, and scheduler state separate. Apply cont
 
 | Instruction | Effect |
 | --- | --- |
-| Finish current; admit nothing new | Freeze exact admitted unfinished task IDs. Those tasks can resume, repair, review, merge, and complete acceptance. A free slot does not admit unrelated work. |
+| Finish current; admit nothing new | Freeze exact admitted unfinished task IDs, including already-issued unresolved reopens. Those tasks can resume, repair, review, merge, and complete acceptance. Reopening a member after closure preserves that batch; a task closed before the freeze needs explicit reopened admission. A free slot does not admit unrelated work. |
 | Pause, or an unqualified stop | Fence new work stages and consequential transitions. Started executions settle at their supported boundary; observation and receipt recording continue. |
 | Cancel active executions | Pause the selected run/tasks and request supported termination of registered workers, controllers, reviewers, and background jobs. Verify each actual outcome. |
 | Resume | Clear only the selected pause. Preserve admission freeze, other holds, ownership, findings, and consumed limits. Reconcile cancelled/surviving jobs before a new attempt. |
