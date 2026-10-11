@@ -368,6 +368,21 @@ def health_failures(schedule, settings, now, created_at=None):
     return failures
 
 
+def release_unsent_claim(run_dir, claim, exc):
+    """Journal recovery can make a failed claim durable; this invocation knows it never notified."""
+    released = {**claim, "status": "not_started", "error": type(exc).__name__}
+    def release(current):
+        alerts = current["scheduler"].get("health_alerts", {})
+        if alerts.get(claim["failure_id"]) != claim:
+            return None
+        return {"health_alerts": {**alerts, claim["failure_id"]: released}, "last_alert": released}
+    try:
+        current = scheduler_patch(run_dir, release)
+    except (OSError, RuntimeErrorDetail, StateError):
+        return False
+    return current["scheduler"].get("health_alerts", {}).get(claim["failure_id"]) != claim
+
+
 def health(run_dir, now=None):
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "health.lock"):
@@ -428,8 +443,11 @@ def health(run_dir, now=None):
         except OSError as exc:
             # Never send a notice whose durable claim failed, or call failed
             # health persistence healthy merely because the heartbeat survived.
-            return {**decision.get("result", {}), "status": "unhealthy", "alert": "storage_failed",
-                    "error": str(exc)}
+            failed = {**decision.get("result", {}), "status": "unhealthy", "alert": "storage_failed",
+                      "error": str(exc)}
+            if "claim" in decision:
+                failed["claim_reconciled"] = release_unsent_claim(run_dir, decision["claim"], exc)
+            return failed
         if "claim" not in decision:
             return decision["result"]
         notice, claim = decision["notice"], decision["claim"]

@@ -490,6 +490,46 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(runtime.health(self.run, at + timedelta(seconds=1))["alert"], "already_attempted")
         notify.assert_called_once()
 
+    def test_recovered_alert_claim_after_state_write_failure_is_retried(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        real_write = state_module.write_atomic
+        failures = []
+        def fail_state_once(path, value):
+            if path.name == "state.json" and not failures:
+                failures.append(path)
+                raise OSError(28, "No space for alert state")
+            return real_write(path, value)
+        with patch.object(state_module, "write_atomic", side_effect=fail_state_once), \
+                patch.object(runtime.subprocess, "run") as notify:
+            result = runtime.health(self.run, self.now)
+        self.assertEqual(result["alert"], "storage_failed")
+        self.assertTrue(result["claim_reconciled"])
+        notify.assert_not_called()
+        alert = Engine.read(self.run)["scheduler"]["health_alerts"][result["failure"]["id"]]
+        self.assertEqual((alert["status"], alert["attempts"]), ("not_started", 1))
+        with patch.object(runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as notify:
+            self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=1))["alert"], "retry_pending")
+            sent = runtime.health(self.run, self.now + timedelta(seconds=60))
+            self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=61))["alert"], "already_attempted")
+        self.assertEqual((sent["alert"], sent["receipt"]["attempts"]), ("transport_accepted", 2))
+        notify.assert_called_once()
+
+    def test_unreconciled_alert_claim_reports_storage_failure_without_sending(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        real_write = state_module.write_atomic
+        def fail_state(path, value):
+            if path.name == "state.json":
+                raise OSError(28, "No space for alert state")
+            return real_write(path, value)
+        with patch.object(state_module, "write_atomic", side_effect=fail_state), \
+                patch.object(runtime.subprocess, "run") as notify:
+            result = runtime.health(self.run, self.now)
+        self.assertEqual(result["alert"], "storage_failed")
+        self.assertFalse(result["claim_reconciled"])
+        notify.assert_not_called()
+
     def test_cadence_reconfiguration_updates_due_time_and_health_together(self):
         self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 3600})
         runtime.complete(self.run, "manual", self.now)
