@@ -144,7 +144,7 @@ class RuntimeTests(unittest.TestCase):
         runtime.complete(self.run, "manual", self.now)
         with patch.object(runtime, "herdr_call") as call:
             result = runtime.tick(self.run, self.now + timedelta(seconds=5))
-        self.assertEqual(result["status"], "not_due")
+        self.assertEqual(result["status"], "minimum_cadence")
         call.assert_not_called()
         schedule = Engine.read(self.run)["scheduler"]
         self.assertIsNone(schedule["wake_requested_at"])
@@ -169,13 +169,32 @@ class RuntimeTests(unittest.TestCase):
             call.assert_not_called()
             self.assertEqual(runtime.tick(self.run, completed_at + timedelta(seconds=60))["status"], "delivered")
 
+    def test_event_wake_respects_completed_pass_minimum_but_can_advance_normal_cadence(self):
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 120})
+        runtime.complete(self.run, "manual", self.now)
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=1))
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=1))["status"], "minimum_cadence")
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=59))["status"], "minimum_cadence")
+            call.assert_not_called()
+            delivered = runtime.tick(self.run, self.now + timedelta(seconds=60))
+            self.assertEqual(delivered["status"], "delivered")
+            self.assertEqual(call.call_count, 2)
+        # Automatic completion also anchors the minimum interval for later events.
+        runtime.complete(self.run, delivered["wake_id"], self.now + timedelta(seconds=90))
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=91))
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=120))["status"], "minimum_cadence")
+            call.assert_not_called()
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=150))["status"], "delivered")
+
     def test_idle_heartbeats_are_bounded_and_health_tracks_liveness(self):
         runtime.complete(self.run, "manual", self.now)
         before = Engine.read(self.run)
         records = set((self.run / "actions").iterdir())
         with patch.object(runtime, "herdr_call") as call:
             for seconds in range(5, 60, 5):
-                self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=seconds))["status"], "not_due")
+                self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=seconds))["status"], "minimum_cadence")
         call.assert_not_called()
         after = Engine.read(self.run)
         self.assertEqual(after["version"], before["version"])
@@ -328,7 +347,7 @@ class RuntimeTests(unittest.TestCase):
         self.config["scheduler"]["herdr_binary"] = str(fake)
         run = self.root / "subprocess-run"
         Engine.initialize(run, self.config)
-        command = [sys.executable, str(SCRIPTS / "supervise.py"), "tick", "--run-dir", str(run)]
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "tick", "--run-dir", str(run)]
         first = subprocess.run(command, capture_output=True, text=True, check=True)
         second = subprocess.run(command, capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(first.stdout)["status"], "delivered")

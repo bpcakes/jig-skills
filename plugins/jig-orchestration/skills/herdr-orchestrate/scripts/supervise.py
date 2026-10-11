@@ -186,6 +186,9 @@ def tick(run_dir, now=None):
             return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
                     "delivery_status": schedule.get("delivery_status")}
         last = parse_time(schedule.get("last_attempt_at"))
+        completed = parse_time(schedule.get("last_completed_at"))
+        if completed and (last is None or completed > last):
+            last = completed
         due = parse_time(schedule.get("next_due_at"))
         requested = bool(schedule.get("wake_requested_at"))
         if last and now < last + timedelta(seconds=settings["minimum_cadence_seconds"]):
