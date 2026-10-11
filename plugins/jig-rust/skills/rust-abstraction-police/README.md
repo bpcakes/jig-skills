@@ -16,7 +16,7 @@ The skill distinguishes real boundary failures from ordinary concrete Rust APIs.
 
 ## Installation
 
-This skill is bundled with the `jig-rust` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#install-with-codex), then invoke `$jig-rust:rust-abstraction-police`.
+This skill is bundled with the `jig-rust` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#installation), then invoke `$jig-rust:rust-abstraction-police` in Codex or `/jig-rust:rust-abstraction-police` in Claude Code.
 
 The collector commands below run from this skill directory. Preserve its directory structure so `SKILL.md` can load the references and helper script.
 

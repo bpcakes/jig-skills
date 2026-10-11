@@ -6,8 +6,8 @@ question below as a checklist. A single well-framed question may settle a branch
 ## Interaction protocol
 
 1. Use an available, permitted structured user-input tool; inspect its schema.
-   Examples of host tool names include `AskUserQuestion` and `request_user_input`.
-   They are alternatives, not dependencies or guaranteed capabilities.
+   Claude Code exposes `AskUserQuestion`; Codex exposes `request_user_input`.
+   They are host alternatives, not dependencies or guaranteed capabilities.
 2. Ask one decision at a time unless the user requests a small batch. Keep
    dependent questions for later. Include a custom-answer or unresolved route.
 3. Put the recommendation and its tradeoff in the question, not in a hidden
