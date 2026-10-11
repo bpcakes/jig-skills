@@ -1,6 +1,7 @@
 ---
 name: typescript-type-system-review
 description: Review TypeScript type safety and API contracts, including assertions, generics, invalid states, and schema boundaries.
+disable-model-invocation: true
 ---
 
 # TypeScript Type System Review

@@ -1,6 +1,7 @@
 ---
 name: rust-abstraction-police
 description: Review Rust abstraction boundaries when the user requests an assessment of encapsulation, implementation coupling, or caller burden. Excludes routine coding and general code review.
+disable-model-invocation: true
 ---
 
 # Rust Abstraction Police

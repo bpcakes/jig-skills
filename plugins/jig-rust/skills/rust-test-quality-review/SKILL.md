@@ -1,6 +1,7 @@
 ---
 name: rust-test-quality-review
 description: Review whether Rust tests prove the changed behavior, including assertions, regression gaps, and determinism.
+disable-model-invocation: true
 ---
 
 # Rust Test Quality Review

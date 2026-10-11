@@ -1,0 +1,17 @@
+{
+  "name": "jig-swift",
+  "version": "0.1.2",
+  "description": "Swift 6 iOS refinement skill for behavior-preserving SwiftUI, UIKit, and concurrency-aware cleanup.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "swift",
+    "ios",
+    "swiftui",
+    "uikit"
+  ]
+}

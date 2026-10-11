@@ -62,7 +62,7 @@ npm test
 
 ## Installation
 
-This skill is bundled with the `jig-typescript` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#install-with-codex), then invoke `$jig-typescript:typescript-react-dup-unifier`.
+This skill is bundled with the `jig-typescript` plugin in `jig-skills`. Install the plugin using the [repository instructions](../../../../README.md#installation), then invoke `$jig-typescript:typescript-react-dup-unifier` in Codex or `/jig-typescript:typescript-react-dup-unifier` in Claude Code.
 
 Run the scanner and test commands above from this skill directory. Keep the relative paths intact because `SKILL.md` invokes the bundled scanner and references the review guides.
 

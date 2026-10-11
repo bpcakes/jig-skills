@@ -1,6 +1,7 @@
 ---
 name: react-hooks-effects-review
 description: Review React hooks, Effects, and refs for stale closures, lifecycle, cleanup, dependency, and render-purity bugs.
+disable-model-invocation: true
 ---
 
 # React Hooks and Effects Review
@@ -44,7 +45,7 @@ Default hierarchy for fixes:
 
 ## Review workflow
 
-For source-backed React and Codex skill guidance, see `references/official-react-guidance.md` when you need to verify the basis for these review rules. Do not load it for routine reviews unless the task is ambiguous or the user asks for sources.
+For the React documentation and skill-format sources behind these rules, see `references/official-react-guidance.md` when you need to verify the basis for these review rules. Do not load it for routine reviews unless the task is ambiguous or the user asks for sources.
 
 ### 1. Establish scope
 

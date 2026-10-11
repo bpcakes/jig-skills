@@ -1,0 +1,583 @@
+{
+  "schemaVersion": 4,
+  "sourceRun": "/tmp/claude-1002/-home-aa--herdr-worktrees-jig-skills-claude-host-support/09d3f7a1-2174-4ac7-8fc7-4a0462c16898/scratchpad/codex-eval-run",
+  "sourceSummaryHash": "6bffe25a0de87051ab400b1c90f44ac8cae65344227910bfb3c559cdde15f5f4",
+  "skillBundlePolicy": "exclude-generated-v1",
+  "schemaHashes": {
+    "response.schema.json": "c0599460d4a7d53fc2d24f26dcd92ed5f9ecef4f9c96f0709613e4e1d14385f5",
+    "grade.schema.json": "d5f5dbd2486be5849052884f94c849beefa0e68b50b172288774ba4e2e79739e"
+  },
+  "coverage": {
+    "allowPartial": true,
+    "completeSuite": false,
+    "missingCases": [
+      "rust-test-only-weakened",
+      "rust-test-only-valid-consolidation",
+      "rust-loaded-explain",
+      "typescript-loaded-explain",
+      "typescript-implicit-simplify",
+      "error-four-from-valid",
+      "error-required-write-discarded",
+      "error-optional-parse-valid",
+      "typescript-validated-assertion",
+      "typescript-unchecked-boundary",
+      "rust-read-only-review-loaded",
+      "rust-simplify-negative-discovery",
+      "sqlx-runtime-query-valid",
+      "rust-test-unit-result-valid",
+      "rust-abstraction-invariant-escape",
+      "rust-abstraction-transparent-contract",
+      "async-finite-channel-no-spans",
+      "async-lost-required-write",
+      "security-debug-without-sink",
+      "security-debug-log-sink",
+      "react-effect-safe-no-lint-config",
+      "react-effect-stale-room",
+      "loop-loaded-one-pass-fix",
+      "loop-discovery-one-pass-fix",
+      "loop-explicit-preview",
+      "react-test-valid-testid",
+      "react-test-missed-confirmation",
+      "react-test-minor-display-gap",
+      "sqlx-minor-display-defect",
+      "react-performance-cheap-provider",
+      "react-performance-quadratic-derivation",
+      "astra-swift-named-clean",
+      "astra-ruby-assessment-no-tests",
+      "astra-component-independent-options",
+      "astra-component-callback-defect",
+      "astra-state-benign-draft",
+      "astra-state-stale-response",
+      "astra-dup-independent-options",
+      "astra-transaction-single-statement",
+      "astra-privacy-expected-control",
+      "astra-privacy-protected-leak",
+      "astra-review-prior-authorized-fix",
+      "review-prior-authorized-stale-finding",
+      "review-intent-omitted",
+      "review-intent-complete",
+      "review-layer-symptom",
+      "review-layer-owner",
+      "review-caller-misuse",
+      "review-caller-valid",
+      "review-coverage-equivalent",
+      "review-coverage-weakened",
+      "selection-rust-boundary-assessment",
+      "selection-typescript-consolidation",
+      "selection-typescript-duplicate-explanation",
+      "selection-privacy-intake-planning",
+      "selection-privacy-focused-source",
+      "selection-privacy-retest-plan",
+      "selection-privacy-loaded-summary",
+      "selection-telemetry-source-review",
+      "review-merge-clean-inventory",
+      "review-merge-dirty-inventory",
+      "review-followup-address",
+      "loop-followup-address",
+      "review-real-dependency-mock-assumption",
+      "review-real-dependency-compatible",
+      "planning-light-existing-components",
+      "planning-small-fix-no-plan",
+      "rust-dup-private-merge",
+      "rust-dup-explain-negative",
+      "rust-dup-keep-separate"
+    ],
+    "missingTrials": [],
+    "historicalCases": [
+      "loop-closure-own-fields",
+      "loop-closure-real-defect",
+      "loop-low-support-nonblocking",
+      "loop-closure-exhausted",
+      "loop-third-attempt-new-evidence",
+      "loop-third-attempt-no-evidence",
+      "loop-documentation-closure",
+      "loop-mechanical-stabilization",
+      "loop-equivalent-coverage",
+      "loop-independent-blocked-group",
+      "loop-closure-exposes-substantive",
+      "loop-closure-mixed-failures-unused",
+      "loop-closure-mixed-failures-exhausted",
+      "loop-closure-mixed-failures-at-cap",
+      "loop-third-attempt-at-cap",
+      "loop-new-support-after-closure",
+      "loop-validation-counted-recovery",
+      "loop-validation-recovery-at-cap",
+      "loop-validation-recovery-oscillation",
+      "loop-closure-wrong-expectation",
+      "loop-reviewer-recovery-decisions"
+    ],
+    "plannedTrials": [
+      {
+        "id": "rust-implicit-simplify",
+        "iteration": 1
+      },
+      {
+        "id": "error-one-from-context-loss",
+        "iteration": 1
+      },
+      {
+        "id": "selection-rust-general-review",
+        "iteration": 1
+      }
+    ],
+    "runState": "completed",
+    "runComplete": true,
+    "runError": null
+  },
+  "startedAt": "2026-10-11T13:55:35.121Z",
+  "cli": "codex-cli 0.162.1",
+  "model": "CLI default (--ignore-user-config)",
+  "configuration": {
+    "agent": {
+      "model": null,
+      "effort": null
+    },
+    "judge": {
+      "model": null,
+      "effort": null
+    }
+  },
+  "sourceCommit": "020563e3de515ed82d216152de9cf88d65407c5a",
+  "harnessHash": "85804f0ff30c55c2b82f72671fa7cdafdfad7b53f87c089379dce83d49ca52fa",
+  "suiteHash": "94c4c401671fae46fc5b121fe69c76bd2734a2b532d42e0b02cd59dabca0d2b6",
+  "exporterHash": "cf0e6a651d9fd71aaf9be5a77793723d6e60713654be626fc7a8e7c1d15b821f",
+  "skillHashes": {
+    "audit-common": "78c62c51446de63a5e6c8ad4f2b43852731f04f611003b7543892e5f09a2d578",
+    "audit-intake-and-evidence-map": "88710a66f86548b20ae41a8da54847361bacfe62034bb5dca7ba408efa143ade",
+    "client-encryption-boundary-audit": "093ca63f3d73e7f736a2c5e2829b2dcb6b43787052415c53a3b7529026665aed",
+    "comprehensive-review": "315feb3eb8585d3e3b4fb67759d11abd3b1ff3e029d598cec8c22f38d1fb9985",
+    "crypto-architecture-review": "9c7beb6e8bdb50e97450d5d5a556d64fe92c978134969bf1001ac6acb0baf62e",
+    "crypto-implementation-static-review": "ba5e53ce4c39f353740137c935008f91384782863a9b0e3c7a2f0a4ac185803c",
+    "fowler-ruby-rails-refactoring": "45d2ce7c3fec49e57a2400fcd31e49ccd6bf07d5c4c763b0da75af2876811e30",
+    "fowler-rust-refactoring": "afa95ecbaa2fc113c19c57233760448e39eefb9b59f6192c6bc7170d676a9053",
+    "metadata-leakage-inventory": "1805a7c7daf8cd1dcc4a75d73d97a77a48dcea2fcc57e14f03583b0aee5d324c",
+    "network-payload-zero-knowledge-test": "0732aee4b933e1b555750c2b6234373d3d93bc6eab11c70eea9e13df5daa8ee5",
+    "planning-workflow": "09d3a6bbb79959f40e566683045a1b5929a407bd7af2a43fccd54a99489a5ac6",
+    "privacy-claims-field-classifier": "01bbdd6454f8ca2dbfd5787693daa21d4e04db8b58466987e6dcae9ea1561df1",
+    "react-hooks-component-api-review": "253e970e70393a1a8f8e746299e5ccf284ff10c8db4ecaa24e80228186e5b4d5",
+    "react-hooks-effects-review": "c0c453e9678dbb3000de2b7c05e5c0d11a9e7a24f2a1569ae2ec733f923cf00a",
+    "react-render-performance-review": "0a3b3f5247f18d0f7b08ee91bd9514f80a7a98116868cd50e58afa9c4ad4a13d",
+    "react-state-data-flow-review": "651b382457b3ab306e47c20142910cf297d452184ff7cef79016b28033e59a7f",
+    "react-test-quality-review": "7d58814ccdc477f02cc0fc76091abc56fa381534f5d29b03a3c2775416e6fee7",
+    "review-fix-loop": "c745447e17f7736fcdedab9be5847f9819b7c295ec2a63689c58f6148bb1aabf",
+    "rust-abstraction-police": "946baef4feb7fc5b07cb2d0deab16b337c1ff14361f013c70f3fb1e77bb2e4a0",
+    "rust-architecture-review": "783a83bc1eeddfba44c7e34680ec54233d0cf323590330e7a527b807826f18b8",
+    "rust-async-concurrency-review": "66f122644fa1dfcc78676e79db21732c3a78335990714f0687a6709c587e68b1",
+    "rust-dup-unifier": "406e2adcfe34b8154516b15a60500470a019a628878ea8339f7a630a41083a02",
+    "rust-error-handling-review": "fd4919278c3e389414c23163c328f84a1c96354d68fc1ea48090734eddd2fd8f",
+    "rust-security-boundary-review": "0b19de4bc4fda81bf85b39975f34c5b8829b36eabecc4abbb9d4f0ce0d5bf9ef",
+    "rust-simplify": "2893ba24335f8f3e224a40af60e742519603d815ee660b37fdd8feb8ec75eebc",
+    "rust-source-reorg": "d953d0331ba499cfff33e386f2932055a4ad8d93bc5ac8b41d3879ef09485525",
+    "rust-test-quality-review": "cb88588be38c9b30628d9b023c845acf483391e746d6c36853d687ed4cc1693b",
+    "scope-drill-workflow": "213d37c9694dde53df2bb6f4ef14c947e9640ed70b6e00f3585875aa9f2fee5a",
+    "server-decryptability-and-plaintext-path-audit": "5ff024da53f04e2f9fe11ebf20efcf5f7eb1ac725315a1f01a24665a1abe349c",
+    "sql-transaction-consistency-review": "f2d36b9d7861db9e3221539184dbd08ba0096a5ee8fc3b462322cce15d9a350c",
+    "sqlx-query-safety-review": "a5e5cb3276fef90fb1abef123d41ec1735d029c4be0b88eeef561211fb76b808",
+    "swift-simplify": "d8a70e1eb302b6efd501c4da5190ac1ee4e9812b61ea53e4e1c5245785b94562",
+    "telemetry-crash-logs-support-leakage-audit": "fcaa0e712c052464bd3d443fbbcb2035d5b65ec7186e79e7ed77b3ccad11d848",
+    "threat-model-and-dataflow-builder": "751deac8db4b29fc5016b4528de2b4b1e07b6c9ed11350909744b41a55b3c4e7",
+    "typescript-react-abstraction-police": "037ab72a402c96d9774eeba216dad976230275c1d0bc94dbb8a0992f94d454f2",
+    "typescript-react-dup-unifier": "268c888c5c014cb4140b5ec83e1e521846db0705f1c58c4416ba612d9e36fbbf",
+    "typescript-simplify": "4422490a25e1a6e2738139397b84feb13d973b2bead236a9d310bab3b96b5fe4",
+    "typescript-type-system-review": "2ced13a43f2f57d5d0d1057f212c3feac3877db1da2eda017a1678d285c390a1",
+    "vulnerability-disclosure-and-retest-manager": "6d5a97ddc92d313a59641d978f1b0578a781b2c00f78d92bc6b446a18355c8ba"
+  },
+  "passed": 3,
+  "total": 3,
+  "skillsEvaluated": 3,
+  "limits": [
+    "One regression-suite run, not an exhaustive or held-out benchmark.",
+    "Semantic grades are separate Codex judgments, not an independent model family.",
+    "Requested model/effort are verified against recorded CLI arguments for every attempted phase; a null reported configuration means effective provider selection was not independently exposed. Skill-resource mention and repeated-command metrics are command-text proxies, not judgments of reads or waste.",
+    "Current source verification covers every discovery entrypoint and all files of recorded target skills and skills read or possibly read in completed trials; unused references of other skills may differ.",
+    "Raw artifacts must remain available at sourceRun to reverify; hashes are not an adversarial authenticity guarantee."
+  ],
+  "results": [
+    {
+      "id": "rust-implicit-simplify",
+      "iteration": 1,
+      "skill": "rust-simplify",
+      "mode": "implicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [
+        "src/lib.rs"
+      ],
+      "reads": [
+        "rust-simplify"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc 'cat .agents/skills/rust-simplify/SKILL.md'",
+        "/usr/bin/bash -lc 'cat src/lib.rs'",
+        "/usr/bin/bash -lc \"rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g '*test*'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md; git status --short; ls -a'",
+        "/usr/bin/bash -lc 'rustc --edition=2021 --crate-type lib --emit=metadata src/lib.rs -o /tmp/jig-skill-case-kBZ4Gi/.classify-check.rmeta'",
+        "/usr/bin/bash -lc 'rm .classify-check.rmeta; git diff -- src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "Simplified `classify` in `src/lib.rs` to return `value > 0` directly, preserving its current behavior. Verified compilation with `rustc`. Existing unrelated changes were left untouched.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "behavior",
+            "passed": true,
+            "evidence": "The after version returns `value > 0` directly: positive inputs yield true, while zero and negative inputs yield false, matching the before version."
+          },
+          {
+            "id": "simplification",
+            "passed": true,
+            "evidence": "The after version replaces the if/else and explicit true/false returns with a single comparison expression."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 21409,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 6626,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 21409,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 70099,
+          "cached_input_tokens": 54784,
+          "output_tokens": 405
+        },
+        "completedCommands": 6,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 1,
+        "skillResourceMentionOutputBytes": 5021
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 6626,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12127,
+          "cached_input_tokens": 0,
+          "output_tokens": 90
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "079593531ff73bea61310b6fe6da67ab7d2e81e5e296a0ada8190858532a061f"
+    },
+    {
+      "id": "error-one-from-context-loss",
+      "iteration": 1,
+      "skill": "rust-error-handling-review",
+      "mode": "explicit",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [
+        "rust-error-handling-review"
+      ],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-error-handling-review/SKILL.md; cat src/lib.rs; rg --files -g 'AGENTS.md' -g 'Cargo.toml' -g '*.rs' -g '*propagation*' -g '*recovery*'\"",
+        "/usr/bin/bash -lc \"cat .agents/skills/rust-error-handling-review/references/propagation-and-design.md; cat AGENTS.md; nl -ba src/lib.rs; rg -n 'load\\\\(|run\\\\(|LoadError|configuration I/O' . --glob '\"'!.git/**'\"' --glob '\"'!.agents/**'\"'; ls -a\"",
+        "/usr/bin/bash -lc 'cat README.md'"
+      ],
+      "answer": {
+        "answer": "Found one diagnostic correctness defect. Review was static; no Cargo manifest or tests were available. No files were changed.",
+        "findings": [
+          {
+            "location": "src/lib.rs:3–8, src/lib.rs:14",
+            "issue": "Low severity: both reads convert failures into the same LoadError::Io, losing whether the primary or fallback configuration failed. Fix by attaching the configuration role and safe path at each read while preserving the original I/O error as the source.",
+            "consequence": "If the primary file is missing, or the primary succeeds and the fallback is missing, run prints the same diagnostic: configuration I/O: No such file or directory (os error 2). Operators cannot identify which file to repair, violating the diagnostic requirement documented in README.md.",
+            "counterevidence": "#[from] preserves the underlying I/O source, but that source does not identify the path or configuration role. The only caller prints Display without additional context; README.md confirms there is no other logging and neither path is secret."
+          }
+        ]
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "lost_origin",
+            "passed": true,
+            "evidence": "The finding explains that both reads become LoadError::Io and run prints the same missing-file diagnostic for either failure, preventing operators from identifying which file to repair. It recommends attaching the configuration role and safe path at each read while preserving the original I/O source, without relying on a conversion-count threshold."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 22574,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 6238,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 22574,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 61729,
+          "cached_input_tokens": 44800,
+          "output_tokens": 463
+        },
+        "completedCommands": 3,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 2,
+        "skillResourceMentionOutputBytes": 7801
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 6238,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 12660,
+          "cached_input_tokens": 0,
+          "output_tokens": 88
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "589a0f07dad77aa3d8129e7fc36356d4c2192b7da9490eda72279a87c92cd78c"
+    },
+    {
+      "id": "selection-rust-general-review",
+      "iteration": 1,
+      "skill": "rust-abstraction-police",
+      "mode": "negative",
+      "passed": true,
+      "checks": {
+        "invocation": true,
+        "scope": true,
+        "findings": true,
+        "trace": true,
+        "outcome": true
+      },
+      "changed": [],
+      "reads": [],
+      "uncertainReads": [],
+      "commands": [
+        "/usr/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g 'README.md' -g 'Cargo.toml' -g 'src/**'\"",
+        "/usr/bin/bash -lc 'cat AGENTS.md README.md Cargo.toml && nl -ba src/lib.rs'"
+      ],
+      "answer": {
+        "answer": "No concrete bugs found. src/lib.rs matches README.md: Label owns a String, exposes borrowed text, and provides no mutation API. No files were changed.",
+        "findings": []
+      },
+      "grade": {
+        "checks": [
+          {
+            "id": "scope",
+            "passed": true,
+            "evidence": "The response reports no concrete bugs and ties that conclusion to the documented contract: owned String, borrowed text, and no mutation API. It adds no design audit or speculative wrappers. Before and after are identical, and fileChanges is empty."
+          }
+        ]
+      },
+      "phases": {
+        "agent": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 14122,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        },
+        "judge": {
+          "state": "completed",
+          "requested": {
+            "model": null,
+            "effort": null
+          },
+          "execution": {
+            "requested": {
+              "model": null,
+              "effort": null
+            },
+            "reported": null,
+            "elapsedMs": 6121,
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "stopReason": null
+          }
+        }
+      },
+      "agentExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 14122,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "agentMetrics": {
+        "usage": {
+          "input_tokens": 38746,
+          "cached_input_tokens": 12672,
+          "output_tokens": 202
+        },
+        "completedCommands": 2,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "judgeExecution": {
+        "requested": {
+          "model": null,
+          "effort": null
+        },
+        "reported": null,
+        "elapsedMs": 6121,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "stopReason": null
+      },
+      "judgeMetrics": {
+        "usage": {
+          "input_tokens": 11970,
+          "cached_input_tokens": 0,
+          "output_tokens": 74
+        },
+        "completedCommands": 0,
+        "repeatedCommands": [],
+        "skillResourceMentionCommands": 0,
+        "skillResourceMentionOutputBytes": 0
+      },
+      "artifactHash": "037e9b0160c7070e3eb14d5864902444efa76bd8a36d06afbb1be1c8fa77449a"
+    }
+  ]
+}

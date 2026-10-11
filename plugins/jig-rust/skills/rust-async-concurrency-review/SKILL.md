@@ -1,6 +1,7 @@
 ---
 name: rust-async-concurrency-review
 description: Review Rust async correctness around task ownership, cancellation, locks, backpressure, and shutdown.
+disable-model-invocation: true
 ---
 
 # Rust async concurrency review

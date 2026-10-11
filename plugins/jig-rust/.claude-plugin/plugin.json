@@ -1,0 +1,25 @@
+{
+  "name": "jig-rust",
+  "version": "0.4.6",
+  "description": "Rust simplification, Fowler-style refactoring assessments, duplicate-abstraction analysis, source reorganization, architecture and abstraction-boundary review, async concurrency review, security-boundary review, SQLx query safety review, SQL transaction consistency review, error handling review, and test quality review skills.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "rust",
+    "review",
+    "refactor",
+    "security",
+    "authz",
+    "async",
+    "concurrency",
+    "tokio",
+    "sqlx",
+    "database",
+    "transaction",
+    "testing"
+  ]
+}

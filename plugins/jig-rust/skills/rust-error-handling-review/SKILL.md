@@ -1,6 +1,7 @@
 ---
 name: rust-error-handling-review
 description: Review Rust error propagation, diagnostics, panic paths, and recovery within the requested scope.
+disable-model-invocation: true
 ---
 
 # Rust Error Handling Review

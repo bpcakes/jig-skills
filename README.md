@@ -30,7 +30,7 @@ $jig-rust:rust-error-handling-review Review my current working changes. Report f
 
 Expect findings about error handling, with source locations and explanations, or an explicit statement that no issues were found. If the scope has no changes, choose a branch comparison or named files using the [scope examples](#scope-and-examples).
 
-This example uses your Codex session without a second reviewer CLI. The commands were checked with Codex CLI 0.153.4; if your version lacks the plugin commands, use [direct skill copy](#direct-skill-copy). For Claude Code, start with that direct-copy installation instead.
+This example uses your Codex session without a second reviewer CLI. The commands were checked with Codex CLI 0.153.4; if your version lacks the plugin commands, use [direct skill copy](#direct-skill-copy). For Claude Code, [install from the same marketplace](#install-with-claude-code) instead.
 
 ## Choose a Skill
 
@@ -52,9 +52,9 @@ This example uses your Codex session without a second reviewer CLI. The commands
 
 The seven plugins contain 38 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
-Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, and query-analysis skills are explicit-only; invoke the named skill when you want one. General-purpose editing skills and the comprehensive-review/review-fix-loop workflows remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
+Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, and query-analysis skills are explicit-only in both hosts (`allow_implicit_invocation: false` in `agents/openai.yaml` for Codex, `disable-model-invocation: true` in `SKILL.md` for Claude Code); invoke the named skill when you want one. General-purpose editing skills and the comprehensive-review/review-fix-loop workflows remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
 
-For marketplace installs, invoke `$plugin:skill` followed by your request in Codex. For example: `$jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
+For marketplace installs, invoke `$plugin:skill` in Codex or `/plugin:skill` in Claude Code, followed by your request. For example: `$jig-rust:rust-simplify Simplify my current working changes.` or `/jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
 
 [Planning](#jig-planning) · [Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [Privacy audit](#jig-privacy-audit)
 
@@ -129,7 +129,7 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
 | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, one commit per repair round by default, local validation, and independent terminal reviews of the full fixed-base range. | Code changes and run record |
 
-Both skills run in Codex and require its subagent facility. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
+Both skills run in Codex and require its subagent facility; the plugin is not listed in the Claude Code marketplace. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 
 ### Jig Privacy Audit
 
@@ -149,7 +149,7 @@ Plugin: `jig-privacy-audit` · [Browse files](plugins/jig-privacy-audit)
 | [telemetry-crash-logs-support-leakage-audit](plugins/jig-privacy-audit/skills/telemetry-crash-logs-support-leakage-audit/SKILL.md) | Checks logs, traces, crash reporters, analytics, and support tooling for sensitive leakage. | Audit report |
 | [vulnerability-disclosure-and-retest-manager](plugins/jig-privacy-audit/skills/vulnerability-disclosure-and-retest-manager/SKILL.md) | Normalizes findings, tracks remediation status, and produces retest summaries. | Audit report |
 
-[audit-common](plugins/jig-privacy-audit/skills/audit-common/SKILL.md) supplies severity, confidence, evidence, and redaction rules. In Codex, its standalone automatic selection is disabled by `agents/openai.yaml`; specialized audits load it directly. Claude installations should treat it as a support skill and avoid selecting it alone for an audit. Use intake when requesting scope or evidence planning. Focused questions with supplied artifacts or established scope go directly to the relevant audit. Finding summaries, disclosure drafts, and retest plans do not initiate runtime testing or additional audits.
+[audit-common](plugins/jig-privacy-audit/skills/audit-common/SKILL.md) supplies severity, confidence, evidence, and redaction rules. Its standalone automatic selection is disabled in both hosts (`agents/openai.yaml` for Codex, `disable-model-invocation` frontmatter for Claude Code); specialized audits load it directly. Use intake when requesting scope or evidence planning. Focused questions with supplied artifacts or established scope go directly to the relevant audit. Finding summaries, disclosure drafts, and retest plans do not initiate runtime testing or additional audits.
 
 ## Installation
 
@@ -169,6 +169,30 @@ An SSH Git URL is an alternative marketplace source if your GitHub SSH access is
 ```sh
 codex plugin marketplace add git@github.com:bpcakes/jig-skills.git
 ```
+
+### Install With Claude Code
+
+Register the marketplace and install a plugin from inside a Claude Code session:
+
+```text
+/plugin marketplace add bpcakes/jig-skills
+/plugin install jig-rust@jig-skills
+```
+
+`/plugin install` opens the plugin's details in the Discover tab; install it from there. The equivalent shell commands install without the interactive view:
+
+```sh
+claude plugin marketplace add bpcakes/jig-skills
+claude plugin install jig-rust@jig-skills
+```
+
+Start a new session, then invoke a skill as `/plugin:skill` followed by your request:
+
+```text
+/jig-rust:rust-error-handling-review Review my current working changes. Report findings with file locations; do not edit code.
+```
+
+The Claude marketplace lists six plugins. `jig-review` is omitted because its skills orchestrate Codex subagents; see the [Codex-only note](#direct-skill-copy). Explicit-only skills appear in the `/` menu but do not trigger automatically. These commands were checked with Claude Code 2.1.296.
 
 ### Direct Skill Copy
 
@@ -204,7 +228,7 @@ The installer preserves automatic dependencies even with `--force`. To replace a
 
 ### Requirements
 
-Start with an authenticated Codex or Claude Code installation. Marketplace installation requires Codex's `plugin` commands; direct copying requires Git and a POSIX shell. The extra runtimes below are needed only for the corresponding helpers or external reviewers, not for every skill.
+Start with an authenticated Codex or Claude Code installation. Marketplace installation requires the `plugin` commands of Codex or Claude Code; direct copying requires Git and a POSIX shell. The extra runtimes below are needed only for the corresponding helpers or external reviewers, not for every skill.
 
 | Feature | Additional requirements |
 |---|---|
@@ -225,7 +249,7 @@ Scanners generate investigation leads; the agent validates them against source a
 
 Run skills from the project you want assessed. Name the scope in your request: current working changes, a feature branch, a base reference, or specific files and directories. For most focused diff reviews, current working changes means staged and unstaged changes; consult the selected skill for exclusions and other supported inputs.
 
-Enter these examples in Codex with the relevant plugins installed. Replace sample paths and branch names with yours.
+Enter these examples in Codex with the relevant plugins installed; in Claude Code, replace the leading `$` with `/`. Replace sample paths and branch names with yours.
 
 Create a plan for a cross-component change:
 
@@ -289,6 +313,8 @@ If an installed plugin is disabled, select it in the Codex plugin UI and enable 
 
 If `codex plugin` is unavailable, use [direct skill copy](#direct-skill-copy) or upgrade Codex through your existing installation method.
 
+In Claude Code, open `/plugin` to check the marketplace and installed plugins, or run `claude plugin marketplace list` and `claude plugin list` from a shell. Marketplace skills use the `/jig-rust:rust-error-handling-review` form; direct copies use `/rust-error-handling-review`.
+
 ### Update marketplace plugins
 
 Refresh the Git marketplace snapshot:
@@ -305,6 +331,13 @@ codex plugin add jig-rust@jig-skills
 ```
 
 Repeat for other plugins you use, then start a new session. Removal deletes the plugin's local cache; preserve any edits you made inside that cache first. For a marketplace registered from a local checkout, update that checkout with Git instead of using the Git-marketplace snapshot command.
+
+For Claude Code, refresh the marketplace and update each installed plugin:
+
+```sh
+claude plugin marketplace update jig-skills
+claude plugin update jig-rust@jig-skills
+```
 
 ### Update direct copies
 

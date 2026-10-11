@@ -6,15 +6,16 @@ Keep each skill focused on a concrete task, with clear inputs, default behavior,
 
 ## Repository Layout
 
-- `.agents/plugins/marketplace.json` registers plugins and their installation policies.
-- `plugins/<plugin>/.codex-plugin/plugin.json` declares plugin metadata and version.
+- `.agents/plugins/marketplace.json` registers plugins and their installation policies for Codex; `.claude-plugin/marketplace.json` registers them for Claude Code. `jig-review` is Codex-only and appears only in the Codex marketplace.
+- `plugins/<plugin>/.codex-plugin/plugin.json` and `plugins/<plugin>/.claude-plugin/plugin.json` declare plugin metadata and version for each host. `evals/host-parity.test.mjs` fails when they drift.
+- `plugins/<plugin>/skills/<skill>/agents/openai.yaml` holds Codex-only interface and policy metadata. A skill with `allow_implicit_invocation: false` there also sets `disable-model-invocation: true` in its `SKILL.md` frontmatter so Claude Code applies the same explicit-only policy; the parity test checks both directions.
 - `plugins/<plugin>/skills/<skill>/SKILL.md` is the skill entrypoint. Supporting references, scanners, examples, and tests stay with the skill.
 - `scripts/install.sh` copies complete skill directories into Codex or Claude Code; it excludes Codex-only orchestration skills from Claude installs.
 - `docs/` contains user guidance that is too detailed for the root README.
 
 ## Changing Skills and Documentation
 
-When adding or renaming a skill, update its frontmatter, supporting references, plugin metadata where relevant, and the linked README catalog. Register new plugins in the marketplace. Bump the affected plugin version when releasing changes to its bundled contents.
+When adding or renaming a skill, update its frontmatter, supporting references, plugin metadata where relevant, and the linked README catalog. Register new plugins in both marketplaces. Bump the affected plugin version in both manifests when releasing changes to its bundled contents.
 
 Use paths relative to the skill directory for bundled resources. For scanner examples, distinguish the scanner's location from the target project being scanned. Keep a skill's directory intact when testing direct installation.
 
@@ -32,6 +33,7 @@ Run commands from the repository root. Select the checks for the helper you chan
 |---|---|
 | Planning canonical-schema validator | `python3 -B -m unittest discover -s plugins/jig-planning/skills/planning-workflow/tests -v` |
 | Skill evaluation harness | `node --test evals/*.test.mjs` |
+| Host manifests and skill invocation policies | `node --test evals/host-parity.test.mjs` (also runs `claude plugin validate --strict` when Claude Code is installed) |
 | Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
 | Privacy-audit scripts | `bash plugins/jig-privacy-audit/scripts/test_fixtures.sh` |
 | Rust abstraction-police collector | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-abstraction-police/tests -v` |

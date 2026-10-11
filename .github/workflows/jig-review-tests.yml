@@ -5,6 +5,10 @@ on:
     paths:
       - "plugins/jig-review/**"
       - "plugins/*/skills/**"
+      - "plugins/*/.codex-plugin/**"
+      - "plugins/*/.claude-plugin/**"
+      - ".agents/plugins/**"
+      - ".claude-plugin/**"
       - "scripts/install.sh"
       - "evals/**"
       - ".github/workflows/jig-review-tests.yml"
@@ -12,6 +16,10 @@ on:
     paths:
       - "plugins/jig-review/**"
       - "plugins/*/skills/**"
+      - "plugins/*/.codex-plugin/**"
+      - "plugins/*/.claude-plugin/**"
+      - ".agents/plugins/**"
+      - ".claude-plugin/**"
       - "scripts/install.sh"
       - "evals/**"
       - ".github/workflows/jig-review-tests.yml"
