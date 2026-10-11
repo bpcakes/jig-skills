@@ -18,7 +18,7 @@ import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
 import { launchExecutable } from "../../comprehensive-review/scripts/provider-launch.mjs";
-import { CODEX_CLI_EFFORTS } from "../../comprehensive-review/scripts/review-options.mjs";
+import { codexEfforts } from "../../comprehensive-review/scripts/review-options.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
@@ -211,7 +211,8 @@ function codexRuntime(provider, options) {
   const selected = options.review.codex ?? {};
   const runtime = provider.runtime ?? selected.runtime ?? "native";
   if (runtime === "native" && selected.launcher && selected.launcher !== "none") throw new Error("--codex-launcher requires the cli runtime, but the codex reviewer entry selects runtime native.");
-  if (runtime === "cli" && selected.effort && !CODEX_CLI_EFFORTS.has(selected.effort)) throw new Error(`--codex-effort ${selected.effort} is not a Codex CLI effort; the cli runtime accepts ${[...CODEX_CLI_EFFORTS].join(", ")}.`);
+  const efforts = codexEfforts(runtime);
+  if (selected.effort && !efforts.has(selected.effort)) throw new Error(`--codex-effort ${selected.effort} is not valid for the ${runtime} Codex runtime, which accepts ${[...efforts].join(", ")}.`);
   return runtime;
 }
 function configure(options, config) {

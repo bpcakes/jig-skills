@@ -89,7 +89,14 @@ function parseReviewers(value) {
 // Native Codex is the host's own subagent. The CLI runtime runs the codex-review
 // adapter as an independent process, which is the only form a Jig launcher can
 // start, so selecting a launcher selects the CLI runtime.
-function codexOptions(raw, provided) {
+function codexEfforts(runtime) {
+  return runtime === "cli" ? CODEX_CLI_EFFORTS : CODEX_EFFORTS;
+}
+
+// With deferCodexEffort, a reviewer configuration file may still change the
+// runtime, so the effort is only checked against the union here and validated
+// against the effective runtime once that is resolved.
+function codexOptions(raw, provided, { deferCodexEffort = false } = {}) {
   let runtime = effort("--codex-runtime", raw.codexRuntime, CODEX_RUNTIMES);
   const launcher = normalizeLauncher(raw.codexLauncher, "--codex-launcher");
   if (launcher !== "none") {
@@ -102,13 +109,14 @@ function codexOptions(raw, provided) {
     model: raw.codexModel == null ? null : nonblank("--codex-model", raw.codexModel),
     effort: raw.codexEffort == null
       ? null
-      : effort("--codex-effort", raw.codexEffort, runtime === "cli" ? CODEX_CLI_EFFORTS : CODEX_EFFORTS),
+      : effort("--codex-effort", raw.codexEffort,
+        deferCodexEffort ? new Set([...CODEX_EFFORTS, ...CODEX_CLI_EFFORTS]) : codexEfforts(runtime)),
     runtime,
     launcher,
   };
 }
 
-function parseArgs(argv) {
+function parseArgs(argv, parseOptions = {}) {
   const raw = {
     reviewers: "claude,codex",
     claudeModel: "opus",
@@ -186,7 +194,7 @@ function parseArgs(argv) {
   if (claude && claude.launcher !== "none" && claude.configDir != null) {
     throw new Error("--claude-config-dir cannot be combined with --claude-launcher; the launcher selects the Claude home.");
   }
-  const codex = selected.has("codex") ? codexOptions(raw, provided) : null;
+  const codex = selected.has("codex") ? codexOptions(raw, provided, parseOptions) : null;
   let cursor = null;
   if (selected.has("cursor")) {
     const cursorEffort = effort(
@@ -230,8 +238,10 @@ if (isMain) {
 
 export {
   CODEX_CLI_EFFORTS,
+  CODEX_EFFORTS,
   CURSOR_MODELS,
   CURSOR_SPEEDS,
+  codexEfforts,
   cursorModel,
   parseArgs,
   readOptionValue,

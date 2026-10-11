@@ -69,4 +69,8 @@ test("Codex runtime and launcher selections reach the loop's review options", ()
   assert.equal(o.review.codex.runtime, "cli"); assert.equal(o.review.codex.launcher, "auto"); assert.equal(o.review.claude.launcher, "home:work");
   assert.equal(parseArgs([]).review.codex.runtime, "native");
   assert.throws(() => parseArgs(["--codex-runtime", "native", "--codex-launcher", "auto"]), /omit --codex-runtime/);
+  // Loop options defer the runtime-specific effort check to init, where a configuration file may change the runtime.
+  assert.equal(parseArgs(["--codex-effort", "minimal"]).review.codex.effort, "minimal");
+  assert.equal(parseArgs(["--codex-runtime", "cli", "--codex-effort", "ultra"]).review.codex.effort, "ultra");
+  assert.throws(() => parseArgs(["--codex-effort", "extreme"]), /Unsupported --codex-effort/);
 });

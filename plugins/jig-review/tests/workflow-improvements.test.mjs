@@ -163,7 +163,9 @@ test("launcher-selected bundled bridges preflight the Jig executable instead of 
   await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "subagent" }] }, ["--reviewers", "codex"]), /must be native or cli/);
   // The configured entry and the loop options resolve to one effective runtime before dispatch.
   await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--reviewers", "codex", "--codex-launcher", "auto"]), /requires the cli runtime, but the codex reviewer entry selects runtime native/);
-  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]), /not a Codex CLI effort/);
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]), /not valid for the cli Codex runtime/);
+  // A native entry overriding --codex-runtime cli must not admit a CLI-only effort.
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--reviewers", "codex", "--codex-runtime", "cli", "--codex-effort", "minimal"]), /not valid for the native Codex runtime/);
 });
 
 test("the configured codex runtime is resolved once and travels with the capability", async t => {
@@ -171,6 +173,10 @@ test("the configured codex runtime is resolved once and travels with the capabil
   assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
   const native = await fixture(t).start({ reviewers: [{ id: "codex" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]);
   assert.deepEqual(native.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "native", undefined]]);
+  // A configured CLI entry accepts a CLI-only effort even without --codex-runtime on the command line.
+  const minimal = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex", "--codex-effort", "minimal"]);
+  assert.deepEqual(minimal.config.reviewers.map(p => [p.id, p.runtime]), [["codex", "cli"]]);
+  assert.equal(minimal.options.review.codex.effort, "minimal");
 });
 
 test("evidence declarations reject broad paths and policy files", () => {

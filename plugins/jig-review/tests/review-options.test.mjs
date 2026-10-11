@@ -259,6 +259,8 @@ test("Jig launchers select provider homes and imply the Codex CLI runtime", () =
   assert.equal(parseArgs(["--codex-effort", "ultra"]).codex.effort, "ultra", "native Codex keeps the host effort range");
   assert.equal(parseArgs(["--codex-runtime", "cli", "--codex-effort", "minimal"]).codex.effort, "minimal");
   assert.throws(() => parseArgs(["--codex-runtime", "cli", "--codex-effort", "ultra"]), /Unsupported --codex-effort value "ultra"\. Use minimal, low, medium, high, xhigh/);
+  assert.throws(() => parseArgs(["--codex-effort", "minimal"]), /Unsupported --codex-effort value "minimal"\. Use low, medium, high, xhigh, max, ultra/);
+  assert.equal(parseArgs(["--codex-effort", "minimal"], { deferCodexEffort: true }).codex.effort, "minimal");
   assert.throws(() => parseArgs(["--codex-runtime", "native", "--codex-launcher", "auto"]), /use --codex-runtime cli or omit --codex-runtime/);
   assert.throws(() => parseArgs(["--codex-runtime", "subagent"]), /Unsupported --codex-runtime value/);
   assert.throws(() => parseArgs(["--claude-launcher", "picker"]), /Unsupported --claude-launcher value "picker"/);

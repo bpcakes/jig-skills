@@ -2,8 +2,7 @@
 
 import { readBrief } from "./review-brief.mjs";
 
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReviewEvidence } from "./review-evidence.mjs";
@@ -23,6 +22,7 @@ import {
   assertScopeMatchesFingerprint,
   installAdapterCancellation,
   providerTimeout,
+  remainingAdapterTime,
   verifyScopeFingerprint,
 } from "./adapter-runtime.mjs";
 
@@ -32,66 +32,116 @@ const LAST_MESSAGE_FILE = "codex-last-message.txt";
 const PRIVATE_HOME_DIR = "codex-home";
 const SHIM_FILE = "codex-shim.sh";
 const MAX_TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024;
-const SKILL_ROOT_DEPTH = 4;
 
 // Only Codex's own error channel decides failures; the shim's startup message
 // below is recognized by the bridge as a permanent configuration failure.
 const MISSING_CREDENTIALS = "the Codex CLI reviewer requires file-based credentials in the selected home";
 
-// Codex loads skills from CODEX_HOME/skills, from .agents/skills in the working
-// directory and its ancestors, from ~/.agents/skills, and from a system root.
-// The private home has no skills; the remaining roots are disabled by SKILL.md
-// path, which is how skills.config identifies a skill.
-function ambientSkillRoots(repoRoot, home = os.homedir()) {
-  const roots = [path.join(home, ".agents", "skills"), "/etc/codex/skills"];
-  for (let directory = path.resolve(repoRoot); ; directory = path.dirname(directory)) {
-    roots.push(path.join(directory, ".agents", "skills"));
-    if (path.dirname(directory) === directory) break;
-  }
-  return roots;
+const RENDER_TIMEOUT_MS = 60 * 1000;
+const MAX_RENDER_BYTES = 64 * 1024 * 1024;
+const PROJECT_DOC_OVERRIDES = Object.freeze(["-c", "project_doc_max_bytes=0"]);
+
+function renderedText(value, parts = []) {
+  if (typeof value === "string") parts.push(value);
+  else if (Array.isArray(value)) for (const item of value) renderedText(item, parts);
+  else if (value && typeof value === "object") for (const item of Object.values(value)) renderedText(item, parts);
+  return parts.join("\n");
 }
 
-function skillFiles(root, depth = SKILL_ROOT_DEPTH, seen = new Set()) {
-  let real;
+// Codex's own renderer is the authority on what it would load for this working
+// directory, home, and configuration. Rendering needs no credentials or network.
+async function renderPrompt(codexBin, { cwd, privateHome, overrides, deadlineAt, signal, environment }) {
+  const result = await runCommand(codexBin, ["debug", "prompt-input", ...overrides, "isolation check"], {
+    cwd,
+    timeoutMs: Math.min(RENDER_TIMEOUT_MS, remainingAdapterTime(deadlineAt)),
+    maxBuffer: MAX_RENDER_BYTES,
+    signal,
+    env: { ...environment, CODEX_HOME: privateHome },
+  });
   try {
-    real = realpathSync(root);
+    return renderedText(JSON.parse(result.stdout.toString("utf8")));
   } catch {
-    return [];
+    throw isolationError("codex debug prompt-input did not return a JSON prompt rendering.");
   }
-  if (seen.has(real) || depth < 0) return [];
-  seen.add(real);
+}
+
+// Skills are listed as "(file: rN/relative/SKILL.md)" under a roots table of
+// "- `rN` = `absolute root`" lines.
+function listedSkills(text) {
+  const roots = new Map();
+  for (const match of text.matchAll(/^- `(r\d+)` = `(.+)`$/gm)) roots.set(match[1], match[2]);
   const files = [];
-  let entries;
-  try {
-    entries = readdirSync(root, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  for (const entry of entries) {
-    const full = path.join(root, entry.name);
-    if (entry.name === "SKILL.md" && (entry.isFile() || entry.isSymbolicLink())) {
-      files.push(full);
-      try {
-        files.push(realpathSync(full));
-      } catch {
-        // A dangling link cannot be loaded as a skill either.
-      }
-    } else if (entry.isDirectory() || entry.isSymbolicLink()) {
-      files.push(...skillFiles(full, depth - 1, seen));
-    }
+  for (const match of text.matchAll(/\(file: (r\d+)\/([^)]+)\)/g)) {
+    const root = roots.get(match[1]);
+    files.push(root ? path.join(root, match[2]) : `${match[1]}/${match[2]}`);
   }
   return files;
 }
 
+function within(file, directory) {
+  const relative = path.relative(directory, file);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+// Everything Codex lists outside the private home is ambient: repository,
+// user, or system skills. Codex's embedded skills live inside the private home.
+function ambientSkills(text, privateHome) {
+  let home = path.resolve(privateHome);
+  try {
+    home = realpathSync(privateHome);
+  } catch {
+    // The directory is created before rendering; fall back to the given path.
+  }
+  return [...new Set(listedSkills(text).filter((file) => {
+    let real = file;
+    try {
+      real = realpathSync(file);
+    } catch {
+      // A listed but unreadable path is still ambient.
+    }
+    return !within(file, home) && !within(real, home);
+  }))].sort();
+}
+
+function instructionsLoaded(text) {
+  return /^# AGENTS\.md instructions for /m.test(text);
+}
+
 // Configuration overrides that keep ambient instructions out of the reviewer:
-// no project AGENTS.md files, and every discoverable repository or user skill
-// disabled. Home instructions and skills are excluded by the private home.
-function isolationOverrides({ repoRoot, home = os.homedir() }) {
-  const overrides = ["-c", "project_doc_max_bytes=0"];
-  const files = [...new Set(ambientSkillRoots(repoRoot, home).flatMap((root) => skillFiles(root)))].sort();
+// no project AGENTS.md files, and every listed ambient skill disabled by its
+// SKILL.md path, which is how skills.config identifies a skill.
+function isolationOverrides(skillFiles = []) {
+  const overrides = [...PROJECT_DOC_OVERRIDES];
+  const files = [...new Set(skillFiles)].sort();
   if (files.length) {
     overrides.push("-c", `skills.config=[${files.map((file) => `{path=${JSON.stringify(file)},enabled=false}`).join(",")}]`);
   }
+  return overrides;
+}
+
+function isolationError(message) {
+  return Object.assign(new Error(`Codex isolation incomplete: ${message}`), { providerError: `Codex isolation incomplete: ${message}` });
+}
+
+// Ask Codex what it would load, disable all of it, then prove that only its own
+// embedded skills and no AGENTS.md instructions remain. Fails closed.
+async function isolate(codexBin, context) {
+  let baseline;
+  try {
+    baseline = await renderPrompt(codexBin, { ...context, overrides: PROJECT_DOC_OVERRIDES });
+  } catch (error) {
+    throw classifyFailure(error, Buffer.alloc(0));
+  }
+  const overrides = isolationOverrides(ambientSkills(baseline, context.privateHome));
+  let verification;
+  try {
+    verification = await renderPrompt(codexBin, { ...context, overrides });
+  } catch (error) {
+    throw classifyFailure(error, Buffer.alloc(0));
+  }
+  const leftover = ambientSkills(verification, context.privateHome);
+  if (leftover.length) throw isolationError(`Codex still lists skills outside the private home: ${leftover.join(", ")}`);
+  if (instructionsLoaded(verification)) throw isolationError("AGENTS.md instructions still load.");
   return overrides;
 }
 
@@ -111,7 +161,7 @@ fi
 source_home="\${CODEX_HOME:-$HOME/.codex}"
 private="$JIG_REVIEW_PRIVATE_HOME"
 if [ ! -f "$source_home/auth.json" ]; then
-  printf 'codex-review: %s has no auth.json; ${MISSING_CREDENTIALS} (not logged in, or keyring storage)\n' "$source_home" >&2
+  printf 'codex-review: the selected Codex home has no auth.json; ${MISSING_CREDENTIALS} (not logged in, or keyring storage)\n' >&2
   exit 1
 fi
 ln -sfn "$source_home/auth.json" "$private/auth.json" || exit 1
@@ -287,12 +337,12 @@ function parseArgs(argv) {
 
 // A read-only, ephemeral, configuration-independent Codex session. The private
 // home carries only credentials, user configuration and execpolicy rules are
-// ignored, project instructions are disabled, and discoverable skills are turned
-// off, so neither the selected home nor the reviewed repository can add
-// instructions or widen command approval past the read-only sandbox, which
+// ignored, and the isolation overrides disable project instructions and every
+// ambient skill, so neither the selected home nor the reviewed repository can
+// add instructions or widen command approval past the read-only sandbox, which
 // denies writes and network access. --json keeps the event stream on stdout for
 // failure classification.
-function buildCodexArgs(options, scope, lastMessagePath, overrides = isolationOverrides({ repoRoot: scope.repoRoot })) {
+function buildCodexArgs(options, scope, lastMessagePath, overrides = isolationOverrides()) {
   const args = [
     "exec",
     "--json",
@@ -363,11 +413,14 @@ async function runCodexReview(options, dependencies = {}) {
     const codexBin = dependencies.codexBin ?? process.env.JIG_CODEX_BIN ?? "codex";
     const lastMessagePath = path.join(evidence.directory, LAST_MESSAGE_FILE);
     const { shim, privateHome } = writeShim(evidence.directory);
+    const overrides = await isolate(codexBin, {
+      cwd: scope.repoRoot, privateHome, deadlineAt, signal, environment: gitEnvironment(childEnvironment(process.env)),
+    });
     const launch = resolveProviderLaunch({
       provider: "codex",
       launcher: options.launcher,
       executable: shim,
-      args: buildCodexArgs(options, scope, lastMessagePath),
+      args: buildCodexArgs(options, scope, lastMessagePath, overrides),
       inherited: process.env,
       jigBin: dependencies.jigBin ?? null,
     });
@@ -442,11 +495,15 @@ if (isMain) {
 
 export {
   MISSING_CREDENTIALS,
-  ambientSkillRoots,
+  ambientSkills,
   buildCodexArgs,
   classifyFailure,
+  instructionsLoaded,
+  isolate,
   isolationOverrides,
+  listedSkills,
   parseArgs,
   parseCodexResult,
+  renderPrompt,
   runCodexReview,
 };
