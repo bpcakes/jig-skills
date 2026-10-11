@@ -316,18 +316,21 @@ def complete(run_dir, wake_id, now=None):
             raise RuntimeErrorDetail("wrong_wake", "Completion must name the pending wake or 'manual' for a full manual pass")
         settings = scheduler_config(current["config"], current["scheduler"])
         interval = max(settings["cadence_seconds"], settings["minimum_cadence_seconds"])
+        # Dispatch already consumed earlier requests. Anything now queued arrived
+        # during this pass; only a full manual reconciliation may consume it too.
+        requested = schedule.get("wake_requested_at") if wake_id != "manual" else None
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
                 "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
                 "last_completed_wake_id": pending or schedule.get("last_completed_wake_id"),
                 "next_due_at": timestamp(now + timedelta(seconds=interval)),
-                "wake_requested_at": None, "wake_reason": None,
+                "wake_requested_at": requested, "wake_reason": schedule.get("wake_reason") if requested else None,
                 "failure": endpoint_failure(schedule), "busy_since_at": None}
     state = scheduler_patch(run_dir, finish)
     return {"status": "completed", "last_completed_at": state["scheduler"].get("last_completed_at"),
             "next_due_at": state["scheduler"].get("next_due_at")}
 
 
-def health_failures(schedule, settings, now):
+def health_failures(schedule, settings, now, created_at=None):
     """Return active incidents in reporting order, including temporarily hidden ones."""
     failures = []
     heartbeat = parse_time(schedule.get("heartbeat_at"))
@@ -344,6 +347,18 @@ def health_failures(schedule, settings, now):
     if busy_since and now >= busy_since + timedelta(seconds=settings["busy_timeout_seconds"]):
         failures.append({"id": "busy-" + schedule["busy_since_at"],
                          "reason": "Coordinator remains busy beyond the supervision timeout; inspect its registered execution"})
+    if not schedule.get("pending_action_id") and not busy_since:
+        interval = max(settings["cadence_seconds"], settings["minimum_cadence_seconds"])
+        completed = parse_time(schedule.get("last_completed_at"))
+        progress = completed or parse_time(schedule.get("last_dispatched_at")) or parse_time(created_at)
+        if progress:
+            due = progress + timedelta(seconds=interval)
+            requested = parse_time(schedule.get("wake_requested_at"))
+            if requested:
+                due = min(due, max(requested, progress + timedelta(seconds=settings["minimum_cadence_seconds"])))
+            if now > due + timedelta(seconds=interval * 2):
+                failures.append({"id": "progress-" + timestamp(progress),
+                                 "reason": "Eligible reconciliation is overdue despite scheduler liveness"})
     return failures
 
 
@@ -360,7 +375,7 @@ def health(run_dir, now=None):
             if not enabled(current, settings):
                 decision["result"] = {"status": "scheduler_stopped", "alert": "suppressed"}
                 return None
-            failures = health_failures(schedule, settings, now)
+            failures = health_failures(schedule, settings, now, current["created_at"])
             active_ids = {failure["id"] for failure in failures}
             previous = schedule.get("health_alerts", {})
             if "health_alerts" not in schedule and schedule.get("alerted_failure_id"):
@@ -402,7 +417,13 @@ def health(run_dir, now=None):
             decision.update(notice=notice, claim=claim)
             return {"health_alerts": alerts, "alerted_failure_id": failure["id"], "last_alert": claim}
 
-        scheduler_patch(run_dir, prepare, check_heartbeat=True)
+        try:
+            scheduler_patch(run_dir, prepare, check_heartbeat=True)
+        except OSError as exc:
+            # Never send a notice whose durable claim failed, or call failed
+            # health persistence healthy merely because the heartbeat survived.
+            return {**decision.get("result", {}), "status": "unhealthy", "alert": "storage_failed",
+                    "error": str(exc)}
         if "claim" not in decision:
             return decision["result"]
         notice, claim = decision["notice"], decision["claim"]

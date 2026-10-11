@@ -12,6 +12,7 @@ from unittest.mock import patch
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills/herdr-orchestrate/scripts"
 sys.path.insert(0, str(SCRIPTS))
 import supervise as runtime
+import state as state_module
 from state import Engine, StateError
 
 
@@ -291,6 +292,102 @@ class RuntimeTests(unittest.TestCase):
         overdue = runtime.health(self.run, self.now + timedelta(seconds=176))
         self.assertEqual(overdue["status"], "unhealthy")
         self.assertIn("heartbeat", overdue["failure"]["reason"])
+
+    def test_automatic_completion_preserves_events_received_during_pass(self):
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 1200})
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            first = runtime.tick(self.run, self.now)
+            runtime.request_wake(self.run, "new result", self.now + timedelta(seconds=10))
+            runtime.request_wake(self.run, "another result", self.now + timedelta(seconds=15))
+            runtime.complete(self.run, first["wake_id"], self.now + timedelta(seconds=20))
+            runtime.complete(self.run, first["wake_id"], self.now + timedelta(seconds=21))
+            schedule = Engine.read(self.run)["scheduler"]
+            self.assertEqual(schedule["wake_reason"], "new result")
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=79))["status"], "minimum_cadence")
+            second = runtime.tick(self.run, self.now + timedelta(seconds=80))
+            self.assertEqual(second["status"], "delivered")
+            self.assertNotEqual(second["wake_id"], first["wake_id"])
+            self.assertIsNone(Engine.read(self.run)["scheduler"]["wake_requested_at"])
+            runtime.complete(self.run, second["wake_id"], self.now + timedelta(seconds=90))
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=150))["status"], "not_due")
+
+    def test_manual_full_pass_consumes_event_received_during_pending_pass(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            first = runtime.tick(self.run, self.now)
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=10))
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=20))
+        before = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(before["wake_requested_at"])
+        runtime.complete(self.run, first["wake_id"], self.now + timedelta(seconds=30))
+        self.assertEqual(Engine.read(self.run)["scheduler"], before)
+
+    def test_fresh_heartbeat_cannot_hide_failed_due_transactions(self):
+        runtime.complete(self.run, "manual", self.now)
+        Engine.heartbeat(self.run, runtime.timestamp(self.now))
+        runtime.health(self.run, self.now)
+        real_write = state_module.write_atomic
+        def fail_transaction(path, value):
+            if path.name == "transaction.json":
+                raise OSError(28, "No space for transaction")
+            return real_write(path, value)
+        incident = None
+        with patch.object(state_module, "write_atomic", side_effect=fail_transaction):
+            for seconds in (65, 195, 600):
+                at = self.now + timedelta(seconds=seconds)
+                with self.assertRaises(OSError):
+                    runtime.tick(self.run, at)
+                result = runtime.health(self.run, at)
+                if seconds == 65:
+                    self.assertEqual(result["status"], "healthy")
+                else:
+                    self.assertEqual(result["status"], "unhealthy")
+                    self.assertIn("reconciliation", result["failure"]["reason"])
+                    if incident:
+                        self.assertEqual(result["failure"]["id"], incident)
+                    incident = result["failure"]["id"]
+        self.assertEqual(Engine.read(self.run)["scheduler"]["last_completed_at"], runtime.timestamp(self.now))
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            wake = runtime.tick(self.run, self.now + timedelta(seconds=601))
+        runtime.complete(self.run, wake["wake_id"], self.now + timedelta(seconds=602))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=602))["status"], "healthy")
+
+    def test_progress_alert_claim_storage_failure_never_sends(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        runtime.complete(self.run, "manual", self.now)
+        Engine.heartbeat(self.run, runtime.timestamp(self.now))
+        runtime.health(self.run, self.now)
+        real_write = state_module.write_atomic
+        def fail_transaction(path, value):
+            if path.name == "transaction.json":
+                raise OSError(28, "No space for alert claim")
+            return real_write(path, value)
+        at = self.now + timedelta(seconds=195)
+        Engine.heartbeat(self.run, runtime.timestamp(at))
+        with patch.object(state_module, "write_atomic", side_effect=fail_transaction), \
+                patch.object(runtime.subprocess, "run") as notify:
+            result = runtime.health(self.run, at)
+        self.assertEqual(result["status"], "unhealthy")
+        self.assertEqual(result["alert"], "storage_failed")
+        notify.assert_not_called()
+        with patch.object(runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as notify:
+            self.assertEqual(runtime.health(self.run, at)["alert"], "transport_accepted")
+            self.assertEqual(runtime.health(self.run, at + timedelta(seconds=1))["alert"], "already_attempted")
+        notify.assert_called_once()
+
+    def test_progress_health_respects_minimum_and_initial_run_without_attempt(self):
+        self.configure_scheduler({**self.config["scheduler"], "minimum_cadence_seconds": 240})
+        runtime.complete(self.run, "manual", self.now)
+        Engine.heartbeat(self.run, runtime.timestamp(self.now + timedelta(seconds=700)))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=700))["status"], "healthy")
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=721))["status"], "unhealthy")
+        self.schedule(enabled=False)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=721))["status"], "scheduler_stopped")
+        initial = self.root / "initial"
+        state = Engine.initialize(initial, self.config)
+        late = runtime.parse_time(state["created_at"]) + timedelta(seconds=181)
+        Engine.heartbeat(initial, runtime.timestamp(late))
+        self.assertEqual(runtime.health(initial, late)["status"], "unhealthy")
 
     def test_pending_wake_heartbeats_stay_bounded_and_do_not_hide_overdue_delivery(self):
         with patch.object(runtime, "herdr_call", return_value=self.response()) as call:

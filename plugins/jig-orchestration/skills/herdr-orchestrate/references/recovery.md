@@ -24,9 +24,13 @@ Ticks wake the coordinator for a bounded reconciliation; they do not meter all t
 
 After a full reconciliation, record its wake completion. A full manual check can consume a pending catch-up and reset the next eligible check. A short status reply cannot. Coalesce missed ticks into one catch-up. Promise another automatic check only after the scheduler is observed running; delivery evidence is stronger than an intended due time.
 
+Automatic completion preserves event wakes received after dispatch for the next minimum-cadence-eligible tick. A full manual reconciliation consumes the currently queued catch-up; use manual completion only after including that catch-up in the check.
+
 A full manual check records the pending wake it consumed separately from the manual completion ID. A late completion for that most recently consumed wake is a no-op, preserving the manual check's evidence and cadence even if another wake is now pending. Unknown wake IDs still fail; only completing the pending wake can consume it.
 
 An independently configured host timer may call the state-only `wake` or `health` command; neither controls Herdr. With an authorized notification argv/destination, the health check reports overdue heartbeat/delivery or recorded scheduler failure and deduplicates unchanged alerts. A scheduler stop suppresses expected-inactivity alerts; a work pause/cancellation does not. Blocker alerts likewise require an authorized destination and a new actionable change.
+
+Fresh heartbeats and repeated attempts do not prove progress. With no pending or busy pass, health also detects reconciliation overdue by more than two effective intervals after eligibility (the effective interval is the larger of cadence and minimum cadence). It measures from completed/dispatched work, or run creation before the first pass; an event wake can advance eligibility. The incident remains stable until progress resumes. If health cannot persist its alert claim, it reports unhealthy storage failure and does not send an unrecorded notification.
 
 Only proved notifier non-start (missing executable or permission denial) is automatically retryable: repair the executable, then the next health call after 60 seconds retries, with at most three total attempts for the same failure. An exhausted budget requires inspection. A nonzero exit may follow an emitted notice; like a timeout or lost acknowledgement, it remains deduplicated and must be inspected before any manual resend. Delivery acknowledgements arriving after a completed coordinator pass retain separate delivery evidence without reopening that pass.
 

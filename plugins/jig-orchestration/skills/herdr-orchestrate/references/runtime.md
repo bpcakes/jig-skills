@@ -17,7 +17,7 @@ A minimal configuration shape is:
 
 ```json
 {
-  "repository": {"path": "/work/coordinator/repository", "target": "main"},
+  "repository": {"path": "/work/coordinator/repository", "target": "main", "host": "local"},
   "scope": {"task_ids": ["example-A", "example-B"]},
   "tracker": {"kind": "bead", "authority": "configured-coordination-ref"},
   "hosts": {

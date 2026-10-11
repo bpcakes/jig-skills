@@ -211,6 +211,46 @@ class EngineTests(unittest.TestCase):
         self.admit("C", host="remote", worktree=str(owned))
         self.assertEqual(Engine.read(self.run)["tasks"]["C"]["worktree"], str(owned))
 
+    def test_repository_protection_uses_the_target_host_for_admission_and_handoff(self):
+        hosts = copy.deepcopy(self.config["hosts"])
+        for host in hosts.values():
+            host["worktree_root"] = str(self.base)
+        remote_main = self.base / "remote-main"
+        hosts["remote"]["repository_path"] = str(remote_main) + "/."
+        self.reset(hosts=hosts)
+        self.admit("B", host="remote", worktree=str(self.repo))
+        self.assert_error("ownership", self.admit, "A", worktree=str(self.repo))
+        self.assert_error("ownership", self.admit, "C", host="remote", worktree=str(self.repo / "child"))
+        for path in (remote_main, remote_main / "child"):
+            self.assert_error("ownership", self.admit, "C", host="remote", worktree=str(path))
+        self.admit("A", worktree=str(self.base / "task-A"))
+        target = {"host": "remote", "driver": "coordinator", "branch": "task/A",
+                  "identity": {"agent_id": "replacement"}, "evidence": self.proof(True),
+                  "source": {**self.proof(), "published": True, "revision": "H1"}}
+        self.assert_error("ownership", self.apply, "handoff", "A", worktree=str(remote_main), **target)
+        self.apply("handoff", "B", host="local", driver="coordinator", worktree=str(self.base / "task-B"),
+                   branch="task/B", identity={"agent_id": "other"}, evidence=self.proof(True),
+                   source={**self.proof(), "published": True, "revision": "H1"})
+        self.apply("handoff", "A", worktree=str(self.repo), **target)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["host"], "remote")
+
+    def test_explicit_and_legacy_repository_host_bindings(self):
+        hosts = {"primary": {**self.config["hosts"]["local"], "worktree_root": str(self.base)},
+                 "away": {**self.config["hosts"]["remote"], "worktree_root": str(self.base)}}
+        self.reset(hosts=hosts, actors={})
+        # Unidentified legacy ownership stays conservative, not silently local.
+        self.assert_error("ownership", self.admit, "B", host="away", worktree=str(self.repo))
+        hosts["primary"]["roles"] = ["coordinator"]
+        self.apply("configure", fields={"hosts": hosts}, evidence=self.proof())
+        self.admit("B", host="away", worktree=str(self.repo))
+        self.assert_error("ownership", self.admit, "C", host="primary", worktree=str(self.repo))
+        self.reset(hosts=hosts, actors={}, repository={**self.config["repository"], "host": "away"})
+        self.admit("B", host="primary", worktree=str(self.repo))
+        self.assert_error("ownership", self.admit, "C", host="away", worktree=str(self.repo))
+        for changes in ({"repository": {**self.config["repository"], "host": "missing"}},
+                        {"hosts": {"primary": {**hosts["primary"], "repository_path": "relative"}}}):
+            self.assert_error("invalid", self.reset, **changes)
+
     def test_pre_admission_claim_uncertainty_cannot_admit_or_repeat(self):
         intent = self.apply("claim_intent", "A", target={"authority": "canonical-ref", "owner": "tracker-actor"},
                             evidence=self.proof())

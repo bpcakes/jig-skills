@@ -226,6 +226,12 @@ class Engine:
             info["worktree_root"] = host_path(info["worktree_root"])
             require(isinstance(info.get("endpoint"), dict) and info["endpoint"],
                     "invalid", "each host needs a registered endpoint")
+            if "repository_path" in info:
+                require(nonempty(info["repository_path"]) and Path(info["repository_path"]).is_absolute(),
+                        "invalid", "host repository_path must be absolute")
+                info["repository_path"] = host_path(info["repository_path"])
+        if "host" in repo:
+            require(repo["host"] in hosts, "invalid", "repository.host must name a registered host")
         cap = config.get("unfinished_task_cap")
         require(cap is None or type(cap) is int and cap > 0, "invalid", "unfinished_task_cap must be positive or null")
         authority = config.get("authority", [])
@@ -399,7 +405,19 @@ class Engine:
         worktree = Path(host_path(value))
         root = Path(state["config"]["hosts"][host]["worktree_root"])
         require(root in worktree.parents, "location", "worktree must be a child of the registered worktree root")
-        protected = [Path(state["config"]["repository"]["path"])]
+        config = state["config"]
+        repository_host = config["repository"].get("host")
+        if repository_host is None:
+            coordinators = [name for name, info in config["hosts"].items() if "coordinator" in info.get("roles", [])]
+            repository_host = (coordinators[0] if len(coordinators) == 1 else
+                               "local" if "local" in config["hosts"] else
+                               next(iter(config["hosts"])) if len(config["hosts"]) == 1 else None)
+        # Unknown legacy ownership retains the conservative protection until
+        # the coordinator host is identified. Never infer it from path equality.
+        protected = [Path(config["repository"]["path"])] if repository_host in {None, host} else []
+        host_repository = config["hosts"][host].get("repository_path")
+        if host_repository:
+            protected.append(Path(host_repository))
         protected.extend(Path(t["worktree"]) for t in state["tasks"].values()
                          if t["host"] == host and t["id"] != excluding)
         require(not any(worktree == path or worktree in path.parents or path in worktree.parents

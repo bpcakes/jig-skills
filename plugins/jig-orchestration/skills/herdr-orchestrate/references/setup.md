@@ -36,6 +36,8 @@ Record canonical checkout/worktree-root paths verified on the host that owns the
 
 Admission and relocation reject equal, ancestor, or descendant paths overlapping the protected repository or another task's checkout on the same host. Similar path prefixes are allowed when they are separate directories; identical paths on different hosts are separate locations. These lexical checks do not replace host-side symlink and physical-checkout verification.
 
+Set `repository.host` to the registered host that owns `repository.path`. Other hosts may declare their protected main checkout with `hosts.<id>.repository_path`. For existing configurations without `repository.host`, the helper uses the sole host with the `coordinator` role, then a host named `local`, then the sole registered host. If none identifies the owner, it conservatively protects the repository path on every host until the coordinator role is identified. Verify these bindings on the owning hosts before admission.
+
 Install or upgrade as an explicit setup operation under existing authority. Do not upgrade active controllers merely to match version strings. Retain the runtime required to resume each saved review run.
 
 ## Herdr endpoints
