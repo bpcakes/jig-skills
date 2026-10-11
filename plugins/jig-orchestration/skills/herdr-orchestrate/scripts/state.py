@@ -175,7 +175,8 @@ class Engine:
         "enabled", "heartbeat_at", "last_attempt_at", "last_delivered_at", "last_completed_at",
         "next_due_at", "pending_action_id", "delivery_status", "failure", "alerted_failure_id",
         "last_completed_action_id", "wake_requested_at", "wake_reason",
-        "last_alert", "busy_since_at",
+        "last_alert", "busy_since_at", "last_dispatched_action_id", "last_dispatched_at",
+        "last_delivered_action_id",
     }
 
     @staticmethod
@@ -348,6 +349,37 @@ class Engine:
         if launching and state["config"].get("launch_cutoff"):
             require(datetime.now(timezone.utc) < instant(state["config"]["launch_cutoff"]),
                     "deadline", "launch cutoff reached")
+
+    @staticmethod
+    def _delegated(state, task, caller, kind):
+        if caller != "coordinator":
+            delegation = task["delegation"] or {}
+            require(delegation.get("executor") == caller and kind in delegation.get("actions", [])
+                    and delegation.get("policy_version") == state["policy_version"],
+                    "authority", "current delegated action authority is required")
+
+    @staticmethod
+    def _claim_transfer(state, task, target, proof):
+        require(isinstance(target, dict) and target.get("authority") == state["config"]["tracker"]["authority"]
+                and target.get("task_id") == task["id"] and target.get("previous_owner") == task["claim"]["owner"]
+                and nonempty(target.get("owner")) and target["owner"] != target["previous_owner"],
+                "identity", "claim transfer must name the canonical task, current owner and distinct successor")
+        evidence(proof)
+        require(proof.get("authorized") is True and (proof.get("handoff_acknowledged") is True
+                or (proof.get("previous_owner_stopped") is True and proof.get("takeover_supported") is True)),
+                "authority", "claim transfer needs authorized acknowledged handoff or supported stopped-owner takeover evidence")
+
+    @staticmethod
+    def _record_claim_transfer(state, task, target, proof, receipt):
+        Engine._claim_transfer(state, task, target, proof)
+        evidence(receipt)
+        require(all(receipt.get(key) == target[key] for key in ("authority", "task_id", "owner"))
+                and receipt.get("confirmed") is True and receipt.get("unpublished") is False,
+                "claim", "claim transfer requires a confirmed published successor ownership receipt")
+        task.setdefault("claim_history", []).append({"previous_claim": task["claim"], "target": target,
+                                                     "evidence": proof, "receipt": receipt})
+        task["claim"] = copy.deepcopy(receipt)
+        task["delegation"] = None
 
     @staticmethod
     def _slot(state, task):
@@ -573,6 +605,36 @@ class Engine:
             state["scheduler"]["version"] += 1
             return {"scheduler": state["scheduler"]}
         require(task is not None, "missing", "task is not admitted")
+        if op in {"claim_transfer_intent", "reconcile_claim"}:
+            Engine._active(state, task, "close", allow_closed=True, launching=op == "claim_transfer_intent",
+                           reconciling=op == "reconcile_claim")
+            require(not task["reservations"] and not task["pending_intent"],
+                    "unsettled", "settle executions and reconcile uncertain effects before tracker ownership transfer")
+            target, proof = req.get("target"), req.get("evidence")
+            Engine._claim_transfer(state, task, target, proof)
+            if op == "reconcile_claim":
+                Engine._record_claim_transfer(state, task, target, proof, req.get("receipt", {}))
+                return {"reconciled_claim": task["claim"]}
+            task["pending_intent"] = {"id": req["action_id"], "kind": "claim_transfer", "executor": caller,
+                                      "target": target, "evidence": proof, "status": "pending",
+                                      "policy_version": state["policy_version"]}
+            return {"intent": task["pending_intent"]}
+        if op == "claim_transfer_outcome":
+            pending = task["pending_intent"]
+            require(pending is not None and pending["kind"] == "claim_transfer"
+                    and pending["id"] == req.get("intent_id") and pending["target"] == req.get("target"),
+                    "identity", "claim transfer outcome must match its recorded action and target")
+            status, receipt = req.get("status"), req.get("receipt", {})
+            require(status in {"unknown", "succeeded", "failed"}, "invalid", "invalid claim transfer outcome")
+            evidence(receipt)
+            if status == "unknown":
+                pending.update(status=status, receipt=receipt)
+            else:
+                if status == "succeeded":
+                    Engine._record_claim_transfer(state, task, pending["target"], pending["evidence"], receipt)
+                task["last_outcome"] = {**pending, "status": status, "receipt": receipt}
+                task["pending_intent"] = None
+            return {"claim_transfer_outcome": status}
         if op == "recover_session":
             require(req.get("previous_identity") == task["identity"], "identity", "recovery must name the current session identity")
             identity = req.get("identity")
@@ -659,6 +721,7 @@ class Engine:
         if op == "reserve":
             kind = req.get("kind")
             Engine._active(state, task, kind, launching=True)
+            Engine._delegated(state, task, caller, kind)
             require(not task["reservations"] and not task["pending_intent"], "unsettled", "settle the previous task execution before another assignment")
             require(nonempty(req.get("unit")), "invalid", "counted assignment unit is required")
             require(req["unit"] == Engine.UNITS.get(kind), "budget", "assignment kind requires its canonical counted unit")
@@ -729,11 +792,7 @@ class Engine:
             Engine._active(state, task, kind, launching=True)
             require(task["slot"] is not None, "capacity", "action requires an execution slot")
             require(task["pending_intent"] is None, "uncertain", "inspect and reconcile the existing pending action")
-            if caller != "coordinator":
-                delegation = task["delegation"] or {}
-                require(delegation.get("executor") == caller and kind in delegation.get("actions", [])
-                        and delegation.get("policy_version") == state["policy_version"],
-                        "authority", "current delegated action authority is required")
+            Engine._delegated(state, task, caller, kind)
             require(isinstance(req.get("target"), dict) and req["target"], "identity", "explicit side-effect target is required")
             evidence(req.get("evidence"))
             counted = any(limit["unit"] == Engine.UNITS[kind] for limit in config.get("limits", []))
@@ -771,7 +830,7 @@ class Engine:
         if op == "outcome":
             pending = task["pending_intent"]
             require(pending is not None and pending["id"] == req.get("intent_id"), "identity", "outcome must match the pending action")
-            require(pending["kind"] != "reopen", "invalid", "use reopen_outcome for canonical reopen reconciliation")
+            require(pending["kind"] in Engine.ACTIONS, "invalid", "use the dedicated tracker outcome operation")
             require(caller in {"coordinator", pending["executor"]}, "forbidden", "only pending executor or coordinator may record outcome")
             require(req.get("target") == pending["target"], "identity", "outcome target differs from pending action")
             status = req.get("status")

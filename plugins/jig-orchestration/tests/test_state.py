@@ -395,6 +395,36 @@ class EngineTests(unittest.TestCase):
         self.assert_error("invalid", Engine.apply, self.run, {**self.request("park", "A"), "caller": "coordinator"})
         self.assert_error("invalid", self.apply, "observe", "A", caller="worker-a", fields={"driver": "attacker"}, evidence=self.proof())
 
+    def test_driver_reservations_require_current_action_delegation_before_mutation(self):
+        self.admit(identity={"native_id": "old"})
+        def rejected():
+            before = Engine.read(self.run)
+            self.assert_error("authority", self.reserve, kind="repair", caller="worker-a")
+            self.assertEqual(Engine.read(self.run), before)
+        rejected()  # No delegation.
+        self.apply("delegate", "A", executor="coordinator", actions=["repair"])
+        rejected()  # Different executor.
+        self.apply("delegate", "A", executor="worker-a", actions=["review"])
+        rejected()  # Different action.
+        self.apply("delegate", "A", executor="worker-a", actions=["repair"])
+        self.apply("control", control="pause")
+        self.apply("control", control="resume")
+        rejected()  # Stale policy.
+        self.apply("delegate", "A", executor="worker-a", actions=["repair"])
+        self.apply("recover_session", "A", previous_identity={"native_id": "old"}, identity={"native_id": "new"},
+                   evidence={**self.proof(), "previous_session_stopped": True, "replacement_verified": True,
+                             "host": "local", "worktree": "/worktrees/A"})
+        rejected()  # Recovery cleared delegation.
+        self.apply("delegate", "A", executor="worker-a", actions=["repair"])
+        reservation = self.reserve(kind="repair", caller="worker-a")
+        self.apply("control", control="pause")
+        self.apply("settle", "A", caller="worker-a", reservation_id=reservation["reservation_id"],
+                   refs={}, evidence=self.proof(True))  # Settlement must remain available.
+        self.apply("control", control="resume")
+        self.reserve(kind="repair")  # Coordinator does not need delegation.
+        task = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(task["counters"]["source_repair"], 2)
+
     def test_unknown_dispatch_keeps_slot_and_count_until_reconciled(self):
         self.admit()
         reservation = self.reserve()
@@ -569,6 +599,87 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(task["refs"], refs)
         self.assertIsNone(task["delegation"])
         self.assertEqual(task["last_handoff"]["previous"]["host"], "local")
+
+    def test_reconciled_tracker_handoff_preserves_state_and_uses_successor_for_closure(self):
+        self.admit()
+        refs = {"controller_id": "controller-A", "run_id": "run-A"}
+        self.apply("observe", "A", fields={"refs": refs}, evidence=self.proof())
+        reservation = self.reserve(kind="repair", refs=refs)
+        self.settle(reservation["reservation_id"], refs=refs)
+        self.apply("control", "A", control="hold", hold_id="merge", actions=["merge"], reason="keep hold")
+        self.apply("delegate", "A", executor="worker-a", actions=["repair"])
+        target = {"authority": "canonical-ref", "task_id": "A", "previous_owner": "tracker-actor", "owner": "successor"}
+        proof = {**self.proof(), "authorized": True, "handoff_acknowledged": True}
+        receipt = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "successor",
+                   "confirmed": True, "unpublished": False}
+        before = Engine.read(self.run)["tasks"]["A"]
+        self.apply("control", control="pause")
+        self.apply("reconcile_claim", "A", target=target, evidence=proof, receipt=receipt)
+        after = Engine.read(self.run)["tasks"]["A"]
+        for key in ("host", "driver", "identity", "worktree", "branch", "refs", "slot", "counters", "holds", "findings"):
+            self.assertEqual(after[key], before[key], key)
+        self.assertEqual(after["claim_history"][0]["previous_claim"], before["claim"])
+        self.assertEqual(after["claim"], receipt)
+        self.assertIsNone(after["delegation"])
+        self.apply("control", control="resume")
+        closed = {**receipt, "status": "closed", "criteria_met": True, "acceptance_ref": "/proof/acceptance"}
+        self.assert_error("closure", self.apply, "close", "A", receipt={**closed, "owner": "tracker-actor"})
+        self.apply("close", "A", receipt=closed)
+        reopen_target = {"authority": "canonical-ref", "owner": "successor"}
+        intent = self.apply("reopen_intent", "A", target=reopen_target, evidence=self.proof())
+        self.apply("reopen_outcome", "A", intent_id=intent["action_id"], target=reopen_target,
+                   status="succeeded", receipt={**receipt, "status": "open"})
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "admitted")
+
+    def test_tracker_transfer_intent_fences_unknown_effect_and_reconciles_after_cancel(self):
+        self.admit()
+        target = {"authority": "canonical-ref", "task_id": "A", "previous_owner": "tracker-actor", "owner": "successor"}
+        proof = {**self.proof(), "authorized": True, "previous_owner_stopped": True, "takeover_supported": True}
+        intent = self.apply("claim_transfer_intent", "A", target=target, evidence=proof)
+        self.apply("claim_transfer_outcome", "A", intent_id=intent["action_id"], target=target,
+                   status="unknown", receipt=self.proof())
+        self.assert_error("unsettled", self.reserve)
+        self.assert_error("unsettled", self.apply, "claim_transfer_intent", "A", target=target, evidence=proof)
+        self.assert_error("invalid", self.apply, "outcome", "A", intent_id=intent["action_id"], target=target,
+                          status="succeeded", receipt=self.proof())
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["claim"]["owner"], "tracker-actor")
+        receipt = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "successor",
+                   "confirmed": True, "unpublished": False}
+        self.apply("control", control="cancel")
+        self.apply("claim_transfer_outcome", "A", intent_id=intent["action_id"], target=target,
+                   status="succeeded", receipt=receipt)
+        task = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(task["claim"], receipt)
+        self.assertIsNone(task["pending_intent"])
+        self.assertTrue(Engine.read(self.run)["controls"]["cancel_requested"])
+
+    def test_tracker_transfer_rejects_unverified_owners_receipts_and_active_jobs(self):
+        self.admit()
+        target = {"authority": "canonical-ref", "task_id": "A", "previous_owner": "tracker-actor", "owner": "successor"}
+        proof = {**self.proof(), "authorized": True, "handoff_acknowledged": True}
+        receipt = {**self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "successor",
+                   "confirmed": True, "unpublished": False}
+        before = Engine.read(self.run)
+        for field, value in (("previous_owner", "foreign"), ("authority", "other"), ("task_id", "B"), ("owner", "tracker-actor")):
+            self.assert_error("identity", self.apply, "reconcile_claim", "A", target={**target, field: value},
+                              evidence=proof, receipt=receipt)
+        for field in ("authorized", "handoff_acknowledged"):
+            self.assert_error("authority", self.apply, "reconcile_claim", "A", target=target,
+                              evidence={**proof, field: False}, receipt=receipt)
+        for field, value in (("owner", "foreign"), ("unpublished", True), ("confirmed", False)):
+            self.assert_error("claim", self.apply, "reconcile_claim", "A", target=target,
+                              evidence=proof, receipt={**receipt, field: value})
+        self.assert_error("forbidden", self.apply, "reconcile_claim", "A", caller="worker-a", target=target,
+                          evidence=proof, receipt=receipt)
+        self.assertEqual(Engine.read(self.run), before)
+        reservation = self.reserve()
+        self.assert_error("unsettled", self.apply, "reconcile_claim", "A", target=target, evidence=proof, receipt=receipt)
+        self.settle(reservation["reservation_id"])
+        intent = self.apply("claim_transfer_intent", "A", target=target, evidence=proof)
+        self.apply("claim_transfer_outcome", "A", intent_id=intent["action_id"], target=target,
+                   status="failed", receipt=self.proof())
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["claim"]["owner"], "tracker-actor")
+        self.assertNotIn("claim_history", Engine.read(self.run)["tasks"]["A"])
 
     def test_session_recovery_preserves_surviving_execution_and_unknown_outcome(self):
         original = {"session": "owned", "native_id": "crashed"}

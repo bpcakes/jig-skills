@@ -4,6 +4,8 @@ Select the repository's configured tracker, not whichever executable or `.beads`
 
 The coordinator owns new-task tracker transitions. Preserve an adopted task's existing owner until an acknowledged handoff. A supported takeover may recover a definitively stopped owner under existing recovery authority; silence or an expired timer is insufficient. Record the observation and reason. Worker process identities remain distinct from the tracker actor.
 
+For an admitted task, settle active jobs and reconcile pending effects before changing its tracker owner. Use the [runtime ownership-transfer operations](runtime.md) to persist intent before a coordinator-driven native transfer, then record its confirmed published result. An already completed authorized transfer can be recorded through `reconcile_claim`. Both retain the prior ownership receipt and require the canonical task/authority, exact previous owner, successor, and handoff or takeover evidence. Uncertain transfer outcomes keep ownership unchanged and block new assignments until reconciled; a session replacement or worktree handoff alone never changes tracker ownership.
+
 ## Beads Rust (`br`)
 
 Use one configured canonical store/authority for cross-host claims and closure. Independent clone databases are not a distributed lock. All participating writers must route through that authority. Verify database redirection/access without inspecting a protected main working tree; `--db` is available in current `br`, but repository policy determines the actual database/export binding.

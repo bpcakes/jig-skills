@@ -27,6 +27,8 @@ import uuid
 from state import Engine, StateError, scheduler_identity
 
 MAX_INPUT = 1024 * 1024
+HEALTH_ALERT_MAX_ATTEMPTS = 3
+HEALTH_ALERT_RETRY_SECONDS = 60
 
 
 class RuntimeErrorDetail(Exception):
@@ -231,7 +233,8 @@ def tick(run_dir, now=None):
             if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
                 return None  # A completed reconciliation consumed this tick.
             return {"pending_action_id": wake_id, "delivery_status": "dispatching", "failure": None,
-                    "wake_requested_at": None, "wake_reason": None, "busy_since_at": None}
+                    "wake_requested_at": None, "wake_reason": None, "busy_since_at": None,
+                    "last_dispatched_action_id": wake_id, "last_dispatched_at": timestamp(now)}
         prepared = scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
         if prepared["scheduler"].get("pending_action_id") != wake_id:
             return {"status": "reconciliation_completed"}
@@ -257,9 +260,16 @@ def tick(run_dir, now=None):
             scheduler_patch(run_dir, uncertain)
             return {"status": "delivery_unconfirmed", "wake_id": wake_id}
         def delivered(current):
-            if current["scheduler"].get("pending_action_id") != wake_id:
-                return None  # A fast coordinator already recorded completion.
-            return {"delivery_status": "delivered", "last_delivered_at": timestamp(now), "failure": None}
+            schedule = current["scheduler"]
+            if schedule.get("last_dispatched_action_id") != wake_id:
+                return None  # Never replace evidence for a newer dispatched wake.
+            fields = {}
+            previous = parse_time(schedule.get("last_delivered_at"))
+            if previous is None or previous <= now:
+                fields.update(last_delivered_at=timestamp(now), last_delivered_action_id=wake_id)
+            if schedule.get("pending_action_id") == wake_id:
+                fields.update(delivery_status="delivered", failure=None)
+            return fields or None  # Preserve a completion that won the acknowledgement race.
         scheduler_patch(run_dir, delivered)
         return {"status": "delivered", "wake_id": wake_id}
 
@@ -322,11 +332,20 @@ def health(run_dir, now=None):
         notifier = settings.get("notifier_argv")
         if not notifier:
             return {**notice, "alert": "local_evidence_only"}
+        attempts = 0
         if schedule.get("alerted_failure_id") == failure["id"]:
-            return {**notice, "alert": "already_attempted"}
+            last = schedule.get("last_alert") or {}
+            if last.get("failure_id") != failure["id"] or last.get("status") != "not_started":
+                return {**notice, "alert": "already_attempted"}
+            attempts = last["attempts"]
+            if attempts >= HEALTH_ALERT_MAX_ATTEMPTS:
+                return {**notice, "alert": "retry_exhausted"}
+            if now < parse_time(last["at"]) + timedelta(seconds=HEALTH_ALERT_RETRY_SECONDS):
+                return {**notice, "alert": "retry_pending"}
+        attempts += 1
         # Record intent first. A lost notifier acknowledgement is never replayed.
         scheduler_patch(run_dir, lambda _: {"alerted_failure_id": failure["id"], "last_alert": {
-            "failure_id": failure["id"], "status": "dispatching", "at": timestamp(now)}})
+            "failure_id": failure["id"], "status": "dispatching", "at": timestamp(now), "attempts": attempts}})
         try:
             result = subprocess.run(notifier, input=json.dumps(notice) + "\n", text=True,
                                     capture_output=True, timeout=20, check=False)
@@ -335,7 +354,9 @@ def health(run_dir, now=None):
                        "returncode": result.returncode}
         except (OSError, subprocess.TimeoutExpired) as exc:
             receipt = {"failure_id": failure["id"], "at": timestamp(now),
-                       "status": "transport_unconfirmed", "error": type(exc).__name__}
+                       "status": "not_started" if isinstance(exc, (FileNotFoundError, PermissionError)) else "transport_unconfirmed",
+                       "error": type(exc).__name__}
+        receipt["attempts"] = attempts
         scheduler_patch(run_dir, lambda _: {"last_alert": receipt})
         return {**notice, "alert": receipt["status"], "receipt": receipt}
 

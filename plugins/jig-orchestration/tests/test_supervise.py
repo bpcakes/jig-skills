@@ -322,6 +322,39 @@ class RuntimeTests(unittest.TestCase):
         schedule = Engine.read(self.run)["scheduler"]
         self.assertIsNone(schedule["pending_action_id"])
         self.assertEqual(schedule["delivery_status"], "completed")
+        self.assertEqual(schedule["last_delivered_action_id"], schedule["last_completed_action_id"])
+        self.assertEqual(runtime.parse_time(schedule["last_delivered_at"]), self.now)
+        self.assertEqual(runtime.parse_time(schedule["last_completed_at"]), self.now)
+
+    def test_delivery_ack_after_manual_completion_retains_both_observations(self):
+        def fake_call(settings, args):
+            if args[1] == "prompt":
+                runtime.complete(self.run, "manual", self.now + timedelta(seconds=1))
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=fake_call):
+            wake = runtime.tick(self.run, self.now)["wake_id"]
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["last_delivered_action_id"], wake)
+        self.assertEqual(runtime.parse_time(schedule["last_delivered_at"]), self.now)
+        self.assertTrue(schedule["last_completed_action_id"].startswith("manual-"))
+        self.assertEqual(schedule["delivery_status"], "completed")
+        self.assertIsNone(schedule["pending_action_id"])
+
+    def test_late_delivery_ack_cannot_replace_a_newer_wake_or_timestamp(self):
+        later = self.now + timedelta(seconds=60)
+        def fake_call(settings, args):
+            if args[1] == "prompt":
+                runtime.complete(self.run, "manual", self.now)
+                self.schedule(last_dispatched_action_id="newer", pending_action_id="newer",
+                              delivery_status="delivered", last_delivered_action_id="newer",
+                              last_delivered_at=runtime.timestamp(later))
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=fake_call):
+            runtime.tick(self.run, self.now)
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["last_delivered_action_id"], "newer")
+        self.assertEqual(schedule["pending_action_id"], "newer")
+        self.assertEqual(runtime.parse_time(schedule["last_delivered_at"]), later)
 
     def test_pause_keeps_supervision_but_scheduler_stop_prevents_delivery(self):
         self.control("pause")
@@ -357,6 +390,55 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(second["alert"], "already_attempted")
         self.assertEqual(call.call_count, 1)
         self.assertEqual(Engine.read(other)["scheduler"]["last_alert"]["status"], "transport_accepted")
+
+    def test_health_notifier_nonstart_retries_after_repair_with_backoff(self):
+        notifier = self.root / "notifier"
+        delivered = self.root / "delivered"
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        first = runtime.health(self.run, self.now)
+        self.assertEqual(first["alert"], "not_started")
+        self.assertEqual(first["receipt"]["error"], "FileNotFoundError")
+        notifier.write_text('#!/bin/sh\ncat > "' + str(delivered) + '"\n')
+        notifier.chmod(0o755)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=1))["alert"], "retry_pending")
+        self.assertFalse(delivered.exists())
+        sent = runtime.health(self.run, self.now + timedelta(seconds=60))
+        self.assertEqual(sent["alert"], "transport_accepted")
+        self.assertEqual(sent["receipt"]["attempts"], 2)
+        self.assertEqual(json.loads(delivered.read_text())["failure"]["id"], first["failure"]["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=120))["alert"], "already_attempted")
+
+    def test_health_notifier_nonstart_retry_budget_is_bounded(self):
+        notifier = self.root / "not-executable"
+        notifier.write_text("#!/bin/sh\nexit 0\n")
+        notifier.chmod(0o644)
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        for attempt in range(1, 4):
+            result = runtime.health(self.run, self.now + timedelta(seconds=(attempt - 1) * 60))
+            self.assertEqual(result["alert"], "not_started")
+            self.assertEqual(result["receipt"]["error"], "PermissionError")
+            self.assertEqual(result["receipt"]["attempts"], attempt)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=180))["alert"], "retry_exhausted")
+        self.assertEqual(Engine.read(self.run)["scheduler"]["last_alert"]["attempts"], 3)
+
+    def test_health_never_replays_a_notifier_that_may_have_sent(self):
+        notifier = self.root / "notifier"
+        delivered = self.root / "delivered"
+        notifier.write_text('#!/bin/sh\ncat >> "' + str(delivered) + '"\nexit 1\n')
+        notifier.chmod(0o755)
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_failed")
+        first = delivered.read_bytes()
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")
+        self.assertEqual(delivered.read_bytes(), first)
+        self.schedule(alerted_failure_id=None)
+        with patch.object(runtime.subprocess, "run", side_effect=subprocess.TimeoutExpired("notifier", 20)) as call:
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_unconfirmed")
+            self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")
+            self.assertEqual(call.call_count, 1)
 
     def test_restricted_route_rejects_spoof_and_foreign_task(self):
         with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": "sh -c unwanted"}):
