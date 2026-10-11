@@ -65,9 +65,15 @@ def host_path(value):
     return "/" + posixpath.normpath(value).lstrip("/")
 
 
-def unfinished(state):
-    return sum(t["phase"] != "closed" or (t["pending_intent"] or {}).get("kind") == "reopen"
-               for t in state["tasks"].values())
+def unadmitted_claims(state):
+    return {task_id for task_id, claim in state["claims"].items()
+            if task_id not in state["tasks"] and claim["status"] not in {"failed", "released"}}
+
+
+def unfinished(state, excluding_claim=None):
+    tasks = sum(t["phase"] != "closed" or (t["pending_intent"] or {}).get("kind") == "reopen"
+                for t in state["tasks"].values())
+    return tasks + len(unadmitted_claims(state) - {excluding_claim})
 
 
 def evidence(value, settled=False):
@@ -169,7 +175,7 @@ class Engine:
         "enabled", "heartbeat_at", "last_attempt_at", "last_delivered_at", "last_completed_at",
         "next_due_at", "pending_action_id", "delivery_status", "failure", "alerted_failure_id",
         "last_completed_action_id", "wake_requested_at", "wake_reason",
-        "last_alert",
+        "last_alert", "busy_since_at",
     }
 
     @staticmethod
@@ -246,7 +252,7 @@ class Engine:
         require(isinstance(settings, dict), "invalid", "scheduler configuration must be an object")
         require(type(settings.get("enabled", False)) is bool, "invalid", "scheduler.enabled must be boolean")
         scheduler_identity(settings)
-        for key in ("cadence_seconds", "minimum_cadence_seconds"):
+        for key in ("cadence_seconds", "minimum_cadence_seconds", "busy_timeout_seconds"):
             if key in settings:
                 value = settings[key]
                 require(type(value) in {int, float} and math.isfinite(value) and value > 0,
@@ -330,11 +336,12 @@ class Engine:
                 "forbidden", "operation is coordinator-only")
 
     @staticmethod
-    def _active(state, task, kind, launching=False, allow_closed=False):
+    def _active(state, task, kind, launching=False, allow_closed=False, reconciling=False):
         require(allow_closed or task["phase"] != "closed", "closed", "task is closed")
-        require(not state["controls"]["paused"] and not task["paused"], "paused", "new work is paused")
-        require(not state["controls"]["cancel_requested"] and not task["cancel_requested"],
-                "cancelled", "cancellation must be reconciled before resume")
+        if not reconciling:
+            require(not state["controls"]["paused"] and not task["paused"], "paused", "new work is paused")
+            require(not state["controls"]["cancel_requested"] and not task["cancel_requested"],
+                    "cancelled", "cancellation must be reconciled before resume")
         holds = list(state["controls"]["holds"].values()) + list(task["holds"].values())
         require(not any("*" in h["actions"] or kind in h["actions"] for h in holds), "held", "an applicable hold prevents this action")
         require(kind in state["config"]["authority"], "authority", "action lacks current run authority")
@@ -367,8 +374,7 @@ class Engine:
             Engine._validate_config(run_dir, candidate)
             require(set(state["tasks"]) <= set(candidate["scope"]["task_ids"]),
                     "ownership", "configuration must preserve all admitted tasks")
-            unresolved_claims = {task_id for task_id, claim in state["claims"].items()
-                                 if claim["status"] in {"pending", "unknown"}}
+            unresolved_claims = unadmitted_claims(state)
             require(unresolved_claims <= set(candidate["scope"]["task_ids"]),
                     "ownership", "reconcile unresolved tracker claims before removing their tasks")
             cap = candidate.get("unfinished_task_cap")
@@ -394,9 +400,9 @@ class Engine:
                 require(binding["slots"] >= occupied, "capacity", "new host slot limit is below current occupancy")
             if "scheduler" in fields and state["scheduler"].get("enabled"):
                 old_identity = {k: v for k, v in config.get("scheduler", {}).items()
-                                if k not in {"cadence_seconds", "minimum_cadence_seconds", "notifier_argv", "notification_authorized", "enabled"}}
+                                if k not in {"cadence_seconds", "minimum_cadence_seconds", "busy_timeout_seconds", "notifier_argv", "notification_authorized", "enabled"}}
                 new_identity = {k: v for k, v in candidate["scheduler"].items()
-                                if k not in {"cadence_seconds", "minimum_cadence_seconds", "notifier_argv", "notification_authorized", "enabled"}}
+                                if k not in {"cadence_seconds", "minimum_cadence_seconds", "busy_timeout_seconds", "notifier_argv", "notification_authorized", "enabled"}}
                 require(old_identity == new_identity, "unsettled", "stop scheduler before rebinding its endpoint")
             if "scheduler" in fields:
                 state["scheduler"]["enabled"] = candidate["scheduler"]["enabled"]
@@ -404,7 +410,7 @@ class Engine:
             state["config"] = candidate
             state["policy_version"] += 1
             return {"configured": sorted(fields)}
-        if op in {"claim_intent", "claim_outcome"}:
+        if op in {"claim_intent", "claim_outcome", "claim_release_intent", "claim_release_outcome"}:
             task_id = req.get("task_id")
             require(task_id in config["scope"]["task_ids"] and task is None,
                     "scope", "claim action requires an authorized, not-yet-admitted task")
@@ -412,8 +418,10 @@ class Engine:
             if op == "claim_intent":
                 require(state["controls"]["admission"] == "open" and not state["controls"]["paused"],
                         "admission", "new claims are stopped")
-                require(previous is None or previous["status"] == "failed",
+                require(previous is None or previous["status"] in {"failed", "released"},
                         "uncertain", "reconcile the prior claim; do not claim it again")
+                cap = config.get("unfinished_task_cap")
+                require(cap is None or unfinished(state) < cap, "wip", "unfinished-task cap reached before claim")
                 target = req.get("target", {})
                 require(target.get("authority") == config["tracker"]["authority"] and nonempty(target.get("owner")),
                         "identity", "claim must name the canonical authority and claimant")
@@ -421,6 +429,33 @@ class Engine:
                 state["claims"][task_id] = {"id": req["action_id"], "target": target, "status": "pending",
                                             "evidence": req["evidence"]}
                 return {"claim_intent": state["claims"][task_id]}
+            if op == "claim_release_intent":
+                require(previous is not None and previous["status"] == "confirmed",
+                        "uncertain", "reconcile the claim before releasing its ownership")
+                release = previous.get("release")
+                require(release is None or release["status"] == "failed",
+                        "uncertain", "reconcile the existing release; do not repeat it")
+                require(req.get("claim_id") == previous["id"] and req.get("target") == previous["target"],
+                        "identity", "release must name the confirmed claim and owner")
+                evidence(req.get("evidence"))
+                previous["release"] = {"id": req["action_id"], "status": "pending", "evidence": req["evidence"]}
+                return {"claim_release_intent": previous["release"]}
+            if op == "claim_release_outcome":
+                release = (previous or {}).get("release")
+                require(release is not None and req.get("intent_id") == release["id"]
+                        and req.get("target") == previous["target"], "identity", "release outcome must match its action and owner")
+                require(release["status"] in {"pending", "unknown"}, "settled", "release is already reconciled")
+                status, receipt = req.get("status"), req.get("receipt", {})
+                require(status in {"succeeded", "failed", "unknown"}, "invalid", "invalid release outcome")
+                evidence(receipt)
+                if status == "succeeded":
+                    require(receipt.get("authority") == previous["target"]["authority"]
+                            and receipt.get("owner") == previous["target"]["owner"] and receipt.get("task_id") == task_id
+                            and receipt.get("released") is True and receipt.get("unpublished") is False,
+                            "claim", "release requires published evidence that the recorded owner released the claim")
+                    previous["status"] = "released"
+                release.update(status=status, receipt=receipt)
+                return {"claim_release_outcome": status}
             require(previous is not None and req.get("intent_id") == previous["id"],
                     "identity", "claim outcome must name the recorded action")
             require(previous["status"] in {"pending", "unknown"}, "settled", "claim action is already reconciled")
@@ -441,7 +476,7 @@ class Engine:
             require(state["controls"]["admission"] == "open" and not state["controls"]["paused"],
                     "admission", "new admission is stopped")
             cap = config.get("unfinished_task_cap")
-            require(cap is None or unfinished(state) < cap,
+            require(cap is None or unfinished(state, excluding_claim=req.get("task_id")) < cap,
                     "wip", "unfinished-task cap reached")
             host = req.get("host")
             require(host in config["hosts"], "invalid", "unregistered host")
@@ -460,7 +495,8 @@ class Engine:
                     and claim.get("unpublished") is False, "claim", "confirmed, published, ready canonical claim is required")
             prior_claim = state["claims"].get(req["task_id"])
             if prior_claim is not None:
-                require(prior_claim["status"] == "confirmed" and prior_claim["target"]["owner"] == claim["owner"],
+                require(prior_claim["status"] == "confirmed" and prior_claim["target"]["owner"] == claim["owner"]
+                        and (prior_claim.get("release") or {}).get("status", "failed") == "failed",
                         "uncertain", "reconcile the recorded claim and owner before admission")
             driver = req.get("driver", "coordinator")
             if driver != "coordinator":
@@ -537,6 +573,20 @@ class Engine:
             state["scheduler"]["version"] += 1
             return {"scheduler": state["scheduler"]}
         require(task is not None, "missing", "task is not admitted")
+        if op == "recover_session":
+            require(req.get("previous_identity") == task["identity"], "identity", "recovery must name the current session identity")
+            identity = req.get("identity")
+            require(isinstance(identity, dict) and identity and identity != task["identity"],
+                    "identity", "recovery requires a distinct observed replacement identity")
+            proof = req.get("evidence", {})
+            evidence(proof)
+            require(proof.get("previous_session_stopped") is True and proof.get("replacement_verified") is True
+                    and proof.get("host") == task["host"] and proof.get("worktree") == task["worktree"],
+                    "identity", "verify the stopped model and replacement at the existing host and worktree")
+            task["last_session_recovery"] = {"previous_identity": task["identity"], "evidence": proof}
+            task["identity"] = copy.deepcopy(identity)
+            task["delegation"] = None
+            return {"recovered_session": identity}
         if op == "handoff":
             require(task["phase"] != "closed" and task["slot"] is None
                     and not task["reservations"] and not task["pending_intent"],
@@ -743,7 +793,10 @@ class Engine:
                     }
             return {"outcome": status}
         if op == "close":
-            Engine._active(state, task, "close")
+            last = task.get("last_outcome", {})
+            reconciled_close = (last.get("kind") == "close" and last.get("status") == "succeeded"
+                                and req.get("receipt") == last.get("receipt"))
+            Engine._active(state, task, "close", reconciling=reconciled_close)
             require(not task["reservations"] and not task["pending_intent"] and state["staging"]["owner"] != task["id"],
                     "unsettled", "settle executions and release staging before closure")
             receipt = req.get("receipt", {})

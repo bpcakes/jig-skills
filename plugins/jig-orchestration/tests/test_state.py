@@ -226,6 +226,76 @@ class EngineTests(unittest.TestCase):
         self.assert_error("scope", self.apply, "claim_intent", "A",
                           target={"authority": "canonical-ref", "owner": "tracker-actor"}, evidence=self.proof())
 
+    def test_claims_reserve_capacity_until_admitted_or_released(self):
+        self.apply("configure", fields={"unfinished_task_cap": 1}, evidence=self.proof())
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        intent = self.apply("claim_intent", "A", target=target, evidence=self.proof())
+        self.assert_error("wip", self.apply, "claim_intent", "B", target=target, evidence=self.proof())
+        self.assert_error("wip", self.admit, "B")
+        self.apply("configure", fields={"unfinished_task_cap": 2}, evidence=self.proof())
+        self.admit("B")
+        self.assert_error("capacity", self.apply, "configure", fields={"unfinished_task_cap": 1}, evidence=self.proof())
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="unknown", receipt=self.proof())
+        self.assert_error("wip", self.admit, "C")
+        receipt = {**self.proof(), **target, "task_id": "A", "confirmed": True, "unpublished": False, "ready": True}
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="confirmed", receipt=receipt)
+        self.assert_error("ownership", self.apply, "configure",
+                          fields={"scope": {"task_ids": ["B", "C"]}, "actors": {}}, evidence=self.proof())
+        self.admit(claim=receipt)  # Consume A's reservation, without counting it twice.
+        self.assert_error("wip", self.apply, "claim_intent", "C", target=target, evidence=self.proof())
+
+    def test_pending_claim_capacity_also_fences_reopening(self):
+        self.apply("configure", fields={"unfinished_task_cap": 1}, evidence=self.proof())
+        self.admit()
+        self.apply("close", "A", receipt={**self.proof(), "authority": "canonical-ref", "task_id": "A",
+                   "owner": "tracker-actor", "status": "closed", "criteria_met": True,
+                   "acceptance_ref": "/proof/acceptance", "unpublished": False})
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        self.apply("claim_intent", "B", target=target, evidence=self.proof())
+        self.assert_error("wip", self.apply, "reopen_intent", "A", target=target, evidence=self.proof())
+
+    def test_release_reconciles_claim_after_admission_stops_without_replay(self):
+        self.apply("configure", fields={"unfinished_task_cap": 1}, evidence=self.proof())
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        intent = self.apply("claim_intent", "A", target=target, evidence=self.proof())
+        self.apply("control", control="finish_current")
+        receipt = {**self.proof(), **target, "task_id": "A", "confirmed": True, "unpublished": False}
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="confirmed", receipt=receipt)
+        self.assert_error("admission", self.admit)
+        self.apply("control", control="pause")
+        release = self.apply("claim_release_intent", "A", claim_id=intent["action_id"], target=target, evidence=self.proof())
+        self.apply("claim_release_outcome", "A", intent_id=release["action_id"], target=target,
+                   status="unknown", receipt=self.proof())
+        self.assert_error("uncertain", self.apply, "claim_release_intent", "A",
+                          claim_id=intent["action_id"], target=target, evidence=self.proof())
+        self.apply("control", control="resume")
+        self.apply("control", control="reopen_admission", evidence=self.proof())
+        self.assert_error("uncertain", self.admit)
+        self.assert_error("wip", self.admit, "B")
+        released = {**self.proof(), **target, "task_id": "A", "released": True, "unpublished": False}
+        for field, value in (("owner", "other"), ("unpublished", True), ("released", False)):
+            self.assert_error("claim", self.apply, "claim_release_outcome", "A", intent_id=release["action_id"],
+                              target=target, status="succeeded", receipt={**released, field: value})
+        self.apply("control", control="cancel")
+        self.apply("claim_release_outcome", "A", intent_id=release["action_id"], target=target,
+                   status="succeeded", receipt=released)
+        self.apply("control", control="resume")
+        self.assert_error("uncertain", self.admit)  # A's old confirmed receipt no longer suffices.
+        self.admit("B")
+        self.assertEqual(Engine.read(self.run)["claims"]["A"]["status"], "released")
+        self.apply("configure", fields={"scope": {"task_ids": ["B", "C"]}, "actors": {}}, evidence=self.proof())
+
+    def test_failed_release_keeps_claim_until_a_new_confirmed_release(self):
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        intent = self.apply("claim_intent", "A", target=target, evidence=self.proof())
+        self.apply("claim_outcome", "A", intent_id=intent["action_id"], status="confirmed",
+                   receipt={**self.proof(), **target, "task_id": "A", "confirmed": True, "unpublished": False})
+        release = self.apply("claim_release_intent", "A", claim_id=intent["action_id"], target=target, evidence=self.proof())
+        self.apply("claim_release_outcome", "A", intent_id=release["action_id"], target=target,
+                   status="failed", receipt=self.proof())
+        self.assertEqual(Engine.read(self.run)["claims"]["A"]["status"], "confirmed")
+        self.admit()  # A verified failed release did not drop ownership.
+
     def test_concurrent_hosts_compete_for_one_slot_at_authority(self):
         self.admit("A")
         self.admit("B")
@@ -500,6 +570,64 @@ class EngineTests(unittest.TestCase):
         self.assertIsNone(task["delegation"])
         self.assertEqual(task["last_handoff"]["previous"]["host"], "local")
 
+    def test_session_recovery_preserves_surviving_execution_and_unknown_outcome(self):
+        original = {"session": "owned", "native_id": "crashed"}
+        replacement = {"session": "owned", "native_id": "replacement"}
+        self.admit(identity=original)
+        refs = {"controller_id": "controller-A", "run_id": "run-A", "job_id": "validation-A"}
+        self.apply("observe", "A", fields={"refs": refs}, evidence=self.proof())
+        reservation = self.reserve(kind="validate", refs=refs)
+        target = {"job_id": "validation-A"}
+        intent = self.apply("intent", "A", kind="validate", reservation_id=reservation["reservation_id"],
+                            target=target, evidence=self.proof())
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="unknown", receipt=self.proof())
+        proof = {**self.proof(), "previous_session_stopped": True, "replacement_verified": True,
+                 "host": "local", "worktree": "/worktrees/A"}
+        before = Engine.read(self.run)["tasks"]["A"]
+        for field, value in (("host", "remote"), ("worktree", "/elsewhere"), ("previous_session_stopped", False),
+                             ("replacement_verified", False)):
+            self.assert_error("identity", self.apply, "recover_session", "A", previous_identity=original,
+                              identity=replacement, evidence={**proof, field: value})
+        self.assert_error("forbidden", self.apply, "recover_session", "A", caller="worker-a",
+                          previous_identity=original, identity=replacement, evidence=proof)
+        self.apply("recover_session", "A", previous_identity=original, identity=replacement, evidence=proof)
+        after = Engine.read(self.run)["tasks"]["A"]
+        for key in ("host", "driver", "worktree", "branch", "claim", "refs", "reservations", "pending_intent",
+                    "slot", "counters", "holds", "paused", "cancel_requested", "findings"):
+            self.assertEqual(after[key], before[key], key)
+        self.assertEqual(after["identity"], replacement)
+        self.assert_error("identity", self.apply, "recover_session", "A", previous_identity=original,
+                          identity={"native_id": "duplicate"}, evidence=proof)
+        self.assert_error("unsettled", self.reserve, kind="validate", refs=refs)
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded", receipt=self.proof())
+        self.assert_error("unsettled", self.reserve, kind="validate", refs=refs)
+        self.settle(reservation["reservation_id"], refs=refs)
+        self.apply("park", "A", evidence=self.proof(True))
+        self.assertIsNone(Engine.read(self.run)["tasks"]["A"]["slot"])
+
+    def test_completed_close_reconciles_pause_and_cancel_but_requires_matching_receipt(self):
+        for task_id, control in (("A", "pause"), ("B", "cancel")):
+            self.admit(task_id)
+            reservation = self.reserve(task_id, kind="close")
+            target = {"authority": "canonical-ref", "task_id": task_id}
+            intent = self.apply("intent", task_id, kind="close", reservation_id=reservation["reservation_id"],
+                                target=target, evidence=self.proof())
+            self.apply("control", control=control)
+            receipt = {**self.proof(), "authority": "canonical-ref", "task_id": task_id, "owner": "tracker-actor",
+                       "status": "closed", "criteria_met": True, "acceptance_ref": "/proof", "unpublished": False}
+            self.apply("outcome", task_id, intent_id=intent["action_id"], target=target, status="succeeded", receipt=receipt)
+            self.settle(reservation["reservation_id"], task_id)
+            self.assert_error("paused", self.apply, "intent", task_id, kind="close", target=target, evidence=self.proof())
+            self.assert_error("paused", self.apply, "close", task_id, receipt={**receipt, "acceptance_ref": "/other"})
+            self.apply("control", control="hold", hold_id="close-hold", actions=["close"], reason="verify closure")
+            self.assert_error("held", self.apply, "close", task_id, receipt=receipt)
+            self.apply("control", control="unhold", hold_id="close-hold")
+            self.apply("close", task_id, receipt=receipt)
+            task = Engine.read(self.run)["tasks"][task_id]
+            self.assertEqual(task["phase"], "closed")
+            self.assertEqual(task["closure"], receipt)
+            self.assertIsNone(task["slot"])
+            self.apply("control", control="resume")
     def test_merge_gate_binds_exact_candidate_run_and_none_mode_applicability(self):
         self.admit()
         refs = {"controller_id": "controller", "run_id": "review-run", "review_base": "B0", "review_head": "H2"}

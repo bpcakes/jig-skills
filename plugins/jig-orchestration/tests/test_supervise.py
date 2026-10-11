@@ -139,6 +139,66 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(call.call_count, 1)
         self.assertNotIn("last_completed_at", Engine.read(self.run)["scheduler"])
 
+    def test_busy_timeout_survives_ticks_and_deduplicates_until_completion(self):
+        self.configure_scheduler({**self.config["scheduler"], "busy_timeout_seconds": 180,
+                                  "notifier_argv": ["/bin/true"], "notification_authorized": True})
+        accepted = subprocess.CompletedProcess(["/bin/true"], 0)
+        with patch.object(runtime, "herdr_call", return_value=self.response("working")) as herdr:
+            for elapsed in (0, 60, 120):
+                at = self.now + timedelta(seconds=elapsed)
+                self.assertEqual(runtime.tick(self.run, at)["status"], "busy")
+                self.assertEqual(runtime.health(self.run, at)["status"], "healthy")
+            with patch.object(runtime.subprocess, "run", return_value=accepted) as notify:
+                first = None
+                for elapsed in (180, 240, 300):
+                    at = self.now + timedelta(seconds=elapsed)
+                    runtime.tick(self.run, at)
+                    result = runtime.health(self.run, at)
+                    self.assertEqual(result["status"], "unhealthy")
+                    if first is None:
+                        first = result
+                        self.assertEqual(result["alert"], "transport_accepted")
+                    else:
+                        self.assertEqual(result["failure"]["id"], first["failure"]["id"])
+                        self.assertEqual(result["alert"], "already_attempted")
+                self.assertEqual(notify.call_count, 1)
+            self.assertTrue(all(call.args[1][1] == "get" for call in herdr.call_args_list))
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=301))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=301))["status"], "healthy")
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["busy_since_at"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=361))["status"], "delivered")
+
+    def test_busy_timeout_configuration_and_manual_completion_race(self):
+        settings = runtime.scheduler_config(self.config)
+        self.assertEqual(settings["busy_timeout_seconds"], 180)
+        self.assertEqual(runtime.scheduler_config({"scheduler": {**self.config["scheduler"],
+                         "minimum_cadence_seconds": 240}})["busy_timeout_seconds"], 720)
+        for value in (0, -1, True, float("inf"), "180"):
+            with self.assertRaises((StateError, ValueError)):
+                self.configure_scheduler({**self.config["scheduler"], "busy_timeout_seconds": value})
+            with self.assertRaises(runtime.RuntimeErrorDetail):
+                runtime.scheduler_config({"scheduler": {**self.config["scheduler"], "busy_timeout_seconds": value}})
+        def lookup(settings, args):
+            runtime.complete(self.run, "manual", self.now + timedelta(seconds=1))
+            return self.response("working")
+        with patch.object(runtime, "herdr_call", side_effect=lookup):
+            runtime.tick(self.run, self.now)
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["delivery_status"], "completed")
+        self.assertIsNone(schedule["busy_since_at"])
+
+    def test_busy_health_honors_custom_timeout_and_scheduler_stop(self):
+        self.configure_scheduler({**self.config["scheduler"], "busy_timeout_seconds": 600})
+        with patch.object(runtime, "herdr_call", return_value=self.response("working")):
+            runtime.tick(self.run, self.now)
+            runtime.tick(self.run, self.now + timedelta(seconds=599))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=599))["status"], "healthy")
+        self.control("pause")
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=600))["status"], "unhealthy")
+        self.schedule(enabled=False)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=600))["status"], "scheduler_stopped")
+
     def test_manual_full_pass_consumes_catchup(self):
         runtime.request_wake(self.run, now=self.now)
         runtime.complete(self.run, "manual", self.now)

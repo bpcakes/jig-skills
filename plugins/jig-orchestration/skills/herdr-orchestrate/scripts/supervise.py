@@ -83,6 +83,7 @@ def scheduler_config(config, schedule=None):
         return {"enabled": False, "cadence_seconds": 1200, "minimum_cadence_seconds": 1200}
     cadence = positive_seconds(settings.get("cadence_seconds", 1200), "cadence_seconds")
     minimum = positive_seconds(settings.get("minimum_cadence_seconds", cadence), "minimum_cadence_seconds")
+    busy_timeout = positive_seconds(settings.get("busy_timeout_seconds", 3 * max(cadence, minimum)), "busy_timeout_seconds")
     try:
         scheduler_identity(settings)
     except StateError as exc:
@@ -95,7 +96,8 @@ def scheduler_config(config, schedule=None):
             raise RuntimeErrorDetail("invalid_config", "notifier_argv must be a nonempty argument array")
         if not Path(notifier[0]).is_absolute():
             raise RuntimeErrorDetail("invalid_config", "Use an absolute notifier executable path")
-    return {**settings, "cadence_seconds": cadence, "minimum_cadence_seconds": minimum}
+    return {**settings, "cadence_seconds": cadence, "minimum_cadence_seconds": minimum,
+            "busy_timeout_seconds": busy_timeout}
 
 
 def scheduler_patch(run_dir, build):
@@ -202,7 +204,12 @@ def tick(run_dir, now=None):
             verify_identity(actual, settings["agent"])
             status = actual.get("agent_status", "unknown")
             if status == "working":
-                scheduler_patch(run_dir, lambda _: {"delivery_status": "busy", "failure": None})
+                def busy(current):
+                    if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
+                        return None
+                    return {"delivery_status": "busy", "failure": None,
+                            "busy_since_at": current["scheduler"].get("busy_since_at") or timestamp(now)}
+                scheduler_patch(run_dir, busy)
                 return {"status": "busy", "agent_status": status}
             if status not in {"idle", "done"}:
                 raise RuntimeErrorDetail("coordinator_" + str(status),
@@ -224,7 +231,7 @@ def tick(run_dir, now=None):
             if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
                 return None  # A completed reconciliation consumed this tick.
             return {"pending_action_id": wake_id, "delivery_status": "dispatching", "failure": None,
-                    "wake_requested_at": None, "wake_reason": None}
+                    "wake_requested_at": None, "wake_reason": None, "busy_since_at": None}
         prepared = scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
         if prepared["scheduler"].get("pending_action_id") != wake_id:
             return {"status": "reconciliation_completed"}
@@ -279,7 +286,7 @@ def complete(run_dir, wake_id, now=None):
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
                 "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
                 "next_due_at": timestamp(now + timedelta(seconds=interval)),
-                "wake_requested_at": None, "wake_reason": None, "failure": None}
+                "wake_requested_at": None, "wake_reason": None, "failure": None, "busy_since_at": None}
     state = scheduler_patch(run_dir, finish)
     return {"status": "completed", "last_completed_at": state["scheduler"].get("last_completed_at"),
             "next_due_at": state["scheduler"].get("next_due_at")}
@@ -303,6 +310,10 @@ def health(run_dir, now=None):
         if not failure and schedule.get("pending_action_id") and attempted and now > attempted + timedelta(seconds=settings["cadence_seconds"] * 2):
             failure = {"id": "pending-" + schedule["pending_action_id"],
                        "reason": "Wake remains unresolved; inspect coordinator execution"}
+        busy_since = parse_time(schedule.get("busy_since_at"))
+        if not failure and busy_since and now >= busy_since + timedelta(seconds=settings["busy_timeout_seconds"]):
+            failure = {"id": "busy-" + schedule["busy_since_at"],
+                       "reason": "Coordinator remains busy beyond the supervision timeout; inspect its registered execution"}
         if not failure:
             if schedule.get("alerted_failure_id"):
                 scheduler_patch(run_dir, lambda _: {"alerted_failure_id": None})

@@ -8,6 +8,8 @@ Run one bounded reconciliation at a time. Read compact current state, inspect th
 
 Before restarting a session, inspect the actual pane occupant, surviving background jobs/reviewer handles, unsent input, and saved handoff. Adopt an existing replacement when appropriate. Rebind profile/session/native identity without losing claim, source revision, run IDs, active jobs, prior findings, limits, or tool denials. Native approval settings survive recovery.
 
+Use the coordinator-only `recover_session` transition for a verified replacement at the existing host/worktree, supplying the exact old identity and evidence that the old model stopped and the replacement was inspected. It preserves reservations and uncertain outcomes; reconcile those by their original IDs before any new assignment. Revalidate delegation after recovery. Settled relocation remains a separate `handoff`; do not mark surviving jobs settled to replace only the model session.
+
 Follow registered run IDs and explicit successor relationships. Do not use latest filename or modification time. A missing record makes an observation unknown; it cannot be replaced by nearby successful evidence. Network silence is not termination or a takeover grant. V1 offers no automatic cross-host coordinator failover: a replacement must establish that its predecessor stopped and reconcile unfinished effects.
 
 Persist intent before prompts, claims, merges, deployment, or other external effects. After timeout, query the external result and durable action by ID before retrying. Distinguish command failure, inability to durably record a result, and unknown execution. If durable intent cannot be saved, stop the side effect. Optional diagnostic-log failure should not kill supervision.
@@ -23,6 +25,8 @@ Ticks wake the coordinator for a bounded reconciliation; they do not meter all t
 After a full reconciliation, record its wake completion. A full manual check can consume a pending catch-up and reset the next eligible check. A short status reply cannot. Coalesce missed ticks into one catch-up. Promise another automatic check only after the scheduler is observed running; delivery evidence is stronger than an intended due time.
 
 An independently configured host timer may call the state-only `wake` or `health` command; neither controls Herdr. With an authorized notification argv/destination, the health check reports overdue heartbeat/delivery or recorded scheduler failure and deduplicates unchanged alerts. A scheduler stop suppresses expected-inactivity alerts; a work pause/cancellation does not. Blocker alerts likewise require an authorized destination and a new actionable change.
+
+Busy skips remain valid until `busy_timeout_seconds` elapses (default: three effective check intervals). Beyond that, health reports a stable busy-timeout alert even while the scheduler heartbeat remains current. Configure a longer interval for expected long work; the alert does not cancel or replace the active coordinator. A full reconciliation or a new dispatched wake resets the busy interval.
 
 The independent health invocation must actually be installed/configured under scheduling authority; the managed process cannot detect and report its own total disappearance. Without an alert channel, disclose local evidence only. This covers managed-process/server failure while the host survives; v1 does not monitor host loss. Transport acceptance does not prove the user read or answered an alert.
 
