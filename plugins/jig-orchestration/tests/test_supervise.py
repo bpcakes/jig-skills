@@ -121,6 +121,32 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(call.call_count, 1)
         self.assertNotIn("pending_action_id", Engine.read(self.run)["scheduler"])
 
+    def test_rebound_endpoint_does_not_inherit_old_lookup_health(self):
+        for outcome in ("working", "failure"):
+            with self.subTest(outcome=outcome):
+                self.schedule(last_attempt_at=None, next_due_at=None)
+                replacement_failure = {"id": "endpoint-replacement", "code": "replacement-failed",
+                                       "at": self.now.isoformat(), "reason": "Replacement failure"}
+
+                def replace_during_lookup(settings, args):
+                    self.schedule(enabled=False)
+                    self.configure_scheduler({**self.config["scheduler"], "session": "new-" + outcome})
+                    self.schedule(enabled=True, failure=replacement_failure, delivery_status="idle",
+                                  busy_since_at=None)
+                    if outcome == "failure":
+                        raise runtime.RuntimeErrorDetail("old-failed", "Old endpoint failure")
+                    return self.response("working")
+
+                with patch.object(runtime, "herdr_call", side_effect=replace_during_lookup) as call:
+                    with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "configuration changed"):
+                        runtime.tick(self.run, self.now)
+                self.assertEqual(call.call_count, 1)
+                current = Engine.read(self.run)["scheduler"]
+                self.assertEqual(current["failure"], replacement_failure)
+                self.assertEqual(current["delivery_status"], "idle")
+                self.assertIsNone(current["busy_since_at"])
+                self.assertNotIn("pending_action_id", current)
+
     def test_uncertain_delivery_is_not_repeated(self):
         with patch.object(runtime, "herdr_call", side_effect=[self.response(), subprocess.TimeoutExpired("fake", 25)]) as call:
             first = runtime.tick(self.run, self.now)

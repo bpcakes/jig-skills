@@ -812,7 +812,8 @@ class Engine:
             evidence(req.get("evidence"))
             counted = any(limit["unit"] == Engine.UNITS[kind] for limit in config.get("limits", []))
             reservation = task["reservations"].get(req.get("reservation_id"))
-            if kind in {"implement", "repair", "review", "validate"} or counted or "reservation_id" in req:
+            reserved = any(r["kind"] == kind for r in task["reservations"].values())
+            if kind in {"implement", "repair", "review", "validate"} or counted or reserved or "reservation_id" in req:
                 require(reservation and reservation["kind"] == kind and not reservation.get("intent_id"),
                         "budget", "action requires an unconsumed counted reservation")
                 for limit in config.get("limits", []):

@@ -208,6 +208,11 @@ def tick(run_dir, now=None):
             return {"status": "not_due", "next_due_at": timestamp(due)}
         scheduler_patch(run_dir, lambda _: {"last_attempt_at": timestamp(now),
                         "next_due_at": timestamp(now + timedelta(seconds=settings["cadence_seconds"]))})
+
+        def check_binding(current):
+            if scheduler_config(current["config"], current["scheduler"]) != settings:
+                raise RuntimeErrorDetail("scheduler_rebound", "Scheduler configuration changed during identity lookup; inspect again")
+
         try:
             actual = herdr_call(settings, ["agent", "get", settings["agent"]["name"]])["agent"]
             verify_identity(actual, settings["agent"])
@@ -216,12 +221,12 @@ def tick(run_dir, now=None):
                 raise RuntimeErrorDetail("coordinator_" + str(status),
                     f"Coordinator at {settings['session']}/{settings['agent']['pane_id']} is {status}; inspect its original pane")
             def recovered(current):
-                if scheduler_config(current["config"], current["scheduler"]) != settings:
-                    return None
+                check_binding(current)
                 return {"failure": None} if endpoint_failure(current["scheduler"]) else None
             scheduler_patch(run_dir, recovered)  # Verified recovery survives a concurrent manual completion.
             if status == "working":
                 def busy(current):
+                    check_binding(current)
                     if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
                         return None
                     return {"delivery_status": "busy", "failure": None,
@@ -231,6 +236,7 @@ def tick(run_dir, now=None):
         except (RuntimeErrorDetail, OSError, subprocess.TimeoutExpired, KeyError, TypeError) as exc:
             code = str(getattr(exc, "code", type(exc).__name__))
             def failed(current):
+                check_binding(current)
                 previous = current["scheduler"].get("failure") or {}
                 continuing = previous.get("code") == code or previous.get("id") == "endpoint-" + code
                 return {"failure": {"id": previous["id"] if continuing else "endpoint-" + uuid.uuid4().hex,
@@ -241,8 +247,7 @@ def tick(run_dir, now=None):
 
         wake_id = "wake-" + uuid.uuid4().hex
         def prepare(current):
-            if scheduler_config(current["config"], current["scheduler"]) != settings:
-                raise RuntimeErrorDetail("scheduler_rebound", "Scheduler configuration changed during identity lookup; inspect again")
+            check_binding(current)
             if not enabled(current, settings):
                 raise RuntimeErrorDetail("scheduler_stopped", "Scheduler stopped before dispatch")
             if current["scheduler"].get("pending_action_id"):

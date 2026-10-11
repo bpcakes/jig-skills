@@ -511,6 +511,31 @@ class EngineTests(unittest.TestCase):
         self.settle(reservation["reservation_id"])
         self.assert_error("budget", self.reserve, kind="push")
 
+    def test_uncapped_intent_requires_existing_matching_reservation_id(self):
+        for kind in ("push", "pr"):
+            with self.subTest(kind=kind):
+                self.reset()
+                self.admit()
+                reservation = self.reserve(kind=kind)
+                target = {"remote": "origin", "branch": "task/A", "head": "H1"}
+                self.assert_error("budget", self.apply, "intent", "A", kind=kind,
+                                  target=target, evidence=self.proof())
+                intent = self.apply("intent", "A", kind=kind, target=target, evidence=self.proof(),
+                                    reservation_id=reservation["reservation_id"])
+                self.apply("outcome", "A", intent_id=intent["action_id"], target=target,
+                           status="succeeded", receipt=self.proof())
+                self.assert_error("budget", self.apply, "intent", "A", kind=kind,
+                                  target=target, evidence=self.proof())
+                current = Engine.read(self.run)
+                self.assertEqual(current["tasks"]["A"]["counters"][Engine.UNITS[kind]], 1)
+                self.assertEqual(current["counters"][Engine.UNITS[kind]], 1)
+                self.settle(reservation["reservation_id"])
+                # Unreserved consequential actions remain supported and count once.
+                self.apply("intent", "A", kind=kind, target=target, evidence=self.proof())
+                current = Engine.read(self.run)
+                self.assertEqual(current["tasks"]["A"]["counters"][Engine.UNITS[kind]], 2)
+                self.assertEqual(current["counters"][Engine.UNITS[kind]], 2)
+
     def test_deadline_between_reservation_and_dispatch_blocks_external_action(self):
         self.admit()
         reservation = self.reserve(kind="push")
