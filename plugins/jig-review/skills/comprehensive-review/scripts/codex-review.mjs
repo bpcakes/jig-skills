@@ -29,6 +29,8 @@ import {
 const DEFAULT_TIMEOUT_MS = 28 * 60 * 1000;
 const MAX_CODEX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const LAST_MESSAGE_FILE = "codex-last-message.txt";
+// Environment credentials that Codex would use instead of the selected home's.
+const API_KEY_VARIABLES = Object.freeze(["CODEX_API_KEY", "OPENAI_API_KEY"]);
 const PRIVATE_HOME_DIR = "codex-home";
 const SHIM_FILE = "codex-shim.sh";
 const MAX_TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024;
@@ -462,12 +464,12 @@ async function runCodexReview(options, dependencies = {}) {
     const codexBin = dependencies.codexBin ?? process.env.JIG_CODEX_BIN ?? "codex";
     const lastMessagePath = path.join(evidence.directory, LAST_MESSAGE_FILE);
     const { shim, privateHome } = writeShim(evidence.directory);
+    const launched = options.launcher !== "none";
     const overrides = await isolate(codexBin, {
       cwd: scope.repoRoot, privateHome, deadlineAt, signal, environment: gitEnvironment(childEnvironment(process.env)),
     });
     // Without a launcher the shim is read by /bin/sh, so the evidence directory
     // need not be executable; Jig has to exec it, so that path is probed first.
-    const launched = options.launcher !== "none";
     if (launched) await probeShim(shim, { deadlineAt, signal });
     const codexArgs = buildCodexArgs(options, scope, lastMessagePath, overrides);
     const launch = resolveProviderLaunch({
@@ -479,11 +481,14 @@ async function runCodexReview(options, dependencies = {}) {
       jigBin: dependencies.jigBin ?? null,
     });
     // JIG_CODEX_BIN makes Jig start the shim; the shim finds the real executable
-    // and the private home through the JIG_REVIEW_* variables.
+    // and the private home through the JIG_REVIEW_* variables. Codex prefers an
+    // API key in the environment over a home's credentials, so under a launcher
+    // the keys are removed and the selected home is the only credential source.
     const environment = childEnvironment(process.env, {
       JIG_CODEX_BIN: shim,
       JIG_REVIEW_CODEX_BIN: codexBin,
       JIG_REVIEW_PRIVATE_HOME: privateHome,
+      ...(launched ? Object.fromEntries(API_KEY_VARIABLES.map((name) => [name, null])) : {}),
     });
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     let transcript = Buffer.alloc(0);
@@ -549,6 +554,7 @@ if (isMain) {
 }
 
 export {
+  API_KEY_VARIABLES,
   MISSING_CREDENTIALS,
   SHIM_NOT_EXECUTABLE,
   ambientSkills,
