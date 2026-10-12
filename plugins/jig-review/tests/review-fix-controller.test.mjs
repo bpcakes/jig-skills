@@ -93,7 +93,8 @@ test("complete CLI-backed review -> repair -> validation -> terminal quorum with
   assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
   assert.equal(run.round, 1);
   assert.equal(run.reports.length, 2);
-  assert.equal(run.attempts.length, 4);
+  // A known pre-start failure can consume an attempt without invoking a reviewer.
+  assert.equal(run.attempts.filter(attempt => attempt.execution !== "not_started").length, 4, JSON.stringify(run.attempts));
   const assignments = run.attempts.map(a => readJSON(path.join(run.directory, "assignments", a.id, "request.json")).assignment);
   assert.deepEqual([...new Set(assignments.map(a => a.repository))], [f.root]);
   for (const a of assignments) {
@@ -105,7 +106,9 @@ test("complete CLI-backed review -> repair -> validation -> terminal quorum with
   assert.equal(readFileSync(path.join(f.root, "value.cjs"), "utf8"), "module.exports = 2;\n");
   assert.deepEqual(snapshot(f.root).repositories, before.repositories);
   assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), indexBytes);
-  assert.equal(new Set(readFileSync(f.log, "utf8").trim().split("\n")).size, readFileSync(f.log, "utf8").trim().split("\n").length);
+  const invocations = readFileSync(f.log, "utf8").trim().split("\n");
+  assert.equal(invocations.filter(id => id.endsWith("-review")).length, 4);
+  assert.equal(new Set(invocations).size, invocations.length);
   assert.equal(readJSON(path.join(run.directory, "validation.json")).some(v => v.exitCode === 0), true);
   const events = readFileSync(path.join(run.directory, "events.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
   assert.deepEqual(events.map(e => e.seq), Array.from({ length: events.length }, (_, i) => i + 1));

@@ -117,7 +117,7 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
   assert.deepEqual(result, vote(a));
   assert.throws(() => parseReport(a, JSON.stringify({ ...vote(a), fingerprint: "wrong" })), /Malformed/);
   // Report formatting failures stay retryable even when the report text quotes a permanent-failure phrase.
-  for (const report of ["ENOENT: no such file quota exceeded", JSON.stringify({ ...vote(a), fingerprint: "wrong authentication failed" })]) {
+  for (const report of ["ENOENT: no such file quota exceeded", "unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]", JSON.stringify({ ...vote(a), fingerprint: "wrong authentication failed" })]) {
     let failure;
     assert.throws(() => parseReport(a, report), (error) => { failure = error; return true; });
     assert.equal(failure.providerError, "");
@@ -129,9 +129,23 @@ test("bridge marks only recognized permanent errors non-retryable", () => {
   for (const error of ["authentication failed", "quota exceeded", "usage limit reached",
     "jig exited with 1: No eligible Claude home with fresh subscription headroom; inspect `jig claude homes --usage` or pass HOME explicitly",
     "jig exited with 2: error: unexpected argument '--auto' found"]) assert.equal(failureResult(new Error(error)).retryable, false);
+  for (const provider of ["Claude", "Codex"]) {
+    for (const diagnostic of [`No ${provider} homes found under the configured search roots`,
+      `${provider} home 'missing' was not found at /tmp/missing`]) {
+      assert.equal(failureResult(new Error(`jig exited with 1: ${diagnostic}`)).retryable, false, diagnostic);
+      assert.equal(failureResult(Object.assign(new Error(diagnostic), { providerError: "", transcript: diagnostic })).retryable, undefined,
+        "quoted missing-home errors must not disable a provider that has already started");
+    }
+  }
   // An adapter that separates the provider's error channel from transcript text decides through providerError.
   assert.equal(failureResult(Object.assign(new Error("codex exited with 1; no structured provider error was reported"), { providerError: "", transcript: "ENOENT quota exceeded" })).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("codex exited with 1: usage limit reached"), { providerError: "usage limit reached" })).retryable, false);
+  for (const providerError of ["unexpected status 401 Unauthorized", "Incorrect API key provided: [redacted]"]) {
+    assert.equal(failureResult(Object.assign(new Error("codex exited with 1"), { providerError })).retryable, false);
+  }
+  for (const providerError of ["unexpected status 429 Too Many Requests", "unexpected status 503 Service Unavailable"]) {
+    assert.equal(failureResult(Object.assign(new Error("codex exited with 1"), { providerError })).retryable, undefined);
+  }
   assert.equal(failureResult(new Error("temporary capacity exceeded")).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("timed out"), { timedOut: true })).execution, "uncertain");
 });
@@ -217,6 +231,49 @@ test("the CLI Codex runtime without a launcher preflights only the codex executa
   assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["codex", true, true]]);
 });
 
+for (const [provider, executable, launcher] of [
+  ["codex", "codex", false], ["codex", "codex", true],
+  ["claude", "claude", false], ["cursor", "cursor-agent", false],
+]) test(`${provider}${launcher ? " with Jig" : ""} preflight honors only forwarded executable overrides`, async t => {
+  const f = fixture(t), variable = `JIG_${provider.toUpperCase()}_BIN`;
+  const previous = { PATH: process.env.PATH, [variable]: process.env[variable], JIG_LAUNCHER_BIN: process.env.JIG_LAUNCHER_BIN };
+  t.after(() => {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  });
+  const bin = path.join(f.root, ".git", "bin"); mkdirSync(bin, { recursive: true });
+  process.env.PATH = [bin, ...(previous.PATH ?? "").split(path.delimiter).filter(dir => dir && !existsSync(path.join(dir, executable)))].join(path.delimiter);
+  process.env[variable] = process.execPath;
+  if (launcher) process.env.JIG_LAUNCHER_BIN = process.execPath;
+  const args = ["--reviewers", provider, ...(provider === "codex" ? ["--codex-runtime", "cli"] : []),
+    ...(launcher ? ["--codex-launcher", "auto"] : [])];
+  const config = { environmentFrom: { review: [variable] } };
+  const preflight = async (fixture, config) => {
+    let run = await fixture.start(config, args);
+    run = await advance(run.directory); run = await advance(run.directory);
+    assert.equal(run.attempts.length, 0, "capability checks must not invoke a provider");
+    return run;
+  };
+
+  // An absolute override is sufficient even when the default executable is absent.
+  let run = await preflight(f, config);
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [[provider, true]]);
+
+  // A default on PATH must not hide a broken override that the adapter will use.
+  writeFileSync(path.join(bin, executable), "#!/bin/sh\nexit 0\n"); chmodSync(path.join(bin, executable), 0o755);
+  process.env[variable] = path.join(bin, "missing-provider");
+  run = await preflight(fixture(t), config);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [[provider, false]]);
+
+  // Ambient overrides omitted from the worker allowlist must not affect preflight.
+  run = await preflight(fixture(t), {});
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [[provider, true]]);
+});
+
 test("the configured codex runtime is resolved once and travels with the capability", async t => {
   const configured = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex"]);
   assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
@@ -259,6 +316,23 @@ test("a known permanent provider failure is retained and never repeatedly dispat
   const run = await runUntilBoundary((await f.start({ reviewers: [{ id: "claude", command }], reviewConcurrency: 1 }, ["--reviewers", "claude"])).directory);
   assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
   assert.equal(run.attempts.length, 1); assert.ok(run.providerFailures.claude);
+  assert.deepEqual(status(run).providerCoverage.completed, []);
+});
+
+test("Codex incorrect API key errors stop controller retries after one attempt", async t => {
+  const f = fixture(t), file = path.join(f.root, ".git", "invalid-key-provider.mjs");
+  writeFileSync(file, `import { classifyFailure } from ${JSON.stringify(import.meta.resolve("../skills/comprehensive-review/scripts/codex-review.mjs"))};
+import { failureResult } from ${JSON.stringify(import.meta.resolve("../skills/review-fix-loop/scripts/provider-bridge.mjs"))};
+for await (const chunk of process.stdin) {}
+const event = { type: "turn.failed", error: { message: "unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]" } };
+const error = classifyFailure(new Error("codex exited with 1"), Buffer.from(JSON.stringify(event) + "\\n"));
+process.stdout.write(JSON.stringify(failureResult(error)) + "\\n");`);
+  const run = await runUntilBoundary((await f.start({
+    reviewers: [{ id: "codex", command: [process.execPath, file] }], reviewConcurrency: 1,
+  }, ["--reviewers", "codex"])).directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.equal(run.attempts.length, 1);
+  assert.match(run.providerFailures.codex.error, /401 Unauthorized: Incorrect API key provided/);
   assert.deepEqual(status(run).providerCoverage.completed, []);
 });
 

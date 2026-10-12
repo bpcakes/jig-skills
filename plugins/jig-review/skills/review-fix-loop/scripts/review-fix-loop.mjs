@@ -1422,7 +1422,9 @@ async function advanceLocked(run) {
         const request = { role: "review", assignment: { provider: p.id }, cwd: run.root, environmentFrom: run.config.environmentFrom?.review };
         // Bundled bridges need the provider CLI, or the Jig launcher that selects its
         // home plus whatever the adapter still runs directly.
-        const executables = p.bundled ? preflightExecutables(p.id, run.options.review[p.id]?.launcher ?? "none", BUNDLED_EXECUTABLES[p.id], commandEnvironment(request)) : null;
+        const environment = commandEnvironment(request);
+        const executable = environment[`JIG_${p.id.toUpperCase()}_BIN`] ?? BUNDLED_EXECUTABLES[p.id];
+        const executables = p.bundled ? preflightExecutables(p.id, run.options.review[p.id]?.launcher ?? "none", executable, environment) : null;
         const available = !p.command ? p.id === "codex"
           : p.bundled ? executables.every(executable => executableCommand({ ...request, command: [executable] }))
           : executableCommand({ ...request, command: p.command });

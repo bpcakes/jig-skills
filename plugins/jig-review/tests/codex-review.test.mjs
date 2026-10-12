@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   API_KEY_VARIABLES,
@@ -289,6 +290,15 @@ test("a launcher without an eligible home is a permanent provider failure", asyn
   const stale = fakeProvider(f.scratch, "stale-jig.mjs", { exitCode: 2, stderr: "error: unexpected argument '--auto' found\n" });
   await assert.rejects(runCodexReview(f.parse(["--launcher", "auto"]), { codexBin: codex, jigBin: stale }), (error) => { failure = error; return /unexpected argument/.test(error.message); });
   assert.equal(failureResult(failure).retryable, false);
+  for (const [launcher, message] of [
+    ["auto", "No Codex homes found under ~/.codex or ~/.codex-*"],
+    ["home:missing", "Codex home 'missing' was not found; checked /tmp/.codex-missing. Discovered homes: none"],
+  ]) {
+    const missing = fakeProvider(f.scratch, "missing-home-jig.mjs", { exitCode: 1, stderr: message });
+    await assert.rejects(runCodexReview(f.parse(["--launcher", launcher]), { codexBin: codex, jigBin: missing }), error => { failure = error; return true; });
+    assert.equal(failure.providerError, message);
+    assert.equal(failureResult(failure).retryable, false, message);
+  }
 });
 
 test("a missing final message fails the review instead of returning an empty report", async (t) => {
@@ -303,11 +313,61 @@ test("a missing final message fails the review instead of returning an empty rep
   assert.equal(failureResult(failure).retryable, false);
 });
 
+test("Codex incorrect API key errors disable the provider through the bridge", async (t) => {
+  const f = await adapterFixture(t);
+  const message = "unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]";
+  const events = [
+    { type: "error", message },
+    { type: "turn.failed", error: { message } },
+  ];
+  const codex = fakeProvider(f.scratch, "invalid-key-codex.mjs", { exitCode: 1,
+    stdout: events.map(event => JSON.stringify(event)).join("\n") + "\n" });
+  let failure;
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: codex }), error => { failure = error; return true; });
+  assert.equal(failure.providerError, `${message}\n${message}`);
+  assert.equal(failureResult(failure).retryable, false);
+
+  // Each supported error envelope must work without another event carrying the message.
+  for (const event of [...events, { type: "error", error: { message } },
+    { type: "error", error: message }, { type: "turn.failed", error: message }]) {
+    const error = classifyFailure(new Error("codex exited with 1"), Buffer.from(JSON.stringify(event) + "\n"));
+    assert.equal(error.providerError, message);
+    assert.equal(failureResult(error).retryable, false, JSON.stringify(event));
+  }
+});
+
+test("CLI and bridge retain bounded untrusted diagnostics after Codex starts", async (t) => {
+  const f = await adapterFixture(t);
+  const diagnostic = "sandbox bootstrap failed: ENOENT; quoted quota exceeded";
+  const codex = fakeProvider(f.scratch, "diagnostic-codex.mjs", { exitCode: 1,
+    stdout: JSON.stringify({ type: "thread.started", thread_id: "t1" }) + "\n",
+    stderr: "omitted-prefix\n" + "x".repeat(5000) + "\n" + diagnostic + "\n" });
+  let failure;
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: codex }), error => { failure = error; return true; });
+  const bridge = failureResult(failure);
+  assert.equal(failure.providerError, "");
+  assert.equal(bridge.retryable, undefined, "diagnostic words must not disable the provider");
+
+  const cli = spawnSync(process.execPath, [
+    fileURLToPath(new URL("../skills/comprehensive-review/scripts/codex-review.mjs", import.meta.url)),
+    "--cwd", f.repo, "--scope", "working-tree", "--expected-fingerprint", f.parse().expectedFingerprint,
+    "--timeout-ms", "10000",
+  ], { env: { ...process.env, JIG_CODEX_BIN: codex }, encoding: "utf8", timeout: 15000 });
+  assert.equal(cli.status, 1, cli.stderr);
+  for (const output of [bridge.error, cli.stderr]) {
+    assert.ok(output.includes(diagnostic), output);
+    assert.match(output, /untrusted diagnostic tail/);
+    assert.ok(!output.includes("omitted-prefix"), "diagnostics retain only the bounded stderr tail");
+    assert.ok(output.length < 6000, "public diagnostics stay bounded");
+    assert.doesNotMatch(output, /see transcript/);
+  }
+});
+
 test("transcript text never classifies a failure; only Codex's structured error events do", async (t) => {
   const f = await adapterFixture(t);
   const transcript = [
     JSON.stringify({ type: "thread.started", thread_id: "t1" }),
-    JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "cat README.md", aggregated_output: "ENOENT: quota exceeded, usage limit reached, authentication failed" } }),
+    JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "cat README.md", aggregated_output: "ENOENT: quota exceeded, usage limit reached, authentication failed; unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]" } }),
   ].join("\n") + "\n";
   const noisy = fakeProvider(f.scratch, "noisy-codex.mjs", { exitCode: 1, stdout: transcript, stderr: "cat README.md\nENOENT: quota exceeded\n" });
   let failure;
