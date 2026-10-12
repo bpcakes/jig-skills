@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
+import { childEnvironment } from "./provider-launch.mjs";
 
 import {
   CURSOR_MODELS,
@@ -195,7 +196,7 @@ async function runCursorReview(options, dependencies = {}) {
       buildCursorArgs(options, scope, promptDirectory, promptPath),
       {
         cwd: scope.repoRoot,
-        env: gitEnvironment(),
+        env: gitEnvironment(childEnvironment(process.env)),
         timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
         maxBuffer: MAX_CURSOR_OUTPUT_BYTES,
         signal,

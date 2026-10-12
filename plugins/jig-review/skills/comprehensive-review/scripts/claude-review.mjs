@@ -8,6 +8,7 @@ import { normalizeClaudeConfigDir } from "./claude-config.mjs";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
+import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
 
 import {
   buildReviewPrompt,
@@ -27,6 +28,10 @@ const VALID_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const VALID_FILE_ACCESS = new Set(["restricted", "host"]);
 const DEFAULT_TIMEOUT_MS = 28 * 60 * 1000;
 const MAX_CLAUDE_OUTPUT_BYTES = 4 * 1024 * 1024;
+// Environment credentials Claude Code prefers over a config directory's stored
+// login. When a home is selected explicitly, by launcher or --config-dir, they
+// would authenticate and charge a different account, so they are removed.
+const CREDENTIAL_VARIABLES = Object.freeze(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]);
 
 function normalizeFileAccess(value = "restricted") {
   const normalized = String(value).trim().toLowerCase();
@@ -46,6 +51,7 @@ function parseArgs(argv) {
     effort: null,
     fileAccess: "restricted",
     configDir: null,
+    launcher: "none",
     expectedFingerprint: null,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     excludePaths: [],
@@ -59,6 +65,7 @@ function parseArgs(argv) {
     "--effort",
     "--file-access",
     "--config-dir",
+    "--launcher",
     "--task-brief",
     "--task-brief-hash",
     "--expected-fingerprint",
@@ -126,6 +133,8 @@ function parseArgs(argv) {
   options.excludePaths = normalizeExcludePaths(options.excludePaths);
   options.fileAccess = normalizeFileAccess(options.fileAccess);
   options.configDir = normalizeClaudeConfigDir(options.configDir, "--config-dir");
+  options.launcher = normalizeLauncher(options.launcher, "--launcher");
+  assertLauncherSelection(options);
   options.model = String(options.model).trim();
   if (!options.model) throw new Error("--model must not be blank.");
   if (options.effort) {
@@ -137,6 +146,14 @@ function parseArgs(argv) {
     }
   }
   return options;
+}
+
+// A Jig launcher sets CLAUDE_CONFIG_DIR itself, so an explicit directory would be
+// silently overridden; reject the ambiguous combination instead.
+function assertLauncherSelection(options) {
+  if (options.launcher !== "none" && options.configDir != null) {
+    throw new Error("--config-dir cannot be combined with --launcher; select the Claude home through the launcher.");
+  }
 }
 
 function buildClaudeArgs(options, evidenceDirectory = null) {
@@ -192,7 +209,9 @@ function parseClaudeResult(stdout) {
     throw new Error("Claude returned malformed JSON output.");
   }
   if (payload.is_error === true) {
-    throw new Error(typeof payload.result === "string" ? payload.result : "Claude reported an error.");
+    // Claude's own structured error channel; the bridge classifies it directly.
+    const message = typeof payload.result === "string" ? payload.result : "Claude reported an error.";
+    throw Object.assign(new Error(message), { providerError: message });
   }
   if (typeof payload.result !== "string" || !payload.result.trim()) {
     throw new Error("Claude output did not contain a final review result.");
@@ -210,7 +229,9 @@ async function runClaudeReview(options, dependencies = {}) {
     expectedFingerprint: options.expectedFingerprint.toLowerCase(),
     fileAccess: normalizeFileAccess(options.fileAccess),
     configDir: normalizeClaudeConfigDir(options.configDir, "--config-dir"),
+    launcher: normalizeLauncher(options.launcher, "--launcher"),
   };
+  assertLauncherSelection(options);
   if (Boolean(options.taskBrief) !== Boolean(options.taskBriefHash)) throw new Error("--task-brief and --task-brief-hash must be supplied together.");
   const taskBrief = readBrief(options.taskBrief, options.taskBriefHash);
   const deadlineAt = Date.now() + options.timeoutMs;
@@ -229,17 +250,34 @@ async function runClaudeReview(options, dependencies = {}) {
     const prompt = buildReviewPrompt(scope, context, { taskBrief }) + (dependencies.promptSuffix ?? "");
     const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
-    const result = await runCommand(claudeBin,
-      buildClaudeArgs(options, context.evidence ? evidence.directory : null), {
-        cwd: scope.repoRoot,
-        input: prompt,
-        timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
-        maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
-        signal,
-        env: gitEnvironment(options.configDir == null
-          ? process.env
-          : { ...process.env, CLAUDE_CONFIG_DIR: options.configDir }),
-      });
+    const launch = resolveProviderLaunch({
+      provider: "claude",
+      launcher: options.launcher,
+      executable: claudeBin,
+      args: buildClaudeArgs(options, context.evidence ? evidence.directory : null),
+      inherited: process.env,
+      jigBin: dependencies.jigBin ?? null,
+    });
+    const result = await runCommand(launch.command, launch.args, {
+      cwd: scope.repoRoot,
+      input: prompt,
+      timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
+      maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
+      signal,
+      env: gitEnvironment(childEnvironment(process.env, {
+        ...(options.configDir == null ? {} : { CLAUDE_CONFIG_DIR: options.configDir }),
+        ...(options.launcher !== "none" || options.configDir != null
+          // Inherited credentials or provider routing must not bypass the selected subscription.
+          ? {
+            ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, null])),
+            ANTHROPIC_BASE_URL: null,
+            CLAUDE_CODE_USE_BEDROCK: null,
+            CLAUDE_CODE_USE_VERTEX: null,
+            CLAUDE_CODE_USE_FOUNDRY: null,
+          }
+          : {}),
+      })),
+    });
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
     const report = parseClaudeResult(result.stdout);
     return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
@@ -282,6 +320,7 @@ if (isMain) {
 }
 
 export {
+  CREDENTIAL_VARIABLES,
   buildClaudeArgs,
   buildReviewPrompt,
   collectReviewContext,

@@ -17,6 +17,8 @@ import { isExcludedPath } from "../../comprehensive-review/scripts/review-exclus
 import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
+import { preflightExecutables } from "../../comprehensive-review/scripts/provider-launch.mjs";
+import { codexEfforts } from "../../comprehensive-review/scripts/review-options.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
@@ -199,10 +201,28 @@ function assertLegacyAdmission(root, runsRoot) {
   catch (error) { throw activeReferenceError(active, reference.directory, error); }
   if (!isSettled(prior)) throw new Error(`Resume the active run: ${reference.directory}`);
 }
+// Codex without a command is the host's native subagent unless the reviewer entry
+// or --codex-runtime selects the bundled CLI bridge. The effective runtime is
+// resolved once, so dispatch, preflight, launcher and effort validation agree:
+// a configured native entry cannot silently drop a requested launcher, and a
+// configured CLI entry cannot admit a native-only effort.
+const BUNDLED_EXECUTABLES = Object.freeze({ claude: "claude", codex: "codex", cursor: "cursor-agent" });
+function codexRuntime(provider, options) {
+  const selected = options.review.codex ?? {};
+  const runtime = provider.runtime ?? selected.runtime ?? "native";
+  if (runtime === "native" && selected.launcher && selected.launcher !== "none") throw new Error("--codex-launcher requires the cli runtime, but the codex reviewer entry selects runtime native.");
+  const efforts = codexEfforts(runtime);
+  if (selected.effort && !efforts.has(selected.effort)) throw new Error(`--codex-effort ${selected.effort} is not valid for the ${runtime} Codex runtime, which accepts ${[...efforts].join(", ")}.`);
+  return runtime;
+}
 function configure(options, config) {
-  const reviewers = (config.reviewers ?? options.review.reviewers.map(id => ({ id }))).map(provider =>
-    provider.command || provider.id === "codex" ? provider : { ...provider, bundled: true,
-      command: [process.execPath, fileURLToPath(new URL("./provider-bridge.mjs", import.meta.url)), provider.id] });
+  const reviewers = (config.reviewers ?? options.review.reviewers.map(id => ({ id }))).map(provider => {
+    if (provider.runtime !== undefined && (provider.id !== "codex" || !["native", "cli"].includes(provider.runtime))) throw new Error("runtime applies only to the codex reviewer and must be native or cli.");
+    if (provider.id === "codex" && !provider.command) provider = { ...provider, runtime: codexRuntime(provider, options) };
+    const bundled = !provider.command && (provider.id !== "codex" || provider.runtime === "cli");
+    return bundled ? { ...provider, bundled: true,
+      command: [process.execPath, fileURLToPath(new URL("./provider-bridge.mjs", import.meta.url)), provider.id] } : provider;
+  });
   if (!reviewers.length || new Set(reviewers.map(p => p.id)).size !== reviewers.length) throw new Error("Reviewer capabilities must have unique provider IDs.");
   for (const provider of reviewers) {
     if (!options.review.reviewers.includes(provider.id)) throw new Error(`Unselected provider: ${provider.id}`);
@@ -1091,7 +1111,8 @@ async function review(run) {
     const provider = pool[(slot.slot + slot.attempts) % pool.length];
     slot.attempts++;
     if (run.pending) { (run.reviewQueue ??= {})[run.pending.id] = run.pending; run.pending = null; run.reviewWave = true; }
-    issue(run, "review", { provider: provider.id, providerOptions: run.options.review[provider.id], slot: slot.slot,
+    // The effective Codex runtime resolved at init travels with the assignment.
+    issue(run, "review", { provider: provider.id, providerOptions: { ...run.options.review[provider.id], ...(provider.runtime ? { runtime: provider.runtime } : {}) }, slot: slot.slot,
       instructions: "Independently inspect the entire scope and immutable task contract. Remain read-only. Check the responsible contracts and affected paths for residual causes, inappropriate layer responsibilities, and regressions; passing tests alone do not establish a sound repair. Report demonstrated consequences, not stylistic preferences or speculative redesign. Return complete coverage, actionable findings, and evidence for every acceptance criterion. Do not invoke another reviewer." }, provider.command);
     if (TERMINAL.has(run.phase)) return;
     launch(run);
@@ -1397,8 +1418,18 @@ async function advanceLocked(run) {
     }
     if (run.phase === "INIT") transition(run, "PREFLIGHT", "Contract and scope pinned.");
     else if (run.phase === "PREFLIGHT") {
-      run.capabilities = run.config.reviewers.map(p => ({ ...p, available: p.command
-        ? executableCommand({ role: "review", assignment: { provider: p.id }, cwd: run.root, command: p.bundled ? [p.id === "claude" ? "claude" : "cursor-agent"] : p.command, environmentFrom: run.config.environmentFrom?.review }) : p.id === "codex" }));
+      run.capabilities = run.config.reviewers.map(p => {
+        const request = { role: "review", assignment: { provider: p.id }, cwd: run.root, environmentFrom: run.config.environmentFrom?.review };
+        // Bundled bridges need the provider CLI, or the Jig launcher that selects its
+        // home plus whatever the adapter still runs directly.
+        const environment = commandEnvironment(request);
+        const executable = environment[`JIG_${p.id.toUpperCase()}_BIN`] ?? BUNDLED_EXECUTABLES[p.id];
+        const executables = p.bundled ? preflightExecutables(p.id, run.options.review[p.id]?.launcher ?? "none", executable, environment) : null;
+        const available = !p.command ? p.id === "codex"
+          : p.bundled ? executables.every(executable => executableCommand({ ...request, command: [executable] }))
+          : executableCommand({ ...request, command: p.command });
+        return { ...p, available };
+      });
       const unavailable = run.options.explicitReviewers ? run.options.review.reviewers.filter(id => !run.capabilities.some(p => p.id === id && p.available)) : [];
       if (unavailable.length) { transition(run, "REVIEW_INCOMPLETE", `Explicitly selected providers are unavailable: ${unavailable.join(", ")}. Install their CLI or configure a command.`, { unavailable }); return run; }
       if (run.options.reviewPolicy === "strict" && run.capabilities.filter(p => p.available).length < 2) {

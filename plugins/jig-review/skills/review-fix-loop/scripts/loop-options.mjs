@@ -47,7 +47,9 @@ export function parseArgs(argv) {
   if (!options.explicitReviewers) {
     forwarded.unshift("--reviewers", options.reviewPolicy === "strict" ? "claude,codex" : "codex");
   }
-  options.review = reviewArgs(forwarded);
+  // A reviewer configuration file may override the Codex runtime at init, where
+  // the effort is validated against the effective runtime.
+  options.review = reviewArgs(forwarded, { deferCodexEffort: true });
   return options;
 }
 
