@@ -28,6 +28,10 @@ const VALID_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const VALID_FILE_ACCESS = new Set(["restricted", "host"]);
 const DEFAULT_TIMEOUT_MS = 28 * 60 * 1000;
 const MAX_CLAUDE_OUTPUT_BYTES = 4 * 1024 * 1024;
+// Environment credentials Claude Code prefers over a config directory's stored
+// login. When a home is selected explicitly, by launcher or --config-dir, they
+// would authenticate and charge a different account, so they are removed.
+const CREDENTIAL_VARIABLES = Object.freeze(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]);
 
 function normalizeFileAccess(value = "restricted") {
   const normalized = String(value).trim().toLowerCase();
@@ -205,7 +209,9 @@ function parseClaudeResult(stdout) {
     throw new Error("Claude returned malformed JSON output.");
   }
   if (payload.is_error === true) {
-    throw new Error(typeof payload.result === "string" ? payload.result : "Claude reported an error.");
+    // Claude's own structured error channel; the bridge classifies it directly.
+    const message = typeof payload.result === "string" ? payload.result : "Claude reported an error.";
+    throw Object.assign(new Error(message), { providerError: message });
   }
   if (typeof payload.result !== "string" || !payload.result.trim()) {
     throw new Error("Claude output did not contain a final review result.");
@@ -258,8 +264,12 @@ async function runClaudeReview(options, dependencies = {}) {
       timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
       maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
       signal,
-      env: gitEnvironment(childEnvironment(process.env,
-        options.configDir == null ? {} : { CLAUDE_CONFIG_DIR: options.configDir })),
+      env: gitEnvironment(childEnvironment(process.env, {
+        ...(options.configDir == null ? {} : { CLAUDE_CONFIG_DIR: options.configDir }),
+        ...(options.launcher !== "none" || options.configDir != null
+          ? Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, null]))
+          : {}),
+      })),
     });
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
     const report = parseClaudeResult(result.stdout);
@@ -303,6 +313,7 @@ if (isMain) {
 }
 
 export {
+  CREDENTIAL_VARIABLES,
   buildClaudeArgs,
   buildReviewPrompt,
   collectReviewContext,

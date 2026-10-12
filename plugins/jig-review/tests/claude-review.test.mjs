@@ -14,6 +14,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  CREDENTIAL_VARIABLES,
   buildClaudeArgs,
   collectReviewContext,
   parseArgs,
@@ -524,8 +525,10 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   ].join("\n"));
   chmodSync(fakeJig, 0o755);
   const previous = { FAKE_CLAUDE_CAPTURE: process.env.FAKE_CLAUDE_CAPTURE, CLAUDECODE: process.env.CLAUDECODE,
-    CLAUDE_CODE_MESSAGING_SOCKET: process.env.CLAUDE_CODE_MESSAGING_SOCKET, CLAUDE_EFFORT: process.env.CLAUDE_EFFORT, JIG_LAUNCHER_BIN: process.env.JIG_LAUNCHER_BIN };
-  Object.assign(process.env, { FAKE_CLAUDE_CAPTURE: capturePath, CLAUDECODE: "1", CLAUDE_CODE_MESSAGING_SOCKET: "/run/parent.sock", CLAUDE_EFFORT: "xhigh" });
+    CLAUDE_CODE_MESSAGING_SOCKET: process.env.CLAUDE_CODE_MESSAGING_SOCKET, CLAUDE_EFFORT: process.env.CLAUDE_EFFORT, JIG_LAUNCHER_BIN: process.env.JIG_LAUNCHER_BIN,
+    ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, process.env[name]])) };
+  Object.assign(process.env, { FAKE_CLAUDE_CAPTURE: capturePath, CLAUDECODE: "1", CLAUDE_CODE_MESSAGING_SOCKET: "/run/parent.sock", CLAUDE_EFFORT: "xhigh",
+    ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, `inherited-${name}`])) });
   delete process.env.JIG_LAUNCHER_BIN;
   t.after(() => {
     for (const [name, value] of Object.entries(previous)) {
@@ -556,6 +559,7 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   assert.equal(captured.env.CLAUDECODE, undefined);
   assert.equal(captured.env.CLAUDE_CODE_MESSAGING_SOCKET, undefined);
   assert.equal(captured.env.CLAUDE_EFFORT, undefined);
+  for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], undefined, `${name} must not override the launcher-selected home`);
   assert.equal(captured.env.FAKE_CLAUDE_CAPTURE, capturePath, "unrelated variables are inherited");
 
   process.env.JIG_LAUNCHER_BIN = fakeJig;
@@ -563,4 +567,15 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   captured = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.deepEqual(captured.argv.slice(0, 5), ["claude", "launch", "work", "--", "-p"]);
   assert.equal(captured.env.CLAUDE_CONFIG_DIR, undefined, "the launcher, not the adapter, selects the home");
+  for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], undefined, `${name} must not override the named home`);
+
+  // An explicit --config-dir is also an account selection; a plain launch keeps the environment's own credentials.
+  delete process.env.JIG_LAUNCHER_BIN;
+  await runClaudeReview(parse(["--config-dir", "~/.claude-work"]), { claudeBin: fakeJig });
+  captured = JSON.parse(readFileSync(capturePath, "utf8"));
+  assert.equal(captured.env.CLAUDE_CONFIG_DIR, path.join(os.homedir(), ".claude-work"));
+  for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], undefined, `${name} must not override --config-dir`);
+  await runClaudeReview(parse([]), { claudeBin: fakeJig });
+  captured = JSON.parse(readFileSync(capturePath, "utf8"));
+  for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], `inherited-${name}`, `${name} is the environment's own account without a selection`);
 });

@@ -186,6 +186,24 @@ test("launcher-selected bundled bridges preflight the Jig executable instead of 
   await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--reviewers", "codex", "--codex-runtime", "cli", "--codex-effort", "minimal"]), /not valid for the native Codex runtime/);
 });
 
+test("the CLI Codex runtime without a launcher preflights only the codex executable", async t => {
+  const f = fixture(t);
+  const previousPath = process.env.PATH;
+  t.after(() => { process.env.PATH = previousPath; });
+  const bin = path.join(f.root, ".git", "bin"); mkdirSync(bin, { recursive: true });
+  process.env.PATH = [bin, ...(previousPath ?? "").split(path.delimiter).filter(dir => dir && !existsSync(path.join(dir, "codex")))].join(path.delimiter);
+  const cli = ["--reviewers", "codex", "--codex-runtime", "cli"];
+  let run = await f.start({}, cli);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["codex", true, false]]);
+  writeFileSync(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n"); chmodSync(path.join(bin, "codex"), 0o755);
+  run = await f.start({}, cli);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["codex", true, true]]);
+});
+
 test("the configured codex runtime is resolved once and travels with the capability", async t => {
   const configured = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex"]);
   assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
