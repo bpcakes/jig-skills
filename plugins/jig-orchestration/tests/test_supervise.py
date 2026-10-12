@@ -1171,6 +1171,23 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(result["missing_role_skills"], [])
                 self.assertTrue(all(item["ok"] for item in result["installations"]))
 
+        host = self.config["hosts"]["local"]
+        host["profiles"] = [profiles[1]]
+        for host_roles in (None, []):
+            with self.subTest(host_roles=host_roles), patch.dict(os.environ, {"PATH": str(self.root / "supported")}):
+                host.pop("roles", None)
+                if host_roles is not None:
+                    host["roles"] = host_roles
+                result = runtime.preflight(self.config, "local")
+                self.assertTrue(result["local_inventory_ok"])
+                self.assertEqual(result["missing_role_skills"], [])
+                paths = profiles[1]["skill_paths"]
+                missing = paths.pop("comprehensive-review")
+                result = runtime.preflight(self.config, "local")
+                self.assertFalse(result["local_inventory_ok"])
+                self.assertEqual(result["missing_role_skills"], ["comprehensive-review"])
+                paths["comprehensive-review"] = missing
+
     def test_review_pair_cannot_be_split_across_profiles(self):
         profiles = []
         for skill in ("comprehensive-review", "review-fix-loop"):

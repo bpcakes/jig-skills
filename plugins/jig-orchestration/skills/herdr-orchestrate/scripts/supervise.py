@@ -581,15 +581,15 @@ def preflight(config, host_id):
                     item["error"] = "installed_skill_changed"
             installations.append(item)
     required_skills = set()
-    if "coordinator" in roles:
+    if "coordinator" in runtime_roles:
         required_skills.update({"herdr-orchestrate", "herdr"})
-    if "review" in roles:
+    if "review" in runtime_roles:
         required_skills.update({"review-fix-loop", "comprehensive-review"})
     observed_skills = {item["skill"] for item in installations if item["ok"]}
     missing_skills = sorted(required_skills - observed_skills)
     return {"host": host_id, "observed_at": timestamp(), "tools": tools, "installations": installations,
             "missing_role_skills": missing_skills,
-            "local_inventory_ok": bool(roles and profiles) and not missing_skills and all(x["ok"] for x in tools + installations),
+            "local_inventory_ok": bool(runtime_roles and profiles) and not missing_skills and all(x["ok"] for x in tools + installations),
             "unchecked": ["SSH host identity and selected agent environment", "review pair compatibility",
                           "reviewer authentication/model access", "Herdr endpoint/native identity and control contracts",
                           "return-route restriction", "tracker claim/publication contract", "pause and limit enforcement"],
