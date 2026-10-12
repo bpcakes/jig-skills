@@ -217,6 +217,49 @@ test("the CLI Codex runtime without a launcher preflights only the codex executa
   assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["codex", true, true]]);
 });
 
+for (const [provider, executable, launcher] of [
+  ["codex", "codex", false], ["codex", "codex", true],
+  ["claude", "claude", false], ["cursor", "cursor-agent", false],
+]) test(`${provider}${launcher ? " with Jig" : ""} preflight honors only forwarded executable overrides`, async t => {
+  const f = fixture(t), variable = `JIG_${provider.toUpperCase()}_BIN`;
+  const previous = { PATH: process.env.PATH, [variable]: process.env[variable], JIG_LAUNCHER_BIN: process.env.JIG_LAUNCHER_BIN };
+  t.after(() => {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  });
+  const bin = path.join(f.root, ".git", "bin"); mkdirSync(bin, { recursive: true });
+  process.env.PATH = [bin, ...(previous.PATH ?? "").split(path.delimiter).filter(dir => dir && !existsSync(path.join(dir, executable)))].join(path.delimiter);
+  process.env[variable] = process.execPath;
+  if (launcher) process.env.JIG_LAUNCHER_BIN = process.execPath;
+  const args = ["--reviewers", provider, ...(provider === "codex" ? ["--codex-runtime", "cli"] : []),
+    ...(launcher ? ["--codex-launcher", "auto"] : [])];
+  const config = { environmentFrom: { review: [variable] } };
+  const preflight = async (fixture, config) => {
+    let run = await fixture.start(config, args);
+    run = await advance(run.directory); run = await advance(run.directory);
+    assert.equal(run.attempts.length, 0, "capability checks must not invoke a provider");
+    return run;
+  };
+
+  // An absolute override is sufficient even when the default executable is absent.
+  let run = await preflight(f, config);
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [[provider, true]]);
+
+  // A default on PATH must not hide a broken override that the adapter will use.
+  writeFileSync(path.join(bin, executable), "#!/bin/sh\nexit 0\n"); chmodSync(path.join(bin, executable), 0o755);
+  process.env[variable] = path.join(bin, "missing-provider");
+  run = await preflight(fixture(t), config);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [[provider, false]]);
+
+  // Ambient overrides omitted from the worker allowlist must not affect preflight.
+  run = await preflight(fixture(t), {});
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [[provider, true]]);
+});
+
 test("the configured codex runtime is resolved once and travels with the capability", async t => {
   const configured = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex"]);
   assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
