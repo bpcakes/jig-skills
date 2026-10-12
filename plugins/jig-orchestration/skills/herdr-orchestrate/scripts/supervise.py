@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -24,7 +23,7 @@ import sys
 import time
 import uuid
 
-from state import Engine, StateError, scheduler_identity
+from state import Engine, StateError, scheduler_deadline, scheduler_identity, scheduler_seconds
 
 MAX_INPUT = 1024 * 1024
 MAX_JSON_DEPTH = 64
@@ -81,9 +80,10 @@ def output(value):
 
 
 def positive_seconds(value, name):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-        raise RuntimeErrorDetail("invalid_config", f"{name} must be positive finite seconds")
-    return value
+    try:
+        return scheduler_seconds(value, name)
+    except StateError as exc:
+        raise RuntimeErrorDetail("invalid_config", str(exc)) from exc
 
 
 def scheduler_config(config, schedule=None):
@@ -220,12 +220,12 @@ def tick(run_dir, now=None):
             last = completed
         due = parse_time(schedule.get("next_due_at"))
         requested = bool(schedule.get("wake_requested_at"))
-        if last and now < last + timedelta(seconds=settings["minimum_cadence_seconds"]):
+        if last and now < scheduler_deadline(last, settings["minimum_cadence_seconds"]):
             return {"status": "minimum_cadence"}
         if due and now < due and not requested:
             return {"status": "not_due", "next_due_at": timestamp(due)}
         scheduler_patch(run_dir, lambda _: {"last_attempt_at": timestamp(now),
-                        "next_due_at": timestamp(now + timedelta(seconds=settings["cadence_seconds"]))})
+                        "next_due_at": timestamp(scheduler_deadline(now, settings["cadence_seconds"]))})
 
         def check_binding(current):
             if scheduler_config(current["config"], current["scheduler"]) != settings:
@@ -340,7 +340,7 @@ def complete(run_dir, wake_id, now=None):
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
                 "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
                 "last_completed_wake_id": pending or schedule.get("last_completed_wake_id"),
-                "next_due_at": timestamp(now + timedelta(seconds=interval)),
+                "next_due_at": timestamp(scheduler_deadline(now, interval)),
                 "wake_requested_at": requested, "wake_reason": schedule.get("wake_reason") if requested else None,
                 "failure": endpoint_failure(schedule), "busy_since_at": None}
     state = scheduler_patch(run_dir, finish)
@@ -352,17 +352,17 @@ def health_failures(schedule, settings, now, created_at=None):
     """Return active incidents in reporting order, including temporarily hidden ones."""
     failures = []
     heartbeat = parse_time(schedule.get("heartbeat_at"))
-    if not heartbeat or now > heartbeat + timedelta(seconds=max(90, settings["cadence_seconds"] * 2)):
+    if not heartbeat or now > scheduler_deadline(heartbeat, max(90, settings["cadence_seconds"] * 2)):
         failures.append({"id": "heartbeat-" + str(schedule.get("heartbeat_at")),
                          "reason": "Scheduler heartbeat missing or overdue"})
     if schedule.get("failure"):
         failures.append(schedule["failure"])
     attempted = parse_time(schedule.get("last_attempt_at"))
-    if schedule.get("pending_action_id") and attempted and now > attempted + timedelta(seconds=settings["cadence_seconds"] * 2):
+    if schedule.get("pending_action_id") and attempted and now > scheduler_deadline(attempted, settings["cadence_seconds"] * 2):
         failures.append({"id": "pending-" + schedule["pending_action_id"],
                          "reason": "Wake remains unresolved; inspect coordinator execution"})
     busy_since = parse_time(schedule.get("busy_since_at"))
-    if busy_since and now >= busy_since + timedelta(seconds=settings["busy_timeout_seconds"]):
+    if busy_since and now >= scheduler_deadline(busy_since, settings["busy_timeout_seconds"]):
         failures.append({"id": "busy-" + schedule["busy_since_at"],
                          "reason": "Coordinator remains busy beyond the supervision timeout; inspect its registered execution"})
     if not schedule.get("pending_action_id") and not busy_since:
@@ -370,11 +370,11 @@ def health_failures(schedule, settings, now, created_at=None):
         completed = parse_time(schedule.get("last_completed_at"))
         progress = completed or parse_time(schedule.get("last_dispatched_at")) or parse_time(created_at)
         if progress:
-            due = progress + timedelta(seconds=interval)
+            due = scheduler_deadline(progress, interval)
             requested = parse_time(schedule.get("wake_requested_at"))
             if requested:
-                due = min(due, max(requested, progress + timedelta(seconds=settings["minimum_cadence_seconds"])))
-            if now > due + timedelta(seconds=interval * 2):
+                due = min(due, max(requested, scheduler_deadline(progress, settings["minimum_cadence_seconds"])))
+            if now > scheduler_deadline(due, interval * 2):
                 failures.append({"id": "progress-" + timestamp(progress),
                                  "reason": "Eligible reconciliation is overdue despite scheduler liveness"})
     return failures
@@ -441,7 +441,7 @@ def health(run_dir, now=None):
                 if attempts >= HEALTH_ALERT_MAX_ATTEMPTS:
                     decision["result"]["alert"] = "retry_exhausted"
                     return fields or None
-                if now < parse_time(last["at"]) + timedelta(seconds=HEALTH_ALERT_RETRY_SECONDS):
+                if now < scheduler_deadline(parse_time(last["at"]), HEALTH_ALERT_RETRY_SECONDS):
                     decision["result"]["alert"] = "retry_pending"
                     return fields or None
             claim = {"failure_id": failure["id"], "status": "dispatching", "at": timestamp(now),
@@ -667,9 +667,10 @@ def main(argv=None):
     if args.command == "init":
         config = read_json(args.config)
         settings = scheduler_config(config)
+        next_due = timestamp(scheduler_deadline(datetime.now(timezone.utc), settings["cadence_seconds"]))
         result = Engine.initialize(args.run_dir, config)
         scheduler_patch(args.run_dir, lambda _: {"enabled": settings.get("enabled", False),
-                        "next_due_at": timestamp(datetime.now(timezone.utc) + timedelta(seconds=settings["cadence_seconds"]))})
+                        "next_due_at": next_due})
         return {"status": "initialized", "policy_version": result["policy_version"],
                 "scheduler_started": False, "notifications": "authorized" if settings.get("notifier_argv") else "local_evidence_only"}
     if args.command == "status":

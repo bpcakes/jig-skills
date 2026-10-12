@@ -53,6 +53,25 @@ def nonempty(value):
     return isinstance(value, str) and bool(value.strip())
 
 
+def scheduler_deadline(at, seconds):
+    try:
+        return at + timedelta(seconds=seconds)
+    except OverflowError as exc:
+        raise StateError("invalid", "scheduler duration exceeds the supported timestamp range") from exc
+
+
+def scheduler_seconds(value, name):
+    require(type(value) in {int, float} and value > 0, "invalid", f"{name} must be positive finite seconds")
+    try:
+        require(math.isfinite(value), "invalid", f"{name} must be positive finite seconds")
+    except OverflowError as exc:
+        raise StateError("invalid", f"{name} exceeds the supported timestamp range") from exc
+    # Health's progress deadline includes a grace period of two more intervals.
+    multiplier = 1 if name == "busy_timeout_seconds" else 3
+    scheduler_deadline(datetime.now(timezone.utc), value * multiplier)
+    return value
+
+
 def git_worktree(path):
     marker = path / ".git"
     return marker.is_file() or marker.is_dir() and (marker / "HEAD").is_file()
@@ -262,9 +281,7 @@ class Engine:
         scheduler_identity(settings)
         for key in ("cadence_seconds", "minimum_cadence_seconds", "busy_timeout_seconds"):
             if key in settings:
-                value = settings[key]
-                require(type(value) in {int, float} and math.isfinite(value) and value > 0,
-                        "invalid", "scheduler cadence must be positive finite seconds")
+                scheduler_seconds(settings[key], key)
         if settings.get("notifier_argv") is not None:
             argv = settings["notifier_argv"]
             require(settings.get("notification_authorized") is True and isinstance(argv, list) and argv
@@ -482,7 +499,7 @@ class Engine:
                     previous = [instant(state["scheduler"][key]) for key in ("last_attempt_at", "last_completed_at")
                                 if state["scheduler"].get(key)]
                     state["scheduler"]["next_due_at"] = (
-                        (max(previous) + timedelta(seconds=interval)).isoformat() if previous else None)
+                        scheduler_deadline(max(previous), interval).isoformat() if previous else None)
                 state["scheduler"]["enabled"] = candidate["scheduler"]["enabled"]
                 state["scheduler"]["version"] += 1
             state["config"] = candidate
@@ -646,6 +663,8 @@ class Engine:
                     require(type(value) is bool, "invalid", "scheduler.enabled must be boolean")
                 elif field in {"failure", "last_alert"}:
                     require(value is None or isinstance(value, dict), "invalid", "scheduler failure/alert must be an object or null")
+                    if field == "failure" and value is not None:
+                        require(nonempty(value.get("id")), "invalid", "scheduler failure.id must be a nonempty string")
                 elif field == "health_alerts":
                     require(isinstance(value, dict) and all(nonempty(key) and isinstance(alert, dict)
                             for key, alert in value.items()), "invalid", "health alerts must map incident IDs to receipts")

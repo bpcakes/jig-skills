@@ -151,6 +151,8 @@ Copy real identity fields from Herdr; do not substitute these example strings. T
 
 Optional `busy_timeout_seconds` is positive finite seconds; its default is three times the larger of `cadence_seconds` and `minimum_cadence_seconds`. Health reports prolonged busy status after that interval from the first skipped delivery. Repeated ticks preserve the interval and alert identity. Successful wake dispatch or a completed full manual reconciliation resets it. Choose a longer value for expected long coordinator turns. This health signal only requests inspection: it never interrupts the coordinator, frees capacity, or replays a wake. Scheduler stop suppresses health alerts; work pause does not.
 
+Scheduler durations must also fit the supported timestamp range, including derived health deadlines. Initialization and configuration reject unrepresentable values before persisting state. A scheduler `failure` record must be null or contain a nonempty string `id` so completion and health checks can identify the incident.
+
 ```sh
 python3 <skill-root>/scripts/supervise.py supervise --run-dir <private-run-dir>
 python3 <skill-root>/scripts/supervise.py tick --run-dir <private-run-dir>

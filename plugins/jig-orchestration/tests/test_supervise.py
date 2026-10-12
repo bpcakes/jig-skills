@@ -311,6 +311,68 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(runtime, "herdr_call", return_value=self.response()):
             self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=361))["status"], "delivered")
 
+    def test_cli_scheduler_duration_rejection_precedes_persistence(self):
+        script = str(SCRIPTS / "supervise.py")
+        fresh_run = self.root / "invalid-duration"
+        for field in ("cadence_seconds", "minimum_cadence_seconds", "busy_timeout_seconds"):
+            for value in (10 ** 400, 1e20, 1e12):
+                with self.subTest(field=field, value=value), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                    settings = {**self.config["scheduler"], "enabled": False, field: value}
+                    config = {**self.config, "scheduler": settings}
+                    before = Engine.read(self.run)
+                    request = {"op": "configure", "action_id": "bad-duration", "expected_policy": before["policy_version"],
+                               "fields": {"scheduler": settings},
+                               "evidence": {"ref": "fixture:duration", "observed_at": self.now.isoformat()}}
+                    for command, payload in ((["init", "--run-dir", str(fresh_run), "--config", "-"], config),
+                                             (["apply", "--run-dir", str(self.run)], request)):
+                        result = subprocess.run([sys.executable, "-B", script, *command], input=json.dumps(payload),
+                                                capture_output=True, text=True, check=False)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertEqual(result.stderr, "")
+                        response = json.loads(result.stdout)
+                        self.assertIs(response["ok"], False)
+                        self.assertIn(response["error"]["code"], {"invalid", "invalid_config"})
+                    self.assertFalse(fresh_run.exists())
+                    self.assertEqual(Engine.read(self.run), before)
+                    self.assertFalse((self.run / "transaction.json").exists())
+        # The rejected initialization did not leave an already-initialized run behind.
+        config = {**self.config, "scheduler": {**self.config["scheduler"], "enabled": False}}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            result = subprocess.run([sys.executable, "-B", script, "init", "--run-dir", str(fresh_run), "--config", "-"],
+                                    input=json.dumps(config), capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(result.stdout)["status"], "initialized")
+        self.assertEqual(result.stderr, "")
+
+    def test_scheduler_deadline_overflow_rejects_configuration_without_mutation(self):
+        self.schedule(last_attempt_at="9999-12-31T23:59:59+00:00")
+        before = Engine.read(self.run)
+        with self.assertRaisesRegex(StateError, "timestamp range"):
+            self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 120})
+        self.assertEqual(Engine.read(self.run), before)
+        with self.assertRaisesRegex(StateError, "timestamp range"):
+            runtime.complete(self.run, "manual", datetime.max.replace(tzinfo=timezone.utc))
+        self.assertEqual(Engine.read(self.run), before)
+
+    def test_cli_rejects_scheduler_failure_without_usable_incident_id(self):
+        before = Engine.read(self.run)
+        for failure in ({}, {"reason": "missing id"}, {"id": 5}, {"id": " "}, {"id": None}):
+            with self.subTest(failure=failure), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                request = {"op": "scheduler", "action_id": "bad-failure", "expected_policy": before["policy_version"],
+                           "expected_scheduler": before["scheduler"]["version"], "fields": {"failure": failure}}
+                result = subprocess.run([sys.executable, "-B", str(SCRIPTS / "supervise.py"), "apply",
+                                         "--run-dir", str(self.run)], input=json.dumps(request),
+                                        capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stderr, "")
+                self.assertEqual(json.loads(result.stdout), {"ok": False, "error": {
+                    "code": "invalid", "message": "scheduler failure.id must be a nonempty string"}})
+                self.assertEqual(Engine.read(self.run), before)
+        self.schedule(failure={"id": "endpoint-fixture", "reason": "fixture"})
+        self.assertEqual(runtime.complete(self.run, "manual", self.now)["status"], "completed")
+        self.assertEqual(runtime.health(self.run, self.now)["status"], "unhealthy")
+        self.schedule(failure=None)
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+
     def test_busy_timeout_configuration_and_manual_completion_race(self):
         settings = runtime.scheduler_config(self.config)
         self.assertEqual(settings["busy_timeout_seconds"], 180)
