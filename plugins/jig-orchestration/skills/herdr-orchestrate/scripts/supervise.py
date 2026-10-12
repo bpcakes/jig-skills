@@ -58,7 +58,10 @@ def read_json(source):
             raw = stream.read(MAX_INPUT + 1)
     if len(raw) > MAX_INPUT:
         raise RuntimeErrorDetail("input_too_large", "JSON input exceeds 1 MiB")
-    value = json.loads(raw)
+    try:
+        value = json.loads(raw)
+    except RecursionError as error:
+        raise RuntimeErrorDetail("invalid_input", "JSON input is nested too deeply") from error
     if not isinstance(value, dict):
         raise RuntimeErrorDetail("invalid_input", "Expected a JSON object")
     return value

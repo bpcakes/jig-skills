@@ -1093,6 +1093,19 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout), {"status": "not_found"})
             self.assertEqual(result.stderr, "")
 
+    def test_restricted_action_cli_rejects_excessive_json_nesting(self):
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "serve",
+                   "--run-dir", str(self.run), "--caller", "worker"]
+        request = '{"op":"action","action_id":' + "[" * 10000 + "0" + "]" * 10000 + "}"
+        before = Engine.read(self.run)
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            result = subprocess.run(command, input=request, capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(json.loads(result.stdout), {
+            "ok": False, "error": {"code": "invalid_input", "message": "JSON input is nested too deeply"}})
+        self.assertEqual(Engine.read(self.run), before)
+
     def test_restricted_query_follows_task_handoff(self):
         self.config["hosts"]["remote"] = {
             "slots": 1, "worktree_root": str(self.root / "remote-trees"),
