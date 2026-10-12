@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { advance, runUntilBoundary, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { commandEnvironment } from "../skills/review-fix-loop/scripts/job-runtime.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { loadRun, resultFile } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { resultSchema } from "../skills/review-fix-loop/scripts/assignment-schema.mjs";
@@ -115,12 +116,116 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
   } });
   assert.deepEqual(result, vote(a));
   assert.throws(() => parseReport(a, JSON.stringify({ ...vote(a), fingerprint: "wrong" })), /Malformed/);
+  // Report formatting failures stay retryable even when the report text quotes a permanent-failure phrase.
+  for (const report of ["ENOENT: no such file quota exceeded", JSON.stringify({ ...vote(a), fingerprint: "wrong authentication failed" })]) {
+    let failure;
+    assert.throws(() => parseReport(a, report), (error) => { failure = error; return true; });
+    assert.equal(failure.providerError, "");
+    assert.equal(failureResult(failure).retryable, undefined, report);
+  }
 });
 
 test("bridge marks only recognized permanent errors non-retryable", () => {
-  for (const error of ["authentication failed", "quota exceeded", "usage limit reached"]) assert.equal(failureResult(new Error(error)).retryable, false);
+  for (const error of ["authentication failed", "quota exceeded", "usage limit reached",
+    "jig exited with 1: No eligible Claude home with fresh subscription headroom; inspect `jig claude homes --usage` or pass HOME explicitly",
+    "jig exited with 2: error: unexpected argument '--auto' found"]) assert.equal(failureResult(new Error(error)).retryable, false);
+  // An adapter that separates the provider's error channel from transcript text decides through providerError.
+  assert.equal(failureResult(Object.assign(new Error("codex exited with 1; no structured provider error was reported"), { providerError: "", transcript: "ENOENT quota exceeded" })).retryable, undefined);
+  assert.equal(failureResult(Object.assign(new Error("codex exited with 1: usage limit reached"), { providerError: "usage limit reached" })).retryable, false);
   assert.equal(failureResult(new Error("temporary capacity exceeded")).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("timed out"), { timedOut: true })).execution, "uncertain");
+});
+
+test("codex bridge forwards launcher and model controls but not the controller's runtime decision", async () => {
+  const a = { id: "001-review", role: "review", provider: "codex", repository: "/repo", fingerprint: "pinned",
+    providerOptions: { model: "gpt-5-codex", effort: "high", runtime: "cli", launcher: "auto" },
+    scope: { scope: "working-tree", includeWorkingTree: false },
+    contract: { acceptanceCriteria: [{ id: "value" }], requiredValidation: [{ id: "unit" }] } };
+  a.resultSchema = resultSchema(a);
+  const result = await reviewAssignment(a, { runner: async (options, dependencies) => {
+    assert.equal(options.model, "gpt-5-codex"); assert.equal(options.effort, "high"); assert.equal(options.launcher, "auto");
+    assert.equal(Object.hasOwn(options, "runtime"), false); assert.ok(dependencies.promptSuffix.includes('"resultSchema"'));
+    return dependencies.parseReport(JSON.stringify(vote(a)));
+  } });
+  assert.deepEqual(result, vote(a));
+  await assert.rejects(reviewAssignment({ ...a, provider: "gemini" }), /Claude, Codex, or Cursor/);
+});
+
+test("launcher-selected bundled bridges preflight the Jig executable instead of the provider CLI", async t => {
+  const f = fixture(t);
+  const previous = process.env.JIG_LAUNCHER_BIN;
+  t.after(() => { if (previous == null) delete process.env.JIG_LAUNCHER_BIN; else process.env.JIG_LAUNCHER_BIN = previous; });
+  const args = ["--reviewers", "claude,codex", "--claude-launcher", "auto", "--codex-launcher", "auto"];
+  process.env.JIG_LAUNCHER_BIN = "/missing/jig-launcher";
+  let run = await f.start({}, args);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.match(JSON.stringify(run.outcome), /claude, codex/);
+  assert.ok(run.capabilities.every(p => p.bundled && p.available === false));
+  // With a launcher present, Codex still needs its own executable because the adapter renders with it directly.
+  const previousPath = process.env.PATH;
+  t.after(() => { process.env.PATH = previousPath; });
+  const bin = path.join(f.root, ".git", "bin"); mkdirSync(bin, { recursive: true });
+  process.env.JIG_LAUNCHER_BIN = process.execPath;
+  // Keep git and node reachable; drop only directories that provide a codex executable.
+  process.env.PATH = [bin, ...(previousPath ?? "").split(path.delimiter).filter(dir => dir && !existsSync(path.join(dir, "codex")))].join(path.delimiter);
+  run = await f.start({}, args);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.available]), [["claude", true], ["codex", false]]);
+  writeFileSync(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n"); chmodSync(path.join(bin, "codex"), 0o755);
+  run = await f.start({}, args);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["claude", true, true], ["codex", true, true]]);
+  await assert.rejects(f.start({ reviewers: [{ id: "claude", runtime: "cli" }] }, ["--reviewers", "claude"]), /runtime applies only to the codex reviewer/);
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "subagent" }] }, ["--reviewers", "codex"]), /must be native or cli/);
+  // The configured entry and the loop options resolve to one effective runtime before dispatch.
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--reviewers", "codex", "--codex-launcher", "auto"]), /requires the cli runtime, but the codex reviewer entry selects runtime native/);
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]), /not valid for the cli Codex runtime/);
+  // A native entry overriding --codex-runtime cli must not admit a CLI-only effort.
+  await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--reviewers", "codex", "--codex-runtime", "cli", "--codex-effort", "minimal"]), /not valid for the native Codex runtime/);
+});
+
+test("review workers inherit every credential their provider CLI honors and nothing else", () => {
+  const inherited = { PATH: "/usr/bin", HOME: "/home/u", SECRET_TOKEN: "no", CODEX_API_KEY: "ck", CODEX_ACCESS_TOKEN: "ct", OPENAI_API_KEY: "ok", CODEX_HOME: "/home/u/.codex-work",
+    ANTHROPIC_API_KEY: "ak", ANTHROPIC_AUTH_TOKEN: "at", CLAUDE_CODE_OAUTH_TOKEN: "ot", CLAUDE_CONFIG_DIR: "/home/u/.claude-work", CURSOR_API_KEY: "cu", JIG_LAUNCHER_BIN: "/opt/jig" };
+  const codex = commandEnvironment({ role: "review", assignment: { provider: "codex" } }, inherited);
+  for (const name of ["CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY", "CODEX_HOME", "JIG_LAUNCHER_BIN", "PATH", "HOME"]) assert.equal(codex[name], inherited[name], name);
+  for (const name of ["SECRET_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CURSOR_API_KEY"]) assert.equal(codex[name], undefined, name);
+  const claude = commandEnvironment({ role: "review", assignment: { provider: "claude" } }, inherited);
+  for (const name of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "JIG_LAUNCHER_BIN"]) assert.equal(claude[name], inherited[name], name);
+  assert.equal(claude.CODEX_API_KEY, undefined);
+  assert.equal(commandEnvironment({ role: "validate", assignment: {} }, inherited).CODEX_API_KEY, undefined, "validation never receives provider credentials");
+});
+
+test("the CLI Codex runtime without a launcher preflights only the codex executable", async t => {
+  const f = fixture(t);
+  const previousPath = process.env.PATH;
+  t.after(() => { process.env.PATH = previousPath; });
+  const bin = path.join(f.root, ".git", "bin"); mkdirSync(bin, { recursive: true });
+  process.env.PATH = [bin, ...(previousPath ?? "").split(path.delimiter).filter(dir => dir && !existsSync(path.join(dir, "codex")))].join(path.delimiter);
+  const cli = ["--reviewers", "codex", "--codex-runtime", "cli"];
+  let run = await f.start({}, cli);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["codex", true, false]]);
+  writeFileSync(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n"); chmodSync(path.join(bin, "codex"), 0o755);
+  run = await f.start({}, cli);
+  run = await advance(run.directory); run = await advance(run.directory);
+  assert.equal(run.phase, "REVIEW", JSON.stringify(run.outcome));
+  assert.deepEqual(run.capabilities.map(p => [p.id, p.bundled, p.available]), [["codex", true, true]]);
+});
+
+test("the configured codex runtime is resolved once and travels with the capability", async t => {
+  const configured = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex"]);
+  assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
+  const native = await fixture(t).start({ reviewers: [{ id: "codex" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]);
+  assert.deepEqual(native.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "native", undefined]]);
+  // A configured CLI entry accepts a CLI-only effort even without --codex-runtime on the command line.
+  const minimal = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex", "--codex-effort", "minimal"]);
+  assert.deepEqual(minimal.config.reviewers.map(p => [p.id, p.runtime]), [["codex", "cli"]]);
+  assert.equal(minimal.options.review.codex.effort, "minimal");
 });
 
 test("evidence declarations reject broad paths and policy files", () => {

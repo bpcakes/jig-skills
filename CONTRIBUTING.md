@@ -56,7 +56,7 @@ These tests create temporary trackers and need no authentication. They do not us
 The ordinary review suite skips authenticated CLI checks. To verify real Claude and Cursor evidence access, explicitly opt in:
 
 ```sh
-JIG_REVIEW_LIVE=claude,cursor node --test plugins/jig-review/tests/review-evidence-live.test.mjs
+JIG_REVIEW_LIVE=claude,cursor,codex node --test plugins/jig-review/tests/review-evidence-live.test.mjs
 ```
 
 These checks require authenticated CLIs and consume provider usage. Select only the providers you intend to test. See the [runtime reference](plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) for what they verify.
