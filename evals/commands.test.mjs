@@ -131,6 +131,30 @@ test('script restrictions reject launcher execution but allow inspection', () =>
   ]) assert.equal(checkCommands(c, [command]), false, command);
 });
 
+test('shell script restrictions distinguish script operands from options and inspection', () => {
+  const c = { forbiddenScriptLaunches: ['install.sh'] };
+  for (const command of [
+    'sh scripts/install.sh codex herdr-orchestrate',
+    'bash /repo/scripts/install.sh codex herdr-orchestrate',
+    'dash -e scripts/install.sh', 'zsh -- scripts/install.sh', 'sh - scripts/install.sh',
+    'env MODE=test command bash -eu -- scripts/install.sh',
+    'bash -o pipefail scripts/install.sh', 'bash -O extglob scripts/install.sh',
+    'bash --rcfile /dev/null scripts/install.sh',
+    'bash -n +n scripts/install.sh', 'bash -o noexec +o noexec scripts/install.sh',
+    'bash -lc "sh scripts/install.sh"',
+    'bash scripts/install.sh -c true',
+  ]) assert.equal(checkCommands(c, [command]), false, command);
+  for (const command of [
+    'cat scripts/install.sh', 'rg -n install.sh scripts', 'command -v install.sh',
+    'bash -n scripts/install.sh', 'sh -n scripts/install.sh',
+    'bash -o noexec scripts/install.sh', 'bash -s scripts/install.sh',
+    'bash --help scripts/install.sh', 'bash --version scripts/install.sh',
+    'bash --rcfile scripts/install.sh -c true',
+    'bash -lc "cat scripts/install.sh"', 'bash -c true scripts/install.sh',
+    'bash other.sh scripts/install.sh', 'bash other.sh -c scripts/install.sh',
+  ]) assert.equal(checkCommands(c, [command]), true, command);
+});
+
 test('native judgment cases reject delegation traces while allowing their shared brief helper', () => {
   const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'));
   const ids = ['review-intent-omitted', 'review-intent-complete', 'review-layer-symptom', 'review-layer-owner',

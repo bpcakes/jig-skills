@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
 const installer = path.join(repo, "scripts/install.sh");
+const herdrSkill = '---\nname: herdr\ndescription: Control the installed Herdr release.\n---\n\n# Herdr\nRequire a genuine managed pane before control.\n';
 function legacyReviewOnly(destination) {
   mkdirSync(destination, { recursive: true });
   cpSync(path.join(repo, "plugins/jig-review/skills/comprehensive-review"), path.join(destination, "comprehensive-review"), { recursive: true });
@@ -17,11 +18,18 @@ function fixture(t) {
   const directory = mkdtempSync(path.join(os.tmpdir(), "jig-install-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const destination = path.join(directory, "skills with spaces");
+  const bin = path.join(directory, "bin");
+  mkdirSync(bin);
+  const herdr = path.join(bin, "herdr");
+  const herdrLog = path.join(directory, "herdr-calls");
+  writeFileSync(herdr, `#!/bin/sh\nprintf '%s\\n' "$*" >> "$HERDR_TEST_LOG"\n[ "$#" = 1 ] && [ "$1" = --skill ] || exit 98\ncat <<'SKILL'\n${herdrSkill}SKILL\n`, { mode: 0o755 });
+  const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, HERDR_TEST_LOG: herdrLog };
   return {
-    destination,
+    destination, bin, herdr, herdrLog, env,
     install: (...args) => spawnSync("sh", [installer, "codex", "--dest", destination, ...args], {
       cwd: directory,
       encoding: "utf8",
+      env,
     }),
   };
 }
@@ -162,10 +170,214 @@ test("all-skills installs include the Codex loop and filter Claude orchestration
   assert.equal(claude.status, 0, claude.stderr);
   assert.equal(existsSync(path.join(claudeDestination, "review-fix-loop")), false);
   assert.equal(existsSync(path.join(claudeDestination, "comprehensive-review")), false);
+  assert.equal(existsSync(path.join(claudeDestination, "herdr-orchestrate")), false);
   assert.equal(existsSync(path.join(claudeDestination, "rust-error-handling-review/SKILL.md")), true);
   const rejected = spawnSync("sh", [installer, "claude", "--dest", claudeDestination, "review-fix-loop"], { encoding: "utf8" });
   assert.equal(rejected.status, 1);
   assert.match(rejected.stderr, /Unsupported for Claude direct install: review-fix-loop/);
+});
+
+test("orchestration installation includes both usable review entrypoints and its complete helper directory", t => {
+  const { destination, install, herdrLog } = fixture(t);
+  const result = install("herdr-orchestrate");
+  assert.equal(result.status, 0, result.stderr);
+  assertInstalledParser(destination);
+  assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), herdrSkill);
+  assert.equal(readFileSync(herdrLog, "utf8"), "--skill\n");
+  for (const relative of ["SKILL.md", "scripts/supervise.py", "scripts/state.py", "references/recovery.md", "references/trackers.md"]) {
+    assert.equal(existsSync(path.join(destination, "herdr-orchestrate", relative)), true, relative);
+  }
+  const help = spawnSync("python3", ["-B", path.join(destination, "herdr-orchestrate/scripts/supervise.py"), "--help"], { encoding: "utf8" });
+  assert.equal(help.status, 0, help.stderr);
+});
+
+for (const dependency of ["review-fix-loop", "comprehensive-review"]) {
+  test(`orchestration refuses incompatible ${dependency} before copying, including --force`, t => {
+    const { destination, install } = fixture(t);
+    mkdirSync(destination, { recursive: true });
+    cpSync(path.join(repo, "plugins/jig-review/skills", dependency), path.join(destination, dependency), { recursive: true });
+    const marker = path.join(destination, dependency, "custom.txt");
+    writeFileSync(marker, "keep custom dependency\n");
+    for (const args of [["herdr-orchestrate"], ["--force", "herdr-orchestrate"]]) {
+      const result = install(...args);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, /No skills were changed/);
+      assert.deepEqual(readdirSync(destination), [dependency]);
+      assert.equal(readFileSync(marker, "utf8"), "keep custom dependency\n");
+    }
+    const replaced = install("--force", "herdr-orchestrate", "review-fix-loop", "comprehensive-review");
+    assert.equal(replaced.status, 0, replaced.stderr);
+    assert.equal(existsSync(marker), false);
+    assertInstalledParser(destination);
+  });
+
+  test(`all-skills install skips orchestration through incompatible ${dependency}`, t => {
+    const { destination, install } = fixture(t);
+    mkdirSync(path.join(destination, dependency), { recursive: true });
+    writeFileSync(path.join(destination, dependency, "SKILL.md"), "keep custom dependency\n");
+    const result = install();
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /Skipping herdr-orchestrate:.*review-fix-loop/);
+    assert.equal(existsSync(path.join(destination, "herdr-orchestrate")), false);
+    assert.equal(existsSync(path.join(destination, "rust-error-handling-review/SKILL.md")), true);
+    assert.equal(readFileSync(path.join(destination, dependency, "SKILL.md"), "utf8"), "keep custom dependency\n");
+  });
+}
+
+test("force replacing orchestration preserves matching automatic review copies", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("herdr-orchestrate").status, 0);
+  const identities = Object.fromEntries(["review-fix-loop", "comprehensive-review"].map(name => [name, statSync(path.join(destination, name))]));
+  writeFileSync(path.join(destination, "herdr-orchestrate/custom.txt"), "replace this\n");
+  const result = install("--force", "herdr-orchestrate");
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(path.join(destination, "herdr-orchestrate/custom.txt")), false);
+  for (const [name, identity] of Object.entries(identities)) {
+    assert.equal(statSync(path.join(destination, name)).ino, identity.ino);
+    assert.equal(statSync(path.join(destination, name)).ctimeMs, identity.ctimeMs);
+  }
+});
+
+test("orchestration is rejected for Claude before unrelated requested skills change", t => {
+  const { destination } = fixture(t);
+  const result = spawnSync("sh", [installer, "claude", "--dest", destination, "rust-error-handling-review", "herdr-orchestrate"], { encoding: "utf8" });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Unsupported for Claude direct install: herdr-orchestrate/);
+  assert.equal(existsSync(destination), false);
+});
+
+test("explicit destination provisions only the selected orchestration profile", t => {
+  const { destination, env } = fixture(t);
+  const siblingHome = path.join(path.dirname(destination), "other codex home");
+  const result = spawnSync("sh", [installer, "codex", "--dest", destination, "herdr-orchestrate"], {
+    encoding: "utf8", env: { ...env, CODEX_HOME: siblingHome },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(siblingHome), false);
+  assert.equal(existsSync(path.join(destination, "herdr-orchestrate/SKILL.md")), true);
+  assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), herdrSkill);
+  assertInstalledParser(destination);
+});
+
+test("orchestration default destination follows the selected CODEX_HOME", t => {
+  const { destination, env } = fixture(t);
+  const profileHome = path.join(path.dirname(destination), "selected codex home");
+  const result = spawnSync("sh", [installer, "codex", "herdr-orchestrate"], {
+    encoding: "utf8", env: { ...env, CODEX_HOME: profileHome },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(destination), false);
+  assert.equal(existsSync(path.join(profileHome, "skills/herdr-orchestrate/SKILL.md")), true);
+  assert.equal(readFileSync(path.join(profileHome, "skills/herdr/SKILL.md"), "utf8"), herdrSkill);
+  assertInstalledParser(path.join(profileHome, "skills"));
+});
+
+test("Herdr alone supports plugin setup without copying the orchestration or review skills", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("herdr").status, 0);
+  assert.deepEqual(readdirSync(destination), ["herdr"]);
+  assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), herdrSkill);
+});
+
+test("orchestration force preserves a matching Herdr symlink and supplementary files", t => {
+  const { destination, install } = fixture(t);
+  const shared = path.join(path.dirname(destination), "shared herdr skill");
+  mkdirSync(shared);
+  writeFileSync(path.join(shared, "SKILL.md"), herdrSkill);
+  writeFileSync(path.join(shared, "local.md"), "keep local guidance\n");
+  mkdirSync(destination);
+  symlinkSync(shared, path.join(destination, "herdr"));
+  const before = statSync(path.join(shared, "SKILL.md"));
+  const result = install("--force", "herdr-orchestrate");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Keeping matching dependency: herdr/);
+  assert.equal(statSync(path.join(destination, "herdr/SKILL.md")).ino, before.ino);
+  assert.equal(readFileSync(path.join(shared, "local.md"), "utf8"), "keep local guidance\n");
+});
+
+test("a differing Herdr dependency needs its own explicit replacement", t => {
+  const { destination, install } = fixture(t);
+  mkdirSync(path.join(destination, "herdr"), { recursive: true });
+  const existing = `${herdrSkill}\nLocally customized.\n`;
+  writeFileSync(path.join(destination, "herdr/SKILL.md"), existing);
+  for (const args of [["herdr-orchestrate"], ["--force", "herdr-orchestrate"], ["herdr-orchestrate", "herdr"]]) {
+    const result = install(...args);
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /Existing herdr differs from the installed Herdr binary/);
+    assert.match(result.stderr, /No skills were changed/);
+    assert.deepEqual(readdirSync(destination), ["herdr"]);
+    assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), existing);
+  }
+  const result = install("--force", "herdr-orchestrate", "herdr");
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), herdrSkill);
+  assertInstalledParser(destination);
+});
+
+test("all-skills install skips orchestration with a conflicting Herdr dependency", t => {
+  const { destination, install } = fixture(t);
+  mkdirSync(path.join(destination, "herdr"), { recursive: true });
+  writeFileSync(path.join(destination, "herdr/SKILL.md"), "keep my Herdr skill\n");
+  const result = install();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /Skipping herdr-orchestrate:.*herdr/);
+  assert.doesNotMatch(result.stdout, /Keeping matching dependency: herdr/);
+  assert.equal(existsSync(path.join(destination, "herdr-orchestrate")), false);
+  assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), "keep my Herdr skill\n");
+  assert.equal(existsSync(path.join(destination, "rust-error-handling-review/SKILL.md")), true);
+});
+
+for (const [failure, body] of [
+  ["failed", "printf 'partial export\\n'; exit 1"],
+  ["empty", "exit 0"],
+  ["help text", "printf 'Herdr --skill is unsupported\\n'"],
+  ["wrong skill", "printf '%s\\n' --- 'name: other' 'description: Wrong skill.' --- '# Other'"],
+]) test(`a ${failure} Herdr export fails before modifying any selected skills`, t => {
+  const { destination, install, herdr } = fixture(t);
+  mkdirSync(path.join(destination, "herdr"), { recursive: true });
+  writeFileSync(path.join(destination, "herdr/SKILL.md"), herdrSkill);
+  writeFileSync(herdr, `#!/bin/sh\n${body}\n`);
+  const result = install("--force", "rust-simplify", "herdr-orchestrate", "herdr");
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /Cannot install Herdr skill:.*No skills were changed/);
+  assert.deepEqual(readdirSync(destination), ["herdr"]);
+  assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), herdrSkill);
+});
+
+test("a missing Herdr binary fails explicit installation but only skips orchestration in bulk", t => {
+  const { destination, bin, herdr, env } = fixture(t);
+  rmSync(herdr);
+  // Limit PATH to ordinary installer tools so this remains a missing-binary
+  // check even on developer machines that already have Herdr installed.
+  for (const tool of ["sh", "dirname", "find", "basename", "sort", "mktemp", "mkdir", "cp", "rm", "diff", "awk"]) {
+    const executable = execFileSync("sh", ["-c", 'command -v "$1"', "sh", tool], { encoding: "utf8" }).trim();
+    symlinkSync(executable, path.join(bin, tool));
+  }
+  const run = (...args) => spawnSync(path.join(bin, "sh"), [installer, "codex", "--dest", destination, ...args], {
+    encoding: "utf8", env: { ...env, PATH: bin },
+  });
+  for (const selected of ["herdr-orchestrate", "herdr"]) {
+    const result = run("rust-simplify", selected);
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /No skills were changed/);
+    assert.equal(existsSync(destination), false);
+  }
+  const result = run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /Herdr skill unavailable/);
+  assert.match(result.stderr, /Skipping herdr-orchestrate/);
+  assert.equal(existsSync(path.join(destination, "herdr")), false);
+  assert.equal(existsSync(path.join(destination, "herdr-orchestrate")), false);
+  assert.equal(existsSync(path.join(destination, "rust-simplify/SKILL.md")), true);
+  assertInstalledParser(destination);
+});
+
+test("unrelated selections and Claude bulk installation never invoke Herdr", t => {
+  const { destination, install, herdrLog, env } = fixture(t);
+  assert.equal(install("review-fix-loop").status, 0);
+  const result = spawnSync("sh", [installer, "claude", "--dest", path.join(destination, "claude")], { encoding: "utf8", env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(herdrLog), false);
 });
 
 test("all-skills installs skip an incompatible loop and preserve existing copies", async (t) => {
@@ -214,6 +426,26 @@ test("all-skills --force replaces a differing dependency and installs a usable l
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stderr, /Skipping review-fix-loop/);
   assert.equal(existsSync(customized), false);
+  assertInstalledParser(destination);
+});
+
+test("all-skills --force preserves a differing Herdr dependency and refreshes unrelated skills", t => {
+  const { destination, install } = fixture(t);
+  assert.equal(install("herdr-orchestrate", "rust-simplify").status, 0);
+  const herdr = path.join(destination, "herdr/SKILL.md");
+  const orchestration = path.join(destination, "herdr-orchestrate/SKILL.md");
+  const rust = path.join(destination, "rust-simplify/SKILL.md");
+  writeFileSync(herdr, "Herdr skill from a different release\n");
+  writeFileSync(orchestration, "preserve existing orchestration\n");
+  writeFileSync(rust, "old unrelated skill\n");
+  const result = install("--force");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /Skipping herdr-orchestrate/);
+  assert.match(result.stderr, /Skipping herdr:/);
+  assert.equal(readFileSync(herdr, "utf8"), "Herdr skill from a different release\n");
+  assert.equal(readFileSync(orchestration, "utf8"), "preserve existing orchestration\n");
+  assert.equal(readFileSync(rust, "utf8"),
+    readFileSync(path.join(repo, "plugins/jig-rust/skills/rust-simplify/SKILL.md"), "utf8"));
   assertInstalledParser(destination);
 });
 

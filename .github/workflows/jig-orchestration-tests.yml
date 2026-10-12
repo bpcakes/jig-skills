@@ -1,0 +1,41 @@
+name: Jig Orchestration Tests
+
+on:
+  pull_request:
+    paths:
+      - "plugins/jig-orchestration/**"
+      - "scripts/install.sh"
+      - "plugins/jig-review/tests/install.test.mjs"
+      - "evals/**"
+      - ".github/workflows/jig-orchestration-tests.yml"
+  push:
+    paths:
+      - "plugins/jig-orchestration/**"
+      - "scripts/install.sh"
+      - "plugins/jig-review/tests/install.test.mjs"
+      - "evals/**"
+      - ".github/workflows/jig-orchestration-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  local-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Isolated orchestration state and runtime checks
+        run: python3 -B -m unittest discover -s plugins/jig-orchestration/tests -v
+      - name: Direct installation and evaluation fixture checks
+        run: node --test plugins/jig-review/tests/install.test.mjs evals/orchestration-fixtures.test.mjs

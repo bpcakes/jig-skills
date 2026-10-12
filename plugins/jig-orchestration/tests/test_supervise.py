@@ -1,0 +1,1445 @@
+"""Runtime checks with isolated state and fake Herdr; never access a live session."""
+from datetime import datetime, timedelta, timezone
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "skills/herdr-orchestrate/scripts"
+sys.path.insert(0, str(SCRIPTS))
+import supervise as runtime
+import state as state_module
+from state import Engine, StateError
+
+
+class RuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.run = self.root / "run"
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.now = datetime.now(timezone.utc)
+        self.identity = {"name": "coordinator", "agent": "codex", "pane_id": "w1:p1",
+                         "terminal_id": "terminal-1",
+                         "agent_session": {"agent": "codex", "kind": "session_id", "value": "native-1"}}
+        self.config = {
+            "repository": {"path": str(self.repo), "target": "main"},
+            "scope": {"task_ids": ["A", "B"]},
+            "tracker": {"kind": "br", "authority": "fixture-db"},
+            "hosts": {"local": {"slots": 2, "worktree_root": str(self.root / "trees"),
+                                 "endpoint": {"session": "test-session"}, "roles": ["coordinator"]}},
+            "actors": {"worker": {"role": "driver", "task_ids": ["A"], "host": "local", "helper_route": True}},
+            "authority": ["implement", "review", "validate", "merge", "close"],
+            "scheduler": {"enabled": True, "cadence_seconds": 60, "minimum_cadence_seconds": 60,
+                          "session": "test-session", "control_pane_id": "w1:p2", "agent": self.identity},
+        }
+        Engine.initialize(self.run, self.config)
+        self.env = patch.dict(os.environ, {"HERDR_ENV": "1", "HERDR_PANE_ID": "w1:p2"}, clear=False)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.addCleanup(self.temp.cleanup)
+
+    def response(self, status="idle", identity=None):
+        return {"agent": {**(identity or self.identity), "agent_status": status}}
+
+    def schedule(self, **fields):
+        return runtime.scheduler_patch(self.run, lambda _: fields)
+
+    def control(self, value):
+        state = Engine.read(self.run)
+        return Engine.apply(self.run, {"action_id": value, "op": "control", "control": value,
+                                     "expected_policy": state["policy_version"]})
+
+    def configure_scheduler(self, settings):
+        current = Engine.read(self.run)
+        return Engine.apply(self.run, {"op": "configure", "action_id": "config-" + str(current["version"]),
+                                      "expected_policy": current["policy_version"],
+                                      "fields": {"scheduler": settings},
+                                      "evidence": {"ref": "fixture:configuration", "observed_at": self.now.isoformat()}})
+
+    def test_missing_managed_context_never_calls_herdr(self):
+        with patch.dict(os.environ, {"HERDR_ENV": ""}), patch.object(runtime, "herdr_call") as call:
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "genuine"):
+                runtime.tick(self.run, self.now)
+        call.assert_not_called()
+        self.assertNotIn("pending_action_id", Engine.read(self.run)["scheduler"])
+
+    def test_wrong_control_pane_and_self_target_are_rejected(self):
+        with patch.dict(os.environ, {"HERDR_PANE_ID": "w9:p9"}), patch.object(runtime, "herdr_call") as call:
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "registered scheduler"):
+                runtime.tick(self.run, self.now)
+        call.assert_not_called()
+        self.config["scheduler"]["control_pane_id"] = "w1:p1"
+        with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "differ"):
+            runtime.scheduler_config(self.config)
+
+    def test_native_replacement_blocks_delivery(self):
+        changed = {**self.identity, "agent_session": {**self.identity["agent_session"], "value": "replacement"}}
+        with patch.object(runtime, "herdr_call", return_value=self.response(identity=changed)) as call:
+            result = runtime.tick(self.run, self.now)
+        self.assertEqual(result["status"], "endpoint_unavailable")
+        self.assertEqual(call.call_count, 1)
+        self.assertNotIn("pending_action_id", Engine.read(self.run)["scheduler"])
+
+    def test_blocked_and_unknown_coordinator_raise_health_failure(self):
+        for status in ("blocked", "unknown", None):
+            with self.subTest(status=status):
+                self.schedule(last_attempt_at=None, next_due_at=None)
+                with patch.object(runtime, "herdr_call", return_value=self.response(status)) as call:
+                    result = runtime.tick(self.run, self.now)
+                self.assertEqual(result["status"], "endpoint_unavailable")
+                self.assertEqual(call.call_count, 1)
+                health = runtime.health(self.run, self.now)
+                self.assertEqual(health["status"], "unhealthy")
+                self.assertIn("w1:p1", health["failure"]["reason"])
+
+    def test_changed_prompt_response_keeps_delivery_unconfirmed(self):
+        changed = {**self.identity, "agent_session": {**self.identity["agent_session"], "value": "other-native"}}
+        with patch.object(runtime, "herdr_call", side_effect=[self.response(), self.response(identity=changed)]) as call:
+            result = runtime.tick(self.run, self.now)
+        self.assertEqual(call.call_args.args[1][2], "w1:p1")
+        self.assertEqual(result["status"], "delivery_unconfirmed")
+        self.assertEqual(Engine.read(self.run)["scheduler"]["pending_action_id"], result["wake_id"])
+
+    def malformed_responses(self):
+        for value in (None, [], "unexpected", 1, True):
+            yield "response", value, value
+            yield "result", value, {"result": value}
+            yield "agent", value, {"result": {"agent": value}}
+            yield "agent_session", value, {
+                "result": self.response(identity={**self.identity, "agent_session": value})}
+
+    def test_malformed_lookup_records_failure_and_can_recover(self):
+        for field, value, response in self.malformed_responses():
+            with self.subTest(field=field, value=value):
+                self.schedule(last_attempt_at=None, next_due_at=None)
+                reply = subprocess.CompletedProcess([], 0, json.dumps(response), "")
+                with patch.object(runtime.subprocess, "run", return_value=reply) as call:
+                    result = runtime.tick(self.run, self.now)
+                self.assertEqual(result["status"], "endpoint_unavailable")
+                self.assertEqual(call.call_count, 1)
+                self.assertEqual(call.call_args.args[0][3:5], ["agent", "get"])
+                self.assertFalse(Engine.read(self.run)["scheduler"].get("pending_action_id"))
+                self.assertEqual(runtime.health(self.run, self.now)["status"], "unhealthy")
+
+                reply.stdout = json.dumps({"result": self.response("working")})
+                with patch.object(runtime.subprocess, "run", return_value=reply):
+                    recovered = runtime.tick(self.run, self.now + timedelta(seconds=60))
+                self.assertEqual(recovered["status"], "busy")
+                self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+
+    def test_malformed_prompt_acknowledgement_preserves_pending_wake(self):
+        for field, value, response in self.malformed_responses():
+            with self.subTest(field=field, value=value):
+                self.schedule(last_attempt_at=None, last_completed_at=None, next_due_at=None)
+                lookup = subprocess.CompletedProcess([], 0, json.dumps({"result": self.response()}), "")
+                acknowledgement = subprocess.CompletedProcess([], 0, json.dumps(response), "")
+                with patch.object(runtime.subprocess, "run", side_effect=[lookup, acknowledgement]) as call:
+                    result = runtime.tick(self.run, self.now)
+                    later = runtime.tick(self.run, self.now + timedelta(hours=2))
+                self.assertEqual(result["status"], "delivery_unconfirmed")
+                self.assertEqual(later["status"], "awaiting_reconciliation")
+                self.assertEqual(later["wake_id"], result["wake_id"])
+                self.assertEqual(later["delivery_status"], "unconfirmed")
+                self.assertEqual(call.call_count, 2)
+                self.assertEqual(call.call_args.args[0][3:6], ["agent", "prompt", "w1:p1"])
+                self.assertEqual(Engine.read(self.run)["scheduler"]["pending_action_id"], result["wake_id"])
+                runtime.complete(self.run, result["wake_id"], self.now + timedelta(hours=2))
+
+    def test_supervisor_continues_after_malformed_endpoint_output(self):
+        replies = [subprocess.CompletedProcess([], 0, "null", ""),
+                   subprocess.CompletedProcess([], 0, json.dumps({"result": self.response("working")}), "")]
+        outcomes = []
+
+        def next_iteration(_):
+            if len(outcomes) == 1:
+                self.schedule(last_attempt_at=None, next_due_at=None)
+            else:
+                self.schedule(enabled=False)
+
+        with patch.object(runtime.subprocess, "run", side_effect=replies) as call, \
+                patch.object(runtime.time, "sleep", side_effect=next_iteration), \
+                patch.object(runtime, "output", side_effect=outcomes.append):
+            result = runtime.supervise(self.run)
+        self.assertEqual([item["status"] for item in outcomes], ["endpoint_unavailable", "busy"])
+        self.assertEqual(result["status"], "scheduler_stopped")
+        self.assertEqual(call.call_count, 2)
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+
+    def test_supervisor_survives_undecodable_herdr_streams(self):
+        for operation in ("get", "prompt"):
+            for fd in (1, 2):
+                with self.subTest(operation=operation, stream=fd):
+                    run = self.root / f"decode-{operation}-{fd}"
+                    fake = self.root / f"herdr-{operation}-{fd}"
+                    calls = self.root / f"calls-{operation}-{fd}"
+                    reply = json.dumps({"result": self.response()})
+                    fake.write_text(
+                        "#!/usr/bin/env python3\nimport os,sys\n"
+                        f"with open({str(calls)!r}, 'a') as log: log.write(sys.argv[4] + '\\n')\n"
+                        f"if sys.argv[4] == {operation!r}: os.write({fd}, bytes([255]))\n"
+                        f"else: print({reply!r})\n")
+                    fake.chmod(0o700)
+                    Engine.initialize(run, {**self.config, "scheduler": {
+                        **self.config["scheduler"], "herdr_binary": str(fake)}})
+                    outcomes = []
+
+                    def next_iteration(_):
+                        if len(outcomes) == 1 and operation == "get":
+                            # Restore a healthy endpoint for the next lookup.
+                            reply = json.dumps({"result": self.response("working")})
+                            fake.write_text(
+                                "#!/usr/bin/env python3\n"
+                                f"with open({str(calls)!r}, 'a') as log: log.write('get\\n')\n"
+                                f"print({reply!r})\n")
+                            runtime.scheduler_patch(run, lambda _: {
+                                "last_attempt_at": None, "next_due_at": None})
+                        elif len(outcomes) == 2:
+                            runtime.scheduler_patch(run, lambda _: {"enabled": False})
+
+                    with patch.object(runtime.time, "sleep", side_effect=next_iteration), \
+                            patch.object(runtime, "output", side_effect=outcomes.append):
+                        result = runtime.supervise(run)
+                    self.assertEqual(result["status"], "scheduler_stopped")
+                    schedule = Engine.read(run)["scheduler"]
+                    if operation == "get":
+                        self.assertEqual([item["status"] for item in outcomes],
+                                         ["endpoint_unavailable", "busy"])
+                        self.assertFalse(schedule.get("pending_action_id"))
+                        self.assertIsNone(schedule["failure"])
+                        self.assertEqual(calls.read_text().splitlines(), ["get", "get"])
+                    else:
+                        self.assertEqual([item["status"] for item in outcomes],
+                                         ["delivery_unconfirmed", "awaiting_reconciliation"])
+                        self.assertEqual(schedule["delivery_status"], "unconfirmed")
+                        self.assertEqual(schedule["pending_action_id"], outcomes[0]["wake_id"])
+                        self.assertEqual(outcomes[1]["wake_id"], outcomes[0]["wake_id"])
+                        self.assertEqual(calls.read_text().splitlines(), ["get", "prompt"])
+
+    def test_concurrent_scheduler_rebind_cannot_dispatch_old_endpoint(self):
+        def change_binding(settings, args):
+            self.schedule(enabled=False)
+            current = Engine.read(self.run)
+            Engine.apply(self.run, {"op": "configure", "action_id": "new-endpoint",
+                         "expected_policy": current["policy_version"],
+                         "fields": {"scheduler": {**self.config["scheduler"], "session": "new-session"}},
+                         "evidence": {"ref": "fixture:authorized-rebind", "observed_at": self.now.isoformat()}})
+            self.schedule(enabled=True)
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=change_binding) as call:
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "configuration changed"):
+                runtime.tick(self.run, self.now)
+        self.assertEqual(call.call_count, 1)
+        self.assertNotIn("pending_action_id", Engine.read(self.run)["scheduler"])
+
+    def test_rebound_endpoint_does_not_inherit_old_lookup_health(self):
+        for outcome in ("working", "failure"):
+            with self.subTest(outcome=outcome):
+                self.schedule(last_attempt_at=None, next_due_at=None)
+                replacement_failure = {"id": "endpoint-replacement", "code": "replacement-failed",
+                                       "at": self.now.isoformat(), "reason": "Replacement failure"}
+
+                def replace_during_lookup(settings, args):
+                    self.schedule(enabled=False)
+                    self.configure_scheduler({**self.config["scheduler"], "session": "new-" + outcome})
+                    self.schedule(enabled=True, failure=replacement_failure, delivery_status="idle",
+                                  busy_since_at=None)
+                    if outcome == "failure":
+                        raise runtime.RuntimeErrorDetail("old-failed", "Old endpoint failure")
+                    return self.response("working")
+
+                with patch.object(runtime, "herdr_call", side_effect=replace_during_lookup) as call:
+                    with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "configuration changed"):
+                        runtime.tick(self.run, self.now)
+                self.assertEqual(call.call_count, 1)
+                current = Engine.read(self.run)["scheduler"]
+                self.assertEqual(current["failure"], replacement_failure)
+                self.assertEqual(current["delivery_status"], "idle")
+                self.assertIsNone(current["busy_since_at"])
+                self.assertNotIn("pending_action_id", current)
+
+    def test_uncertain_delivery_is_not_repeated(self):
+        with patch.object(runtime, "herdr_call", side_effect=[self.response(), subprocess.TimeoutExpired("fake", 25)]) as call:
+            first = runtime.tick(self.run, self.now)
+            second = runtime.tick(self.run, self.now + timedelta(hours=2))
+        self.assertEqual(first["status"], "delivery_unconfirmed")
+        self.assertEqual(second["status"], "awaiting_reconciliation")
+        self.assertEqual(call.call_count, 2)
+        runtime.complete(self.run, first["wake_id"], self.now + timedelta(hours=2))
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["pending_action_id"])
+
+    def test_busy_is_not_completion_and_minimum_cadence_holds(self):
+        runtime.request_wake(self.run, now=self.now)
+        with patch.object(runtime, "herdr_call", return_value=self.response("working")) as call:
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "busy")
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=1))["status"], "minimum_cadence")
+        self.assertEqual(call.call_count, 1)
+        self.assertNotIn("last_completed_at", Engine.read(self.run)["scheduler"])
+
+    def test_busy_timeout_survives_ticks_and_deduplicates_until_completion(self):
+        self.configure_scheduler({**self.config["scheduler"], "busy_timeout_seconds": 180,
+                                  "notifier_argv": ["/bin/true"], "notification_authorized": True})
+        accepted = subprocess.CompletedProcess(["/bin/true"], 0)
+        with patch.object(runtime, "herdr_call", return_value=self.response("working")) as herdr:
+            for elapsed in (0, 60, 120):
+                at = self.now + timedelta(seconds=elapsed)
+                self.assertEqual(runtime.tick(self.run, at)["status"], "busy")
+                self.assertEqual(runtime.health(self.run, at)["status"], "healthy")
+            with patch.object(runtime.subprocess, "run", return_value=accepted) as notify:
+                first = None
+                for elapsed in (180, 240, 300):
+                    at = self.now + timedelta(seconds=elapsed)
+                    runtime.tick(self.run, at)
+                    result = runtime.health(self.run, at)
+                    self.assertEqual(result["status"], "unhealthy")
+                    if first is None:
+                        first = result
+                        self.assertEqual(result["alert"], "transport_accepted")
+                    else:
+                        self.assertEqual(result["failure"]["id"], first["failure"]["id"])
+                        self.assertEqual(result["alert"], "already_attempted")
+                self.assertEqual(notify.call_count, 1)
+            self.assertTrue(all(call.args[1][1] == "get" for call in herdr.call_args_list))
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=301))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=301))["status"], "healthy")
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["busy_since_at"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=361))["status"], "delivered")
+
+    def test_cli_scheduler_duration_rejection_precedes_persistence(self):
+        script = str(SCRIPTS / "supervise.py")
+        fresh_run = self.root / "invalid-duration"
+        for field in ("cadence_seconds", "minimum_cadence_seconds", "busy_timeout_seconds"):
+            for value in (10 ** 400, 1e20, 1e12):
+                with self.subTest(field=field, value=value), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                    settings = {**self.config["scheduler"], "enabled": False, field: value}
+                    config = {**self.config, "scheduler": settings}
+                    before = Engine.read(self.run)
+                    request = {"op": "configure", "action_id": "bad-duration", "expected_policy": before["policy_version"],
+                               "fields": {"scheduler": settings},
+                               "evidence": {"ref": "fixture:duration", "observed_at": self.now.isoformat()}}
+                    for command, payload in ((["init", "--run-dir", str(fresh_run), "--config", "-"], config),
+                                             (["apply", "--run-dir", str(self.run)], request)):
+                        result = subprocess.run([sys.executable, "-B", script, *command], input=json.dumps(payload),
+                                                capture_output=True, text=True, check=False)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertEqual(result.stderr, "")
+                        response = json.loads(result.stdout)
+                        self.assertIs(response["ok"], False)
+                        self.assertIn(response["error"]["code"], {"invalid", "invalid_config"})
+                    self.assertFalse(fresh_run.exists())
+                    self.assertEqual(Engine.read(self.run), before)
+                    self.assertFalse((self.run / "transaction.json").exists())
+        # The rejected initialization did not leave an already-initialized run behind.
+        config = {**self.config, "scheduler": {**self.config["scheduler"], "enabled": False}}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            result = subprocess.run([sys.executable, "-B", script, "init", "--run-dir", str(fresh_run), "--config", "-"],
+                                    input=json.dumps(config), capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(result.stdout)["status"], "initialized")
+        self.assertEqual(result.stderr, "")
+
+    def test_scheduler_deadline_overflow_rejects_configuration_without_mutation(self):
+        self.schedule(last_attempt_at="9999-12-31T23:59:59+00:00")
+        before = Engine.read(self.run)
+        with self.assertRaisesRegex(StateError, "timestamp range"):
+            self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 120})
+        self.assertEqual(Engine.read(self.run), before)
+        with self.assertRaisesRegex(StateError, "timestamp range"):
+            runtime.complete(self.run, "manual", datetime.max.replace(tzinfo=timezone.utc))
+        self.assertEqual(Engine.read(self.run), before)
+
+    def test_cli_rejects_scheduler_failure_without_usable_incident_id(self):
+        before = Engine.read(self.run)
+        for failure in ({}, {"reason": "missing id"}, {"id": 5}, {"id": " "}, {"id": None}):
+            with self.subTest(failure=failure), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                request = {"op": "scheduler", "action_id": "bad-failure", "expected_policy": before["policy_version"],
+                           "expected_scheduler": before["scheduler"]["version"], "fields": {"failure": failure}}
+                result = subprocess.run([sys.executable, "-B", str(SCRIPTS / "supervise.py"), "apply",
+                                         "--run-dir", str(self.run)], input=json.dumps(request),
+                                        capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stderr, "")
+                self.assertEqual(json.loads(result.stdout), {"ok": False, "error": {
+                    "code": "invalid", "message": "scheduler failure.id must be a nonempty string"}})
+                self.assertEqual(Engine.read(self.run), before)
+        self.schedule(failure={"id": "endpoint-fixture", "reason": "fixture"})
+        self.assertEqual(runtime.complete(self.run, "manual", self.now)["status"], "completed")
+        self.assertEqual(runtime.health(self.run, self.now)["status"], "unhealthy")
+        self.schedule(failure=None)
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+
+    def test_busy_timeout_configuration_and_manual_completion_race(self):
+        settings = runtime.scheduler_config(self.config)
+        self.assertEqual(settings["busy_timeout_seconds"], 180)
+        self.assertEqual(runtime.scheduler_config({"scheduler": {**self.config["scheduler"],
+                         "minimum_cadence_seconds": 240}})["busy_timeout_seconds"], 720)
+        for value in (0, -1, True, float("inf"), "180"):
+            with self.assertRaises((StateError, ValueError)):
+                self.configure_scheduler({**self.config["scheduler"], "busy_timeout_seconds": value})
+            with self.assertRaises(runtime.RuntimeErrorDetail):
+                runtime.scheduler_config({"scheduler": {**self.config["scheduler"], "busy_timeout_seconds": value}})
+        def lookup(settings, args):
+            runtime.complete(self.run, "manual", self.now + timedelta(seconds=1))
+            return self.response("working")
+        with patch.object(runtime, "herdr_call", side_effect=lookup):
+            runtime.tick(self.run, self.now)
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["delivery_status"], "completed")
+        self.assertIsNone(schedule["busy_since_at"])
+
+    def test_busy_health_honors_custom_timeout_and_scheduler_stop(self):
+        self.configure_scheduler({**self.config["scheduler"], "busy_timeout_seconds": 600})
+        with patch.object(runtime, "herdr_call", return_value=self.response("working")):
+            runtime.tick(self.run, self.now)
+            runtime.tick(self.run, self.now + timedelta(seconds=599))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=599))["status"], "healthy")
+        self.control("pause")
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=600))["status"], "unhealthy")
+        self.schedule(enabled=False)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=600))["status"], "scheduler_stopped")
+
+    def test_manual_full_pass_consumes_catchup(self):
+        runtime.request_wake(self.run, now=self.now)
+        runtime.complete(self.run, "manual", self.now)
+        with patch.object(runtime, "herdr_call") as call:
+            result = runtime.tick(self.run, self.now + timedelta(seconds=5))
+        self.assertEqual(result["status"], "minimum_cadence")
+        call.assert_not_called()
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(schedule["wake_requested_at"])
+        self.assertEqual(runtime.parse_time(schedule["next_due_at"]), self.now + timedelta(seconds=60))
+
+    def test_manual_completion_during_lookup_suppresses_obsolete_wake(self):
+        runtime.request_wake(self.run, now=self.now)
+        completed_at = self.now + timedelta(seconds=2)
+        def lookup(settings, args):
+            runtime.complete(self.run, "manual", completed_at)
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=lookup) as call:
+            result = runtime.tick(self.run, self.now)
+        self.assertEqual(result["status"], "reconciliation_completed")
+        self.assertEqual(call.call_count, 1)
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(schedule["pending_action_id"])
+        self.assertIsNone(schedule["wake_requested_at"])
+        self.assertEqual(runtime.parse_time(schedule["next_due_at"]), completed_at + timedelta(seconds=60))
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            self.assertEqual(runtime.tick(self.run, completed_at + timedelta(seconds=30))["status"], "minimum_cadence")
+            call.assert_not_called()
+            self.assertEqual(runtime.tick(self.run, completed_at + timedelta(seconds=60))["status"], "delivered")
+
+    def test_event_wake_respects_completed_pass_minimum_but_can_advance_normal_cadence(self):
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 120})
+        runtime.complete(self.run, "manual", self.now)
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=1))
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=1))["status"], "minimum_cadence")
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=59))["status"], "minimum_cadence")
+            call.assert_not_called()
+            delivered = runtime.tick(self.run, self.now + timedelta(seconds=60))
+            self.assertEqual(delivered["status"], "delivered")
+            self.assertEqual(call.call_count, 2)
+        # Automatic completion also anchors the minimum interval for later events.
+        runtime.complete(self.run, delivered["wake_id"], self.now + timedelta(seconds=90))
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=91))
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=120))["status"], "minimum_cadence")
+            call.assert_not_called()
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=150))["status"], "delivered")
+
+    def test_idle_heartbeats_are_bounded_and_health_tracks_liveness(self):
+        runtime.complete(self.run, "manual", self.now)
+        before = Engine.read(self.run)
+        records = set((self.run / "actions").iterdir())
+        with patch.object(runtime, "herdr_call") as call:
+            for seconds in range(5, 60, 5):
+                self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=seconds))["status"], "minimum_cadence")
+        call.assert_not_called()
+        after = Engine.read(self.run)
+        self.assertEqual(after["version"], before["version"])
+        self.assertEqual(after["scheduler"]["version"], before["scheduler"]["version"])
+        self.assertEqual(set((self.run / "actions").iterdir()), records)
+        self.assertEqual(runtime.parse_time(after["scheduler"]["heartbeat_at"]), self.now + timedelta(seconds=55))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=170))["status"], "healthy")
+        overdue = runtime.health(self.run, self.now + timedelta(seconds=176))
+        self.assertEqual(overdue["status"], "unhealthy")
+        self.assertIn("heartbeat", overdue["failure"]["reason"])
+
+    def test_automatic_completion_preserves_events_received_during_pass(self):
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 1200})
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            first = runtime.tick(self.run, self.now)
+            runtime.request_wake(self.run, "new result", self.now + timedelta(seconds=10))
+            runtime.request_wake(self.run, "another result", self.now + timedelta(seconds=15))
+            runtime.complete(self.run, first["wake_id"], self.now + timedelta(seconds=20))
+            runtime.complete(self.run, first["wake_id"], self.now + timedelta(seconds=21))
+            schedule = Engine.read(self.run)["scheduler"]
+            self.assertEqual(schedule["wake_reason"], "new result")
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=79))["status"], "minimum_cadence")
+            second = runtime.tick(self.run, self.now + timedelta(seconds=80))
+            self.assertEqual(second["status"], "delivered")
+            self.assertNotEqual(second["wake_id"], first["wake_id"])
+            self.assertIsNone(Engine.read(self.run)["scheduler"]["wake_requested_at"])
+            runtime.complete(self.run, second["wake_id"], self.now + timedelta(seconds=90))
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=150))["status"], "not_due")
+
+    def test_manual_full_pass_consumes_event_received_during_pending_pass(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            first = runtime.tick(self.run, self.now)
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=10))
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=20))
+        before = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(before["wake_requested_at"])
+        runtime.complete(self.run, first["wake_id"], self.now + timedelta(seconds=30))
+        self.assertEqual(Engine.read(self.run)["scheduler"], before)
+
+    def test_fresh_heartbeat_cannot_hide_failed_due_transactions(self):
+        runtime.complete(self.run, "manual", self.now)
+        Engine.heartbeat(self.run, runtime.timestamp(self.now))
+        runtime.health(self.run, self.now)
+        real_write = state_module.write_atomic
+        def fail_transaction(path, value):
+            if path.name == "transaction.json":
+                raise OSError(28, "No space for transaction")
+            return real_write(path, value)
+        incident = None
+        with patch.object(state_module, "write_atomic", side_effect=fail_transaction):
+            for seconds in (65, 195, 600):
+                at = self.now + timedelta(seconds=seconds)
+                with self.assertRaises(OSError):
+                    runtime.tick(self.run, at)
+                result = runtime.health(self.run, at)
+                if seconds == 65:
+                    self.assertEqual(result["status"], "healthy")
+                else:
+                    self.assertEqual(result["status"], "unhealthy")
+                    self.assertIn("reconciliation", result["failure"]["reason"])
+                    if incident:
+                        self.assertEqual(result["failure"]["id"], incident)
+                    incident = result["failure"]["id"]
+        self.assertEqual(Engine.read(self.run)["scheduler"]["last_completed_at"], runtime.timestamp(self.now))
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            wake = runtime.tick(self.run, self.now + timedelta(seconds=601))
+        runtime.complete(self.run, wake["wake_id"], self.now + timedelta(seconds=602))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=602))["status"], "healthy")
+
+    def test_progress_alert_claim_storage_failure_never_sends(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        runtime.complete(self.run, "manual", self.now)
+        Engine.heartbeat(self.run, runtime.timestamp(self.now))
+        runtime.health(self.run, self.now)
+        real_write = state_module.write_atomic
+        def fail_transaction(path, value):
+            if path.name == "transaction.json":
+                raise OSError(28, "No space for alert claim")
+            return real_write(path, value)
+        at = self.now + timedelta(seconds=195)
+        Engine.heartbeat(self.run, runtime.timestamp(at))
+        with patch.object(state_module, "write_atomic", side_effect=fail_transaction), \
+                patch.object(runtime.subprocess, "run") as notify:
+            result = runtime.health(self.run, at)
+        self.assertEqual(result["status"], "unhealthy")
+        self.assertEqual(result["alert"], "storage_failed")
+        notify.assert_not_called()
+        with patch.object(runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as notify:
+            self.assertEqual(runtime.health(self.run, at)["alert"], "transport_accepted")
+            self.assertEqual(runtime.health(self.run, at + timedelta(seconds=1))["alert"], "already_attempted")
+        notify.assert_called_once()
+
+    def test_recovered_alert_claim_after_state_write_failure_is_retried(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        real_write = state_module.write_atomic
+        failures = []
+        def fail_state_once(path, value):
+            if path.name == "state.json" and not failures:
+                failures.append(path)
+                raise OSError(28, "No space for alert state")
+            return real_write(path, value)
+        with patch.object(state_module, "write_atomic", side_effect=fail_state_once), \
+                patch.object(runtime.subprocess, "run") as notify:
+            result = runtime.health(self.run, self.now)
+        self.assertEqual(result["alert"], "storage_failed")
+        self.assertTrue(result["claim_reconciled"])
+        notify.assert_not_called()
+        alert = Engine.read(self.run)["scheduler"]["health_alerts"][result["failure"]["id"]]
+        self.assertEqual((alert["status"], alert["attempts"]), ("not_started", 1))
+        with patch.object(runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as notify:
+            self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=1))["alert"], "retry_pending")
+            sent = runtime.health(self.run, self.now + timedelta(seconds=60))
+            self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=61))["alert"], "already_attempted")
+        self.assertEqual((sent["alert"], sent["receipt"]["attempts"]), ("transport_accepted", 2))
+        notify.assert_called_once()
+
+    def test_unreconciled_alert_claim_reports_storage_failure_without_sending(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        real_write = state_module.write_atomic
+        def fail_state(path, value):
+            if path.name == "state.json":
+                raise OSError(28, "No space for alert state")
+            return real_write(path, value)
+        with patch.object(state_module, "write_atomic", side_effect=fail_state), \
+                patch.object(runtime.subprocess, "run") as notify:
+            result = runtime.health(self.run, self.now)
+        self.assertEqual(result["alert"], "storage_failed")
+        self.assertFalse(result["claim_reconciled"])
+        notify.assert_not_called()
+
+    def test_cadence_reconfiguration_updates_due_time_and_health_together(self):
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 3600})
+        runtime.complete(self.run, "manual", self.now)
+        self.configure_scheduler(self.config["scheduler"])
+        self.assertEqual(runtime.parse_time(Engine.read(self.run)["scheduler"]["next_due_at"]),
+                         self.now + timedelta(seconds=60))
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            wake = runtime.tick(self.run, self.now + timedelta(seconds=60))
+        self.assertEqual(wake["status"], "delivered")
+        runtime.complete(self.run, wake["wake_id"], self.now + timedelta(seconds=61))
+        Engine.heartbeat(self.run, runtime.timestamp(self.now + timedelta(seconds=181)))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=181))["status"], "healthy")
+        self.configure_scheduler({**self.config["scheduler"], "cadence_seconds": 3600})
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=182))["status"], "not_due")
+        call.assert_not_called()
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=182))["status"], "healthy")
+        self.assertEqual(runtime.parse_time(Engine.read(self.run)["scheduler"]["next_due_at"]),
+                         self.now + timedelta(seconds=3661))
+
+    def test_cadence_change_preserves_pending_events_and_latest_attempt_minimum(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            wake = runtime.tick(self.run, self.now)
+        runtime.request_wake(self.run, now=self.now + timedelta(seconds=10))
+        self.configure_scheduler({**self.config["scheduler"], "minimum_cadence_seconds": 240})
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["pending_action_id"], wake["wake_id"])
+        self.assertIsNotNone(schedule["wake_requested_at"])
+        self.assertEqual(runtime.parse_time(schedule["next_due_at"]), self.now + timedelta(seconds=240))
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=241))["status"], "awaiting_reconciliation")
+        call.assert_not_called()
+        runtime.complete(self.run, wake["wake_id"], self.now + timedelta(seconds=250))
+        self.configure_scheduler(self.config["scheduler"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=309))["status"], "minimum_cadence")
+            self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=310))["status"], "delivered")
+
+    def test_progress_health_respects_minimum_and_initial_run_without_attempt(self):
+        self.configure_scheduler({**self.config["scheduler"], "minimum_cadence_seconds": 240})
+        runtime.complete(self.run, "manual", self.now)
+        Engine.heartbeat(self.run, runtime.timestamp(self.now + timedelta(seconds=700)))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=700))["status"], "healthy")
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=721))["status"], "unhealthy")
+        self.schedule(enabled=False)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=721))["status"], "scheduler_stopped")
+        initial = self.root / "initial"
+        state = Engine.initialize(initial, self.config)
+        late = runtime.parse_time(state["created_at"]) + timedelta(seconds=181)
+        Engine.heartbeat(initial, runtime.timestamp(late))
+        self.assertEqual(runtime.health(initial, late)["status"], "unhealthy")
+
+    def test_pending_wake_heartbeats_stay_bounded_and_do_not_hide_overdue_delivery(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            first = runtime.tick(self.run, self.now)
+            records = set((self.run / "actions").iterdir())
+            for seconds in (5, 60, 121):
+                self.assertEqual(runtime.tick(self.run, self.now + timedelta(seconds=seconds))["status"],
+                                 "awaiting_reconciliation")
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(set((self.run / "actions").iterdir()), records)
+        overdue = runtime.health(self.run, self.now + timedelta(seconds=121))
+        self.assertEqual(overdue["failure"]["id"], "pending-" + first["wake_id"])
+
+    def test_configure_enablement_controls_delivery_and_scheduler_stop_can_resume(self):
+        self.configure_scheduler({**self.config["scheduler"], "enabled": False})
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "scheduler_stopped")
+            self.assertEqual(runtime.supervise(self.run)["status"], "scheduler_stopped")
+            self.assertEqual(runtime.health(self.run, self.now)["status"], "scheduler_stopped")
+        call.assert_not_called()
+        self.configure_scheduler(self.config["scheduler"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "delivered")
+        self.schedule(enabled=False)
+        self.assertFalse(Engine.read(self.run)["config"]["scheduler"]["enabled"])
+        self.schedule(enabled=True)
+        self.assertTrue(Engine.read(self.run)["config"]["scheduler"]["enabled"])
+        # Resuming never replays an already delivered wake.
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "awaiting_reconciliation")
+        call.assert_not_called()
+
+    def test_enablement_requires_identity_through_both_state_entrypoints(self):
+        self.schedule(enabled=False)
+        self.configure_scheduler({"enabled": False})
+        before = Engine.read(self.run)
+        with self.assertRaisesRegex(StateError, "scheduler.session"):
+            self.schedule(enabled=True)
+        with self.assertRaisesRegex(StateError, "scheduler.session"):
+            self.configure_scheduler({"enabled": True})
+        self.assertEqual(Engine.read(self.run), before)
+        self.configure_scheduler(self.config["scheduler"])
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "delivered")
+
+    def test_fast_completion_not_overwritten_by_delivery_ack(self):
+        def fake_call(settings, args):
+            if args[1] == "get":
+                return self.response()
+            wake = Engine.read(self.run)["scheduler"]["pending_action_id"]
+            runtime.complete(self.run, wake, self.now)
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=fake_call):
+            runtime.tick(self.run, self.now)
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(schedule["pending_action_id"])
+        self.assertEqual(schedule["delivery_status"], "completed")
+        self.assertEqual(schedule["last_delivered_action_id"], schedule["last_completed_action_id"])
+        self.assertEqual(runtime.parse_time(schedule["last_delivered_at"]), self.now)
+        self.assertEqual(runtime.parse_time(schedule["last_completed_at"]), self.now)
+
+    def test_delivery_ack_after_manual_completion_retains_both_observations(self):
+        def fake_call(settings, args):
+            if args[1] == "prompt":
+                runtime.complete(self.run, "manual", self.now + timedelta(seconds=1))
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=fake_call):
+            wake = runtime.tick(self.run, self.now)["wake_id"]
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["last_delivered_action_id"], wake)
+        self.assertEqual(runtime.parse_time(schedule["last_delivered_at"]), self.now)
+        self.assertTrue(schedule["last_completed_action_id"].startswith("manual-"))
+        self.assertEqual(schedule["delivery_status"], "completed")
+        self.assertIsNone(schedule["pending_action_id"])
+        before = Engine.read(self.run)
+        runtime.complete(self.run, wake, self.now + timedelta(seconds=2))
+        self.assertEqual(Engine.read(self.run), before)
+
+    def test_consumed_wake_completion_preserves_later_manual_pass_and_new_pending_wake(self):
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            first = runtime.tick(self.run, self.now)["wake_id"]
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=1))
+        runtime.complete(self.run, "manual", self.now + timedelta(seconds=2))
+        before = Engine.read(self.run)
+        runtime.complete(self.run, first, self.now + timedelta(seconds=3))
+        self.assertEqual(Engine.read(self.run), before)
+        with patch.object(runtime, "herdr_call", return_value=self.response()):
+            second = runtime.tick(self.run, self.now + timedelta(seconds=62))["wake_id"]
+        before = Engine.read(self.run)
+        runtime.complete(self.run, first, self.now + timedelta(seconds=63))
+        self.assertEqual(Engine.read(self.run), before)
+        with self.assertRaises(runtime.RuntimeErrorDetail) as error:
+            runtime.complete(self.run, "unknown", self.now + timedelta(seconds=63))
+        self.assertEqual(error.exception.code, "wrong_wake")
+        self.assertEqual(Engine.read(self.run), before)
+        runtime.complete(self.run, second, self.now + timedelta(seconds=64))
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(schedule["pending_action_id"])
+        self.assertEqual(schedule["last_completed_wake_id"], second)
+        self.assertEqual(schedule["last_completed_action_id"], second)
+
+    def test_late_delivery_ack_cannot_replace_a_newer_wake_or_timestamp(self):
+        later = self.now + timedelta(seconds=60)
+        def fake_call(settings, args):
+            if args[1] == "prompt":
+                runtime.complete(self.run, "manual", self.now)
+                self.schedule(last_dispatched_action_id="newer", pending_action_id="newer",
+                              delivery_status="delivered", last_delivered_action_id="newer",
+                              last_delivered_at=runtime.timestamp(later))
+            return self.response()
+        with patch.object(runtime, "herdr_call", side_effect=fake_call):
+            runtime.tick(self.run, self.now)
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["last_delivered_action_id"], "newer")
+        self.assertEqual(schedule["pending_action_id"], "newer")
+        self.assertEqual(runtime.parse_time(schedule["last_delivered_at"]), later)
+
+    def test_pause_keeps_supervision_but_scheduler_stop_prevents_delivery(self):
+        self.control("pause")
+        with patch.object(runtime, "herdr_call", return_value=self.response()) as call:
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "delivered")
+        self.assertEqual(call.call_count, 2)
+        self.schedule(enabled=False)
+        with patch.object(runtime, "herdr_call") as call:
+            self.assertEqual(runtime.tick(self.run, self.now)["status"], "scheduler_stopped")
+        call.assert_not_called()
+
+    def test_health_without_notifier_reports_local_evidence(self):
+        self.control("pause")
+        with patch.object(runtime, "herdr_call") as call:
+            result = runtime.health(self.run, self.now)
+        self.assertEqual(result["alert"], "local_evidence_only")
+        call.assert_not_called()
+
+    def test_notification_authorization_is_required(self):
+        self.config["scheduler"]["notifier_argv"] = ["/bin/true"]
+        with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "authorization"):
+            runtime.scheduler_config(self.config)
+
+    def test_health_alert_is_durable_and_deduplicated(self):
+        other = self.root / "alerts"
+        self.config["scheduler"].update(notifier_argv=["/bin/true"], notification_authorized=True)
+        Engine.initialize(other, self.config)
+        fake = subprocess.CompletedProcess(["/bin/true"], 0)
+        with patch.object(runtime.subprocess, "run", return_value=fake) as call:
+            first = runtime.health(other, self.now)
+            second = runtime.health(other, self.now)
+        self.assertEqual(first["alert"], "transport_accepted")
+        self.assertEqual(second["alert"], "already_attempted")
+        self.assertEqual(call.call_count, 1)
+        self.assertEqual(Engine.read(other)["scheduler"]["last_alert"]["status"], "transport_accepted")
+
+    def test_endpoint_alert_deduplicates_one_incident_and_recovers_between_health_polls(self):
+        notifier = self.root / "notifier"
+        notices = self.root / "notices"
+        notifier.write_text('#!/bin/sh\ncat >> "' + str(notices) + '"\n')
+        notifier.chmod(0o755)
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        def tick(status, seconds):
+            with patch.object(runtime, "herdr_call", return_value=self.response(status)):
+                return runtime.tick(self.run, self.now + timedelta(seconds=seconds))
+        first = tick("blocked", 0)["failure"]
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_accepted")
+        repeated = tick("blocked", 60)["failure"]
+        self.assertEqual(repeated["id"], first["id"])
+        self.assertEqual(repeated["at"], first["at"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")
+        self.assertEqual(tick("working", 120)["status"], "busy")
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["failure"])
+        second = tick("blocked", 180)["failure"]
+        self.assertNotEqual(second["id"], first["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=180))["alert"], "transport_accepted")
+        wake = tick("idle", 240)["wake_id"]
+        runtime.complete(self.run, wake, self.now + timedelta(seconds=241))
+        third = tick("blocked", 301)["failure"]
+        self.assertNotIn(third["id"], (first["id"], second["id"]))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=301))["alert"], "transport_accepted")
+        received = [json.loads(line)["failure"]["id"] for line in notices.read_text().splitlines()]
+        self.assertEqual(received, [first["id"], second["id"], third["id"]])
+
+    def test_endpoint_alert_history_survives_an_interleaved_heartbeat_incident(self):
+        notices = self.root / "notices"
+        notifier = [sys.executable, "-c", 'import sys; open(sys.argv[1], "a").write(sys.stdin.read())', str(notices)]
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": notifier,
+                                  "notification_authorized": True})
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            first = runtime.tick(self.run, self.now)["failure"]
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_accepted")
+            overdue = runtime.health(self.run, self.now + timedelta(seconds=121))
+            self.assertEqual(overdue["alert"], "transport_accepted")
+            self.assertTrue(overdue["failure"]["id"].startswith("heartbeat-"))
+            repeated = runtime.tick(self.run, self.now + timedelta(seconds=122))["failure"]
+        self.assertEqual(first["id"], repeated["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=122))["alert"], "already_attempted")
+        self.assertEqual([json.loads(line)["failure"]["id"] for line in notices.read_text().splitlines()],
+                         [first["id"], overdue["failure"]["id"]])
+        with patch.object(runtime, "herdr_call", return_value=self.response("working")):
+            runtime.tick(self.run, self.now + timedelta(seconds=182))
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=182))["status"], "healthy")
+        self.assertEqual(Engine.read(self.run)["scheduler"]["health_alerts"], {})
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            recurrence = runtime.tick(self.run, self.now + timedelta(seconds=242))["failure"]
+        self.assertNotEqual(recurrence["id"], first["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=242))["alert"], "transport_accepted")
+
+    def test_health_claim_rechecks_stop_revocation_rebinding_and_recovery(self):
+        for change in ("stop", "revoke", "rebind", "recover", "recover-versioned"):
+            with self.subTest(change=change):
+                self.run = self.root / change
+                Engine.initialize(self.run, self.config)
+                old_notice, new_notice = self.root / (change + "-old"), self.root / (change + "-new")
+                program = 'import sys; open(sys.argv[1], "a").write(sys.stdin.read())'
+                settings = {**self.config["scheduler"], "notifier_argv": [sys.executable, "-c", program, str(old_notice)],
+                            "notification_authorized": True}
+                self.configure_scheduler(settings)
+                real_apply = Engine.apply
+                changed = False
+                def intervene(run_dir, request, caller="coordinator"):
+                    nonlocal changed
+                    if not changed and request.get("fields", {}).get("last_alert", {}).get("status") == "dispatching":
+                        changed = True
+                        if change == "stop":
+                            self.schedule(enabled=False)
+                        elif change == "revoke":
+                            self.configure_scheduler({**settings, "notifier_argv": None, "notification_authorized": False})
+                        elif change == "rebind":
+                            self.configure_scheduler({**settings, "notifier_argv": [sys.executable, "-c", program, str(new_notice)]})
+                        elif change == "recover":
+                            # The real tick writes separate liveness evidence
+                            # without advancing the scheduler's CAS version.
+                            version = Engine.read(self.run)["scheduler"]["version"]
+                            Engine.heartbeat(self.run, runtime.timestamp(self.now))
+                            self.assertEqual(Engine.read(self.run)["scheduler"]["version"], version)
+                        else:
+                            self.schedule(heartbeat_at=runtime.timestamp(self.now))
+                    return real_apply(run_dir, request, caller)
+                with patch.object(Engine, "apply", side_effect=intervene):
+                    result = runtime.health(self.run, self.now)
+                self.assertTrue(changed)
+                self.assertFalse(old_notice.exists())
+                if change == "rebind":
+                    self.assertEqual(result["alert"], "transport_accepted")
+                    self.assertEqual(json.loads(new_notice.read_text())["failure"]["id"], result["failure"]["id"])
+                    self.assertEqual(runtime.health(self.run, self.now)["alert"], "already_attempted")
+                elif change == "stop":
+                    self.assertEqual(result["alert"], "suppressed")
+                elif change == "revoke":
+                    self.assertEqual(result["alert"], "local_evidence_only")
+                else:
+                    self.assertEqual(result["status"], "healthy")
+                    self.assertNotIn("last_alert", Engine.read(self.run)["scheduler"])
+
+    def test_health_reconciles_notification_already_claimed_before_stop(self):
+        notices = self.root / "notices"
+        settings = {**self.config["scheduler"], "notification_authorized": True,
+                    "notifier_argv": [sys.executable, "-c", 'import sys; open(sys.argv[1], "a").write(sys.stdin.read())', str(notices)]}
+        self.configure_scheduler(settings)
+        real_apply = Engine.apply
+        stopped = False
+        def stop_after_claim(run_dir, request, caller="coordinator"):
+            nonlocal stopped
+            result = real_apply(run_dir, request, caller)
+            if not stopped and request.get("fields", {}).get("last_alert", {}).get("status") == "dispatching":
+                stopped = True
+                self.schedule(enabled=False)
+            return result
+        with patch.object(Engine, "apply", side_effect=stop_after_claim):
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_accepted")
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "suppressed")
+        self.schedule(enabled=True)
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "already_attempted")
+        self.assertEqual(len(notices.read_text().splitlines()), 1)
+
+    def test_health_imports_legacy_notification_evidence_without_replaying(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
+                                  "notification_authorized": True})
+        self.schedule(alerted_failure_id="heartbeat-None", last_alert={"failure_id": "heartbeat-None",
+                      "status": "dispatching", "attempts": 1, "at": runtime.timestamp(self.now)})
+        with patch.object(runtime.subprocess, "run") as notify:
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "already_attempted")
+        notify.assert_not_called()
+        self.assertEqual(Engine.read(self.run)["scheduler"]["health_alerts"]["heartbeat-None"]["status"], "dispatching")
+
+    def test_interleaved_incident_preserves_not_started_retry_count(self):
+        notifier = self.root / "missing-notifier"
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            runtime.tick(self.run, self.now)
+            first = runtime.health(self.run, self.now)
+            self.assertEqual(first["receipt"]["attempts"], 1)
+            runtime.health(self.run, self.now + timedelta(seconds=121))
+            runtime.tick(self.run, self.now + timedelta(seconds=122))
+        retried = runtime.health(self.run, self.now + timedelta(seconds=122))
+        self.assertEqual(retried["failure"]["id"], first["failure"]["id"])
+        self.assertEqual(retried["receipt"]["attempts"], 2)
+        self.assertEqual(retried["alert"], "not_started")
+
+    def test_manual_completion_preserves_endpoint_incident_and_notification_history(self):
+        for legacy in (False, True):
+            with self.subTest(legacy=legacy):
+                run = self.root / ("legacy-outage" if legacy else "outage")
+                config = {**self.config, "scheduler": {**self.config["scheduler"],
+                          "notifier_argv": ["/bin/true"], "notification_authorized": True}}
+                Engine.initialize(run, config)
+                with patch.object(runtime, "herdr_call", return_value=self.response("blocked")), \
+                        patch.object(runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as notify:
+                    failure = runtime.tick(run, self.now)["failure"]
+                    if legacy:
+                        failure = {"id": "endpoint-coordinator_blocked", "at": failure["at"], "reason": failure["reason"]}
+                        runtime.scheduler_patch(run, lambda _: {"failure": failure})
+                    self.assertEqual(runtime.health(run, self.now)["alert"], "transport_accepted")
+                    alert = Engine.read(run)["scheduler"]["last_alert"]
+                    runtime.complete(run, "manual", self.now + timedelta(seconds=1))
+                    self.assertEqual(Engine.read(run)["scheduler"]["failure"], failure)
+                    self.assertEqual(runtime.health(run, self.now + timedelta(seconds=1))["alert"], "already_attempted")
+                    repeated = runtime.tick(run, self.now + timedelta(seconds=61))["failure"]
+                    self.assertEqual(repeated["id"], failure["id"])
+                    runtime.complete(run, "manual", self.now + timedelta(seconds=62))
+                    repeated = runtime.tick(run, self.now + timedelta(seconds=122))["failure"]
+                    self.assertEqual(repeated["id"], failure["id"])
+                    self.assertEqual(runtime.health(run, self.now + timedelta(seconds=122))["alert"], "already_attempted")
+                    self.assertEqual(Engine.read(run)["scheduler"]["last_alert"], alert)
+                    self.assertEqual(notify.call_count, 1)
+
+    def test_verified_endpoint_recovery_survives_manual_completion_during_lookup(self):
+        for status in ("working", "idle", "done"):
+            with self.subTest(status=status):
+                run = self.root / ("recovered-" + status)
+                Engine.initialize(run, self.config)
+                runtime.scheduler_patch(run, lambda _: {"failure": {
+                    "id": "endpoint-outage", "code": "coordinator_blocked", "at": runtime.timestamp(self.now)}})
+                def lookup(settings, args):
+                    self.assertEqual(args[1], "get")
+                    runtime.complete(run, "manual", self.now + timedelta(seconds=1))
+                    return self.response(status)
+                with patch.object(runtime, "herdr_call", side_effect=lookup) as call:
+                    result = runtime.tick(run, self.now)
+                self.assertEqual(call.call_count, 1)
+                self.assertEqual(result["status"], "busy" if status == "working" else "reconciliation_completed")
+                schedule = Engine.read(run)["scheduler"]
+                self.assertIsNone(schedule["failure"])
+                self.assertIsNone(schedule.get("pending_action_id"))
+                self.assertEqual(schedule["delivery_status"], "completed")
+                self.assertEqual(runtime.health(run, self.now + timedelta(seconds=1))["status"], "healthy")
+
+    def test_health_notifier_nonstart_retries_after_repair_with_backoff(self):
+        notifier = self.root / "notifier"
+        delivered = self.root / "delivered"
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        first = runtime.health(self.run, self.now)
+        self.assertEqual(first["alert"], "not_started")
+        self.assertEqual(first["receipt"]["error"], "FileNotFoundError")
+        notifier.write_text('#!/bin/sh\ncat > "' + str(delivered) + '"\n')
+        notifier.chmod(0o755)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=1))["alert"], "retry_pending")
+        self.assertFalse(delivered.exists())
+        sent = runtime.health(self.run, self.now + timedelta(seconds=60))
+        self.assertEqual(sent["alert"], "transport_accepted")
+        self.assertEqual(sent["receipt"]["attempts"], 2)
+        self.assertEqual(json.loads(delivered.read_text())["failure"]["id"], first["failure"]["id"])
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=120))["alert"], "already_attempted")
+
+    def test_health_notifier_nonstart_retry_budget_is_bounded(self):
+        notifier = self.root / "not-executable"
+        notifier.write_text("#!/bin/sh\nexit 0\n")
+        notifier.chmod(0o644)
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        for attempt in range(1, 4):
+            result = runtime.health(self.run, self.now + timedelta(seconds=(attempt - 1) * 60))
+            self.assertEqual(result["alert"], "not_started")
+            self.assertEqual(result["receipt"]["error"], "PermissionError")
+            self.assertEqual(result["receipt"]["attempts"], attempt)
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=180))["alert"], "retry_exhausted")
+        self.assertEqual(Engine.read(self.run)["scheduler"]["last_alert"]["attempts"], 3)
+
+    def test_health_records_notifier_exit_despite_binary_diagnostics(self):
+        for stream in (1, 2):
+            for returncode in (0, 1):
+                with self.subTest(stream=stream, returncode=returncode):
+                    run = self.root / f"binary-notifier-{stream}-{returncode}"
+                    delivered = self.root / f"notice-{stream}-{returncode}"
+                    notifier = [sys.executable, "-c", (
+                        'import os, sys; '
+                        'notice = sys.stdin.buffer.read(); '
+                        'open(sys.argv[1], "ab").write(notice); '
+                        'os.write(int(sys.argv[2]), bytes([255])); '
+                        'sys.exit(int(sys.argv[3]))'
+                    ), str(delivered), str(stream), str(returncode)]
+                    Engine.initialize(run, {**self.config, "scheduler": {
+                        **self.config["scheduler"], "notifier_argv": notifier,
+                        "notification_authorized": True}})
+                    result = runtime.health(run, self.now)
+                    expected = "transport_accepted" if returncode == 0 else "transport_failed"
+                    self.assertEqual(result["alert"], expected)
+                    receipt = result["receipt"]
+                    self.assertEqual(receipt["returncode"], returncode)
+                    self.assertEqual(receipt["attempts"], 1)
+                    schedule = Engine.read(run)["scheduler"]
+                    self.assertEqual(schedule["last_alert"], receipt)
+                    self.assertEqual(schedule["health_alerts"][result["failure"]["id"]], receipt)
+                    notices = delivered.read_bytes().splitlines()
+                    self.assertEqual(len(notices), 1)
+                    self.assertEqual(json.loads(notices[0])["failure"], result["failure"])
+                    self.assertEqual(runtime.health(run, self.now + timedelta(seconds=60))["alert"],
+                                     "already_attempted")
+                    self.assertEqual(delivered.read_bytes().splitlines(), notices)
+
+    def test_tick_preserves_incident_without_original_timestamp(self):
+        failure = {"id": "endpoint-existing", "code": "coordinator_blocked"}
+        self.schedule(failure=failure)
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            result = runtime.tick(self.run, self.now)
+        self.assertEqual(result["status"], "endpoint_unavailable")
+        self.assertEqual(result["failure"]["id"], failure["id"])
+        self.assertEqual(result["failure"]["at"], self.now.isoformat())
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            repeated = runtime.tick(self.run, self.now + timedelta(seconds=61))
+        self.assertEqual(repeated["failure"], result["failure"])
+
+    def test_health_incomplete_retry_receipts_do_not_crash_or_resend(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/notifier"],
+                                  "notification_authorized": True})
+        failure = {"id": "endpoint-existing", "reason": "fixture"}
+        self.schedule(heartbeat_at=self.now.isoformat(), failure=failure)
+        for receipt in ({"status": "not_started"},
+                        {"status": "not_started", "attempts": "1", "at": self.now.isoformat()},
+                        {"status": "not_started", "attempts": 1},
+                        {"status": "not_started", "attempts": 1, "at": "invalid"},
+                        {"status": "not_started", "attempts": 1, "at": None}):
+            with self.subTest(receipt=receipt), patch.object(runtime.subprocess, "run") as notify:
+                self.schedule(health_alerts={failure["id"]: receipt})
+                result = runtime.health(self.run, self.now)
+                self.assertEqual(result["status"], "unhealthy")
+                self.assertEqual(result["alert"], "already_attempted")
+                notify.assert_not_called()
+                self.assertEqual(Engine.read(self.run)["scheduler"]["health_alerts"][failure["id"]], receipt)
+
+    def test_cli_round_trips_surrogates_and_unicode_in_stored_json(self):
+        value = "\\ud800 marker: " + "\ud800" + " ž 😀"
+        proof = {"ref": value, "observed_at": self.now.isoformat()}
+        Engine.apply(self.run, {
+            "op": "admit", "action_id": "admit-A", "expected_policy": 1,
+            "task_id": "A", "host": "local", "driver": "worker", "branch": "task/A",
+            "worktree": str(self.root / "trees" / "A"),
+            "claim": {**proof, "authority": "fixture-db", "task_id": "A", "owner": "worker",
+                      "confirmed": True, "ready": True, "unpublished": False}})
+        def cli(arguments, request=None):
+            with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": "", "PYTHONIOENCODING": "utf-8:strict"}):
+                result = subprocess.run([sys.executable, "-B", str(SCRIPTS / "supervise.py"),
+                                         *arguments, "--run-dir", str(self.run)],
+                                        input=json.dumps(request) if request else None,
+                                        capture_output=True, text=True, check=True)
+            self.assertEqual(result.stderr, "")
+            return json.loads(result.stdout)
+        claimed = cli(["apply"], {"op": "claim_intent", "action_id": "unicode-claim", "expected_policy": 1,
+                                   "task_id": "B", "target": {"authority": "fixture-db", "owner": "worker"},
+                                   "evidence": proof})
+        self.assertEqual(claimed["claim_intent"]["evidence"]["ref"], value)
+        observed = cli(["serve", "--caller", "worker"], {
+            "op": "observe", "action_id": "unicode-observe", "expected_policy": 1, "task_id": "A",
+            "expected_task": Engine.read(self.run)["tasks"]["A"]["version"],
+            "fields": {"findings": value}, "evidence": proof})
+        self.assertEqual(observed["observed"], ["findings"])
+        self.assertEqual(cli(["status"])["tasks"]["A"]["findings"], value)
+        self.assertEqual(cli(["status", "--task", "A"])["findings"], value)
+        self.assertEqual(cli(["action", "--id", "unicode-observe"])["request"]["fields"]["findings"], value)
+
+    def test_health_never_replays_a_notifier_that_may_have_sent(self):
+        notifier = self.root / "notifier"
+        delivered = self.root / "delivered"
+        notifier.write_text('#!/bin/sh\ncat >> "' + str(delivered) + '"\nexit 1\n')
+        notifier.chmod(0o755)
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": [str(notifier)],
+                                  "notification_authorized": True})
+        self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_failed")
+        first = delivered.read_bytes()
+        self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")
+        self.assertEqual(delivered.read_bytes(), first)
+        self.schedule(heartbeat_at=runtime.timestamp(self.now))
+        self.assertEqual(runtime.health(self.run, self.now)["status"], "healthy")
+        self.schedule(heartbeat_at=None)
+        with patch.object(runtime.subprocess, "run", side_effect=subprocess.TimeoutExpired("notifier", 20)) as call:
+            self.assertEqual(runtime.health(self.run, self.now)["alert"], "transport_unconfirmed")
+            self.assertEqual(runtime.health(self.run, self.now + timedelta(seconds=60))["alert"], "already_attempted")
+            self.assertEqual(call.call_count, 1)
+
+    def test_restricted_route_rejects_spoof_and_foreign_task(self):
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": "sh -c unwanted"}):
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "without a remote command"):
+                runtime.serve(self.run, "worker", {"op": "query", "task_id": "A"})
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "Caller identity"):
+                runtime.serve(self.run, "worker", {"op": "query", "task_id": "A", "caller": "coordinator"})
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "not assigned"):
+                runtime.serve(self.run, "worker", {"op": "query", "task_id": "B"})
+            self.assertEqual(runtime.serve(self.run, "worker", {"op": "action", "action_id": "absent"}), {"status": "not_found"})
+            result = runtime.serve(self.run, "worker", {"op": "query", "task_id": "A"})
+            self.assertEqual(result["policy_version"], 1)
+            self.assertIsNone(result["task"])
+            self.assertNotIn("config", result)
+
+    def test_restricted_route_rejects_coordinator_and_unverified_routes(self):
+        request = {"op": "control", "control": "pause", "action_id": "forbidden-control", "expected_policy": 1}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            with self.assertRaises(runtime.RuntimeErrorDetail) as caught:
+                runtime.serve(self.run, "coordinator", request)
+            self.assertEqual(caught.exception.code, "unknown_caller")
+            for route in (False, None):
+                with self.subTest(helper_route=route):
+                    actor = self.config["actors"]["worker"]
+                    actor.pop("helper_route", None)
+                    if route is not None:
+                        actor["helper_route"] = route
+                    run = self.root / ("unverified-" + str(route))
+                    Engine.initialize(run, self.config)
+                    with self.assertRaises(runtime.RuntimeErrorDetail) as caught:
+                        runtime.serve(run, "worker", {"op": "query", "task_id": "A"})
+                    self.assertEqual(caught.exception.code, "unknown_caller")
+            self.assertFalse(Engine.read(self.run)["controls"]["paused"])
+            self.assertIsNone(Engine.action(self.run, request["action_id"]))
+
+    def test_restricted_route_only_returns_own_action_records(self):
+        self.config["actors"]["other-worker"] = {
+            "role": "driver", "task_ids": ["B"], "host": "local", "helper_route": True}
+        run = self.root / "action-isolation"
+        Engine.initialize(run, self.config)
+        proof = {"ref": "fixture:action-isolation", "observed_at": self.now.isoformat()}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            for task_id, caller in (("A", "worker"), ("B", "other-worker")):
+                admitted = Engine.apply(run, {
+                    "op": "admit", "action_id": "admit-" + task_id, "expected_policy": 1,
+                    "task_id": task_id, "host": "local", "driver": caller, "branch": "task/" + task_id,
+                    "worktree": str(self.root / "trees" / task_id),
+                    "claim": {**proof, "authority": "fixture-db", "task_id": task_id, "owner": caller,
+                              "confirmed": True, "ready": True, "unpublished": False}})
+                request = {"op": "observe", "action_id": "observe-" + task_id, "expected_policy": 1,
+                           "task_id": task_id, "expected_task": admitted["task_version"],
+                           "fields": {"next_action": "implement"}, "evidence": proof}
+                result = runtime.serve(run, caller, request)
+                record = runtime.serve(run, caller, {"op": "action", "action_id": request["action_id"]})
+                self.assertEqual(record["caller"], caller)
+                self.assertEqual(record["request"], request)
+                self.assertEqual(record["result"], result)
+            for action_id in ("admit-A", "observe-B"):
+                with self.subTest(action_id=action_id):
+                    with self.assertRaises(runtime.RuntimeErrorDetail) as caught:
+                        runtime.serve(run, "worker", {"op": "action", "action_id": action_id})
+                    self.assertEqual(caught.exception.code, "wrong_caller")
+
+    def test_restricted_action_cli_rejects_malformed_ids_as_json(self):
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "serve",
+                   "--run-dir", str(self.run), "--caller", "worker"]
+        before = Engine.read(self.run)
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            for action_id in (1, 1.5, True, None, [], {}, "", " "):
+                with self.subTest(action_id=action_id):
+                    result = subprocess.run(command, input=json.dumps({"op": "action", "action_id": action_id}),
+                                            capture_output=True, text=True, check=False)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stderr, "")
+                    self.assertEqual(json.loads(result.stdout), {
+                        "ok": False, "error": {"code": "invalid", "message": "action_id must be a nonempty string"}})
+                    self.assertEqual(Engine.read(self.run), before)
+            result = subprocess.run(command, input=json.dumps({"op": "action", "action_id": "absent"}),
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(json.loads(result.stdout), {"status": "not_found"})
+            self.assertEqual(result.stderr, "")
+
+    def test_restricted_action_cli_rejects_excessive_json_nesting(self):
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "serve",
+                   "--run-dir", str(self.run), "--caller", "worker"]
+        request = '{"op":"action","action_id":' + "[" * 10000 + "0" + "]" * 10000 + "}"
+        before = Engine.read(self.run)
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            result = subprocess.run(command, input=request, capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(json.loads(result.stdout), {
+            "ok": False, "error": {"code": "invalid_input", "message": "JSON input is nested too deeply"}})
+        self.assertEqual(Engine.read(self.run), before)
+
+    def test_restricted_observe_cli_bounds_json_depth_before_copying(self):
+        proof = {"ref": "fixture:json-depth", "observed_at": self.now.isoformat()}
+        Engine.apply(self.run, {
+            "op": "admit", "action_id": "admit-A", "expected_policy": 1,
+            "task_id": "A", "host": "local", "driver": "worker", "branch": "task/A",
+            "worktree": str(self.root / "trees" / "A"),
+            "claim": {**proof, "authority": "fixture-db", "task_id": "A", "owner": "worker",
+                      "confirmed": True, "ready": True, "unpublished": False}})
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "serve",
+                   "--run-dir", str(self.run), "--caller", "worker"]
+        # The request and fields objects add two levels above findings.
+        for depth in (62, 63, 600):
+            with self.subTest(depth=depth), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                before = Engine.read(self.run)
+                request = {"op": "observe", "action_id": "observe-" + str(depth), "expected_policy": 1,
+                           "task_id": "A", "expected_task": before["tasks"]["A"]["version"],
+                           "fields": {"refs": {}, "findings": "DEPTH_PAYLOAD"}, "evidence": proof}
+                nested = "[" * depth + "0" + "]" * depth
+                raw = json.dumps(request).replace('"DEPTH_PAYLOAD"', nested)
+                result = subprocess.run(command, input=raw, capture_output=True, text=True, check=False)
+                self.assertEqual(result.stderr, "")
+                if depth == 62:
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(json.loads(result.stdout)["observed"], ["findings", "refs"])
+                    self.assertEqual(Engine.read(self.run)["tasks"]["A"]["findings"], json.loads(nested))
+                else:
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(json.loads(result.stdout), {
+                        "ok": False, "error": {"code": "invalid_input", "message": "JSON input is nested too deeply"}})
+                    self.assertEqual(Engine.read(self.run), before)
+
+    def test_restricted_query_follows_task_handoff(self):
+        self.config["hosts"]["remote"] = {
+            "slots": 1, "worktree_root": str(self.root / "remote-trees"),
+            "endpoint": {"profile": "remote"}}
+        query = {"op": "query", "task_id": "A"}
+        proof = {"ref": "fixture:handoff", "observed_at": self.now.isoformat()}
+        for destination in ("local", "remote"):
+            with self.subTest(destination=destination), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                self.config["actors"]["successor"] = {
+                    "role": "driver", "task_ids": ["A"], "host": destination, "helper_route": True}
+                run = self.root / ("handoff-" + destination)
+                Engine.initialize(run, self.config)
+                Engine.apply(run, {
+                    "op": "admit", "action_id": "admit-A", "expected_policy": 1, "task_id": "A",
+                    "host": "local", "driver": "worker", "branch": "task/A",
+                    "worktree": str(self.root / "trees" / "A"),
+                    "claim": {**proof, "authority": "fixture-db", "task_id": "A", "owner": "worker",
+                              "confirmed": True, "ready": True, "unpublished": False}})
+                result = runtime.serve(run, "worker", query)
+                self.assertEqual(result["task"]["driver"], "worker")
+                self.assertEqual(result["task"]["host"], "local")
+                self.assertEqual(result["controls"], Engine.read(run)["controls"])
+                self.assertEqual(result["staging"], Engine.read(run)["staging"])
+                with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "does not drive"):
+                    runtime.serve(run, "successor", query)
+
+                Engine.apply(run, {
+                    "op": "handoff", "action_id": "handoff-A", "expected_policy": 1,
+                    "task_id": "A", "expected_task": result["task"]["version"],
+                    "host": destination, "driver": "successor", "branch": "task/A",
+                    "worktree": str(Path(self.config["hosts"][destination]["worktree_root"]) / "A"),
+                    "identity": {"session": "successor-session", "agent_id": "successor-agent"},
+                    "source": {**proof, "revision": "published-head", "published": True},
+                    "evidence": {**proof, "all_jobs_settled": True}})
+                with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "does not drive"):
+                    runtime.serve(run, "worker", query)
+                successor = runtime.serve(run, "successor", query)["task"]
+                self.assertEqual(successor["driver"], "successor")
+                self.assertEqual(successor["host"], destination)
+                self.assertEqual(successor["identity"]["agent_id"], "successor-agent")
+
+    def test_restricted_query_rejects_mismatched_host_binding(self):
+        # Check the route boundary also fails closed on an inconsistent state snapshot.
+        snapshot = Engine.read(self.run)
+        snapshot["tasks"]["A"] = {"id": "A", "driver": "worker", "host": "remote"}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}), patch.object(
+                Engine, "read", return_value=snapshot):
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "does not drive"):
+                runtime.serve(self.run, "worker", {"op": "query", "task_id": "A"})
+
+    def test_roles_require_installed_skills_and_no_auth_claim(self):
+        self.config["hosts"]["local"].update(roles=["review"], profiles=[{
+            "id": "custom", "agent_home": str(self.root / "custom-home"), "required_skills": []}])
+        with patch.object(runtime.shutil, "which", return_value=None):
+            result = runtime.preflight(self.config, "local")
+        self.assertFalse(result["local_inventory_ok"])
+        self.assertEqual(result["missing_role_skills"], ["comprehensive-review", "review-fix-loop"])
+        self.assertIn("gh", [item["tool"] for item in result["tools"]])
+        self.assertIn("reviewer authentication/model access", result["unchecked"])
+
+    def test_profile_only_review_role_checks_runtime_presence_and_versions(self):
+        profiles = []
+        for name, skills in (("coordinator", ("herdr-orchestrate", "herdr")),
+                             ("review", ("comprehensive-review", "review-fix-loop"))):
+            home = self.root / name
+            profile = {"id": name, "agent_home": str(home), "skill_paths": {}}
+            if name == "review":
+                profile["roles"] = ["review"]
+            for skill in skills:
+                directory = home / "skills" / skill
+                directory.mkdir(parents=True)
+                (directory / "SKILL.md").write_text("---\nname: " + skill + "\n---\n")
+                profile["skill_paths"][skill] = str(directory)
+            profiles.append(profile)
+        self.config["hosts"]["local"]["profiles"] = profiles
+        for name, overrides, failures in (
+                ("missing", {"node": None, "codex": None}, {"node", "codex"}),
+                ("old-git", {"git": "2.39.0"}, {"git"}),
+                ("old-node", {"node": "20.0.0"}, {"node"}),
+                ("supported", {}, set())):
+            with self.subTest(name=name):
+                binary_dir = self.root / name
+                binary_dir.mkdir()
+                versions = {"git": "2.42.0", "herdr": "1.0.0", "gh": "2.0.0",
+                            "python3": "3.10.0", "node": "22.0.0", "codex": "1.0.0", **overrides}
+                for tool, version in versions.items():
+                    if version is not None:
+                        executable = binary_dir / tool
+                        executable.write_text(f"#!/bin/sh\necho '{tool} {version}'\n")
+                        executable.chmod(0o700)
+                with patch.dict(os.environ, {"PATH": str(binary_dir)}):
+                    result = runtime.preflight(self.config, "local")
+                self.assertEqual(result["local_inventory_ok"], not failures)
+                self.assertEqual({item["tool"] for item in result["tools"] if not item["ok"]}, failures)
+                self.assertEqual(result["missing_role_skills"], [])
+                self.assertTrue(all(item["ok"] for item in result["installations"]))
+
+        host = self.config["hosts"]["local"]
+        host["profiles"] = [profiles[1]]
+        for host_roles in (None, []):
+            with self.subTest(host_roles=host_roles), patch.dict(os.environ, {"PATH": str(self.root / "supported")}):
+                host.pop("roles", None)
+                if host_roles is not None:
+                    host["roles"] = host_roles
+                result = runtime.preflight(self.config, "local")
+                self.assertTrue(result["local_inventory_ok"])
+                self.assertEqual(result["missing_role_skills"], [])
+                paths = profiles[1]["skill_paths"]
+                missing = paths.pop("comprehensive-review")
+                result = runtime.preflight(self.config, "local")
+                self.assertFalse(result["local_inventory_ok"])
+                self.assertEqual(result["missing_role_skills"], ["comprehensive-review"])
+                paths["comprehensive-review"] = missing
+
+    def test_review_pair_cannot_be_split_across_profiles(self):
+        profiles = []
+        for skill in ("comprehensive-review", "review-fix-loop"):
+            directory = self.root / skill
+            directory.mkdir()
+            (directory / "SKILL.md").write_text("---\nname: " + skill + "\n---\n")
+            profiles.append({"id": skill, "agent_home": str(directory), "required_skills": [skill],
+                             "skill_paths": {skill: str(directory)}})
+        self.config["hosts"]["local"].update(roles=["review"], profiles=profiles)
+        with patch.object(runtime.shutil, "which", return_value="/fixture/tool"), patch.object(
+                runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "tool 99.0", "")):
+            result = runtime.preflight(self.config, "local")
+        self.assertFalse(result["local_inventory_ok"])
+        self.assertEqual(sum(not item["ok"] for item in result["installations"]), 2)
+
+    def test_coordinator_requires_herdr_skill_in_selected_profile(self):
+        profile = {"id": "coordinator", "agent_home": str(self.root / "custom-home"), "skill_paths": {}}
+        self.config["hosts"]["local"]["profiles"] = [profile]
+        for skill in ("herdr-orchestrate", "herdr"):
+            directory = self.root / skill
+            directory.mkdir()
+            (directory / "SKILL.md").write_text("---\nname: " + skill + "\n---\n")
+            profile["skill_paths"][skill] = str(directory)
+        with patch.object(runtime.shutil, "which", return_value="/fixture/tool"), patch.object(
+                runtime.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "tool 99.0", "")):
+            result = runtime.preflight(self.config, "local")
+            self.assertTrue(result["local_inventory_ok"])
+            del profile["skill_paths"]["herdr"]
+            result = runtime.preflight(self.config, "local")
+        self.assertFalse(result["local_inventory_ok"])
+        self.assertEqual(result["missing_role_skills"], ["herdr"])
+        self.assertEqual([item["skill"] for item in result["installations"] if not item["ok"]], ["herdr"])
+
+    def test_cli_uses_fake_endpoint_and_restarts_without_duplicate_prompt(self):
+        fake = self.root / "fake-herdr"
+        log = self.root / "calls.jsonl"
+        fake.write_text("#!/usr/bin/env python3\nimport json,sys\n"
+                        f"with open({str(log)!r}, 'a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n"
+                        f"print({json.dumps({'result': self.response()})!r})\n")
+        fake.chmod(0o700)
+        self.config["scheduler"]["herdr_binary"] = str(fake)
+        run = self.root / "subprocess-run"
+        Engine.initialize(run, self.config)
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "tick", "--run-dir", str(run)]
+        first = subprocess.run(command, capture_output=True, text=True, check=True)
+        second = subprocess.run(command, capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(first.stdout)["status"], "delivered")
+        self.assertEqual(json.loads(second.stdout)["status"], "awaiting_reconciliation")
+        calls = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][:4], ["--session", "test-session", "agent", "get"])
+        self.assertEqual(calls[1][:4], ["--session", "test-session", "agent", "prompt"])
+        self.assertNotIn("--current", calls[1])
+
+    def test_single_instance_lock_and_state_cas(self):
+        with runtime.exclusive(self.run, "delivery.lock"):
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "Another process"):
+                with runtime.exclusive(self.run, "delivery.lock"):
+                    self.fail("duplicate lock")
+        snapshot = Engine.read(self.run)
+        self.schedule(wake_reason="first")
+        with self.assertRaises(StateError) as caught:
+            Engine.apply(self.run, {"action_id": "stale", "op": "scheduler", "expected_policy": 1,
+                                   "expected_scheduler": snapshot["scheduler"]["version"],
+                                   "fields": {"wake_reason": "overwrite"}})
+        self.assertEqual(caught.exception.code, "stale_scheduler")
+
+
+if __name__ == "__main__":
+    unittest.main()

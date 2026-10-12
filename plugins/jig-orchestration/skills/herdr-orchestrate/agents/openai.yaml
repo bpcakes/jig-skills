@@ -1,0 +1,4 @@
+interface:
+  display_name: "Herdr Orchestrate"
+  short_description: "Deliver task batches across Herdr machines"
+  default_prompt: "Use $herdr-orchestrate to deliver this scoped task batch through reviewed GitHub PRs and required acceptance."

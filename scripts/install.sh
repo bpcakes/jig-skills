@@ -7,16 +7,18 @@ Usage: scripts/install.sh codex|claude [--force] [--dest directory] [skill-name.
 
 Installs skills from this repository's plugins into the selected agent's skill directory.
 If no skill names are provided, all compatible skills are installed.
-In that mode, without --force, an incompatible dependency skips only its dependents.
+In that mode, an incompatible dependency skips its dependents unless selected for replacement.
 --dest selects the skills directory directly, overriding the agent default.
 --force replaces selected skills. An automatic dependency is never overwritten;
 name the dependency explicitly with --force to replace a differing copy.
+herdr-orchestrate also installs Herdr's skill from the local `herdr --skill`.
+The Herdr binary must already be installed. Select `herdr` to install only that skill.
 EOF
 }
 
 is_codex_only_skill() {
     case "$1" in
-        comprehensive-review|review-fix-loop)
+        comprehensive-review|review-fix-loop|herdr-orchestrate)
             return 0
             ;;
         *)
@@ -26,6 +28,10 @@ is_codex_only_skill() {
 }
 
 find_skill_source() {
+    if [ "$1" = "herdr" ]; then
+        printf '%s\n' "$herdr_stage/herdr"
+        return 0
+    fi
     for candidate in "$plugins_dir"/*/skills/"$1"; do
         if [ -d "$candidate" ]; then
             printf '%s\n' "$candidate"
@@ -36,8 +42,9 @@ find_skill_source() {
     return 1
 }
 
-required_dependency() {
+required_dependencies() {
     case "$1" in
+        herdr-orchestrate) printf '%s\n' 'review-fix-loop herdr' ;;
         review-fix-loop) printf '%s\n' comprehensive-review ;;
         comprehensive-review) printf '%s\n' review-fix-loop ;;
         audit-common) ;;
@@ -135,7 +142,7 @@ for skill in "$@"; do
             exit 1
             ;;
     esac
-    find_skill_source "$skill" >/dev/null
+    if [ "$skill" != "herdr" ]; then find_skill_source "$skill" >/dev/null; fi
     if [ "$target_agent" = "claude" ] && is_codex_only_skill "$skill"; then
         printf 'Unsupported for Claude direct install: %s\n' "$skill" >&2
         exit 1
@@ -150,35 +157,78 @@ explicit_skills=" $* "
 while :; do
     added=0
     for skill in "$@"; do
-        dependency=$(required_dependency "$skill")
-        if [ -z "$dependency" ]; then continue; fi
-        case " $* " in *" $dependency "*) continue ;; esac
-        find_skill_source "$dependency" >/dev/null
-        automatic_dependencies="$automatic_dependencies $dependency"
-        set -- "$dependency" "$@"
-        added=1
-        printf 'Required dependency: %s (matching existing copy is preserved)\n' "$dependency"
+        for dependency in $(required_dependencies "$skill"); do
+            case " $* " in *" $dependency "*) continue ;; esac
+            if [ "$dependency" != "herdr" ]; then find_skill_source "$dependency" >/dev/null; fi
+            automatic_dependencies="$automatic_dependencies $dependency"
+            set -- "$dependency" "$@"
+            added=1
+            printf 'Required dependency: %s (matching existing copy is preserved)\n' "$dependency"
+        done
     done
     if [ "$added" -eq 0 ]; then break; fi
 done
-for dependency in review-fix-loop comprehensive-review audit-common; do
+
+# Herdr ships a release-matched, self-contained skill. Stage it locally so a
+# missing/failed export cannot truncate an installed copy or leave a partial
+# orchestration installation. This reads no session and installs no executable.
+herdr_stage=
+case " $* " in
+    *" herdr "*)
+        herdr_stage=$(mktemp -d "${TMPDIR:-/tmp}/jig-install-herdr.XXXXXX")
+        trap 'rm -rf "$herdr_stage"' 0
+        trap 'exit 1' HUP INT TERM
+        mkdir "$herdr_stage/herdr"
+        if command -v herdr >/dev/null 2>&1 &&
+            herdr --skill >"$herdr_stage/herdr/SKILL.md" &&
+            awk '
+                NR == 1 { if ($0 != "---") exit 1; next }
+                !closed && /^---$/ { closed = 1; next }
+                !closed && /^name: *herdr *$/ { name = 1 }
+                !closed && /^description: *[^[:space:]]/ { description = 1 }
+                closed && /[^[:space:]]/ { body = 1 }
+                END { if (!name || !description || !closed || !body) exit 1 }
+            ' "$herdr_stage/herdr/SKILL.md"; then
+            :
+        elif [ "$install_all" -eq 1 ]; then
+            skipped_dependents="$skipped_dependents herdr"
+            printf 'Herdr skill unavailable: install a Herdr binary supporting `herdr --skill` and rerun for herdr-orchestrate.\n' >&2
+        else
+            printf 'Cannot install Herdr skill: install a Herdr binary supporting `herdr --skill` and rerun. No skills were changed.\n' >&2
+            exit 1
+        fi
+        ;;
+esac
+
+for dependency in review-fix-loop comprehensive-review audit-common herdr; do
+    case " $skipped_dependents " in *" $dependency "*) continue ;; esac
     dependents=
     selected_dependency=0
     for skill in "$@"; do
         case "$explicit_skills" in *" $dependency "*) selected_dependency=1 ;; esac
-        if [ "$(required_dependency "$skill")" = "$dependency" ]; then
-            dependents="$dependents $skill"
-        fi
+        case " $(required_dependencies "$skill") " in
+            *" $dependency "*) dependents="$dependents $skill" ;;
+        esac
     done
     if [ -z "$dependents" ]; then continue; fi
     dependency_source=$(find_skill_source "$dependency")
     dependency_target="$dest/$dependency"
+    dependency_origin='this checkout'
     if [ -e "$dependency_target" ] || [ -L "$dependency_target" ]; then
+        # Herdr's export is one file; preserve any supplementary local files.
+        if [ "$dependency" = "herdr" ]; then
+            dependency_origin='the installed Herdr binary'
+            dependency_source="$dependency_source/SKILL.md"
+            dependency_target="$dependency_target/SKILL.md"
+        fi
         if ! diff -qr "$dependency_source" "$dependency_target" >/dev/null 2>&1; then
-            if [ "$install_all" -eq 1 ] && [ "$force" -eq 0 ]; then
+            if [ "$install_all" -eq 1 ] && { [ "$force" -eq 0 ] || [ "$selected_dependency" -ne 1 ]; }; then
                 skipped_dependents="$skipped_dependents$dependents"
+                if [ "$dependency" = "herdr" ]; then
+                    skipped_dependents="$skipped_dependents herdr"
+                fi
             elif [ "$selected_dependency" -ne 1 ] || [ "$force" -ne 1 ]; then
-                printf 'Existing %s differs from this checkout; these skills require the matching copy:%s\n' "$dependency" "$dependents" >&2
+                printf 'Existing %s differs from %s; these skills require the matching copy:%s\n' "$dependency" "$dependency_origin" "$dependents" >&2
                 printf 'No skills were changed. To replace these copies, select %s and the dependent skills explicitly with --force (and the same --dest, if used).\n' "$dependency" >&2
                 exit 1
             fi
@@ -186,12 +236,35 @@ for dependency in review-fix-loop comprehensive-review audit-common; do
     fi
 done
 
+# A dependency skipped because one of its own dependencies is incompatible
+# cannot support a new dependent. Propagate before copying any directories.
+while :; do
+    added=0
+    for skill in "$@"; do
+        case " $skipped_dependents " in *" $skill "*) continue ;; esac
+        for dependency in $(required_dependencies "$skill"); do
+            case " $skipped_dependents " in
+                *" $dependency "*)
+                    skipped_dependents="$skipped_dependents $skill"
+                    added=1
+                    break
+                    ;;
+            esac
+        done
+    done
+    if [ "$added" -eq 0 ]; then break; fi
+done
+
 mkdir -p "$dest"
 
 for skill in "$@"; do
     case " $skipped_dependents " in
         *" $skill "*)
-            printf 'Skipping %s: existing %s differs from this checkout; continuing with other skills.\n' "$skill" "$(required_dependency "$skill")" >&2
+            if [ "$skill" = "herdr" ]; then
+                printf 'Skipping herdr: its export is unavailable or the existing skill differs; continuing with other skills.\n' >&2
+            else
+                printf 'Skipping %s: required dependency (%s) is incompatible or unavailable; continuing with other skills.\n' "$skill" "$(required_dependencies "$skill")" >&2
+            fi
             continue
             ;;
     esac

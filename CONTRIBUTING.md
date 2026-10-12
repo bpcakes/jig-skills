@@ -6,16 +6,16 @@ Keep each skill focused on a concrete task, with clear inputs, default behavior,
 
 ## Repository Layout
 
-- `.agents/plugins/marketplace.json` registers plugins and their installation policies for Codex; `.claude-plugin/marketplace.json` registers them for Claude Code. `jig-review` is Codex-only and appears only in the Codex marketplace.
+- `.agents/plugins/marketplace.json` registers plugins and their installation policies for Codex; `.claude-plugin/marketplace.json` registers them for Claude Code. `jig-review` and `jig-orchestration` currently require Codex and appear only in the Codex marketplace.
 - `plugins/<plugin>/.codex-plugin/plugin.json` and `plugins/<plugin>/.claude-plugin/plugin.json` declare plugin metadata and version for each host. `evals/host-parity.test.mjs` fails when they drift.
 - `plugins/<plugin>/skills/<skill>/agents/openai.yaml` holds Codex-only interface and policy metadata. A skill with `allow_implicit_invocation: false` there also sets `disable-model-invocation: true` in its `SKILL.md` frontmatter so Claude Code applies the same explicit-only policy; the parity test checks both directions.
 - `plugins/<plugin>/skills/<skill>/SKILL.md` is the skill entrypoint. Supporting references, scanners, examples, and tests stay with the skill.
-- `scripts/install.sh` copies complete skill directories into Codex or Claude Code; it excludes Codex-only orchestration skills from Claude installs.
+- `scripts/install.sh` copies complete skill directories into Codex or Claude Code; it excludes Codex-only orchestration skills from Claude installs. Selecting `herdr-orchestrate` also exports the matching Herdr skill from the locally installed `herdr --skill` command; the installer does not install the Herdr binary or fetch its skill over the network.
 - `docs/` contains user guidance that is too detailed for the root README.
 
 ## Changing Skills and Documentation
 
-When adding or renaming a skill, update its frontmatter, supporting references, plugin metadata where relevant, and the linked README catalog. Register new plugins in both marketplaces. Bump the affected plugin version in both manifests when releasing changes to its bundled contents.
+When adding or renaming a skill, update its frontmatter, supporting references, plugin metadata where relevant, and the linked README catalog. Register new plugins in both marketplaces when supported by both hosts; record Codex-only exceptions in the parity test and installer. Bump the affected plugin version in each supported host's manifest when releasing changes to its bundled contents.
 
 Use paths relative to the skill directory for bundled resources. For scanner examples, distinguish the scanner's location from the target project being scanned. Keep a skill's directory intact when testing direct installation.
 
@@ -35,6 +35,8 @@ Run commands from the repository root. Select the checks for the helper you chan
 | Skill evaluation harness | `node --test evals/*.test.mjs` |
 | Host manifests and skill invocation policies | `node --test evals/host-parity.test.mjs` (also runs `claude plugin validate --strict` when Claude Code is installed) |
 | Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
+| Herdr orchestration state and supervisor | `python3 -B -m unittest discover -s plugins/jig-orchestration/tests -v` |
+| Orchestration installation and evidence fixtures | `node --test plugins/jig-review/tests/install.test.mjs evals/orchestration-fixtures.test.mjs` |
 | Privacy-audit scripts | `bash plugins/jig-privacy-audit/scripts/test_fixtures.sh` |
 | Rust abstraction-police collector | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-abstraction-police/tests -v` |
 | Rust duplication scanner | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-dup-unifier/tests -v` |
@@ -43,7 +45,7 @@ Run commands from the repository root. Select the checks for the helper you chan
 | TypeScript/React abstraction scanner | `node --test plugins/jig-typescript/skills/typescript-react-abstraction-police/tests/scan.test.mjs` |
 | TypeScript/React duplication scanner | `node plugins/jig-typescript/skills/typescript-react-dup-unifier/scripts/test-typescript-react-dup-unifier.mjs` |
 
-Use the [feature-specific runtimes](README.md#requirements). The Ruby smoke test needs Minitest; the TypeScript AST scanner tests need an existing TypeScript installation. The [review CI workflow](.github/workflows/jig-review-tests.yml) runs the review suite on Node 22 and 24. That workflow does not cover every plugin's helpers.
+Use the [feature-specific runtimes](README.md#requirements). The Ruby smoke test needs Minitest; the TypeScript AST scanner tests need an existing TypeScript installation. The [review CI workflow](.github/workflows/jig-review-tests.yml) runs the review suite on Node 22 and 24. The [orchestration CI workflow](.github/workflows/jig-orchestration-tests.yml) exercises isolated state/runtime checks on Linux and macOS with Python 3.10 and 3.13, plus direct installation and frozen evidence fixtures. Neither workflow starts real Herdr agents, changes live trackers, or launches authenticated provider evaluations. These workflows do not cover every plugin's helpers.
 
 The Beads integration tests require the `br` CLI; CI installs the checksum-pinned [Beads v0.5.7 release](https://github.com/Dicklesworthstone/beads_rust/releases/tag/v0.5.7) and sets `JIG_REVIEW_REQUIRE_BEADS=1`, so a missing or broken executable fails the suite instead of skipping coverage. Local runs without `br` explicitly report these integration tests as skipped. To require the same coverage locally:
 

@@ -9,9 +9,10 @@ const repo = fileURLToPath(new URL('..', import.meta.url));
 const read = file => readFileSync(path.join(repo, file), 'utf8');
 const json = file => JSON.parse(read(file));
 
-// These plugins orchestrate Codex subagents, so they have no Claude Code manifest and are absent
-// from the Claude marketplace. scripts/install.sh rejects their skills for Claude for the same reason.
-const codexOnlyPlugins = ['jig-review'];
+// jig-review uses Codex subagents; jig-orchestration currently requires a Codex
+// coordinator and installs that review pair. Neither has a Claude manifest or
+// marketplace entry. Keep these exclusions aligned with scripts/install.sh.
+const codexOnlyPlugins = ['jig-review', 'jig-orchestration'];
 
 const plugins = readdirSync(path.join(repo, 'plugins')).sort();
 const codexMarketplace = json('.agents/plugins/marketplace.json');
