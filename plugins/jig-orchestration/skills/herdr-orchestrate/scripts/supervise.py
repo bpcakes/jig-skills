@@ -525,15 +525,20 @@ def preflight(config, host_id):
         raise RuntimeErrorDetail("unknown_host", "Choose a registered host ID")
     roles = host.get("roles", [])
     profiles = host.get("profiles", [])
-    required = {"git": (2, 42) if "review" in roles else None, "herdr": None}
-    if "coordinator" in roles or "review" in roles:
+    runtime_roles = set(roles)
+    for profile in profiles:
+        if not isinstance(profile, dict) or not isinstance(profile.get("agent_home"), str) or not Path(profile["agent_home"]).is_absolute():
+            raise RuntimeErrorDetail("invalid_config", "Each profile needs its actual absolute agent_home")
+        runtime_roles.update(profile.get("roles", roles))
+    required = {"git": (2, 42) if "review" in runtime_roles else None, "herdr": None}
+    if "coordinator" in runtime_roles or "review" in runtime_roles:
         required["gh"] = None
-    if "coordinator" in roles:
+    if "coordinator" in runtime_roles:
         required["python3"] = (3, 10)
-    if "review" in roles:
+    if "review" in runtime_roles:
         required.update({"node": (22,), "codex": None})
     tracker = config.get("tracker", {}).get("kind")
-    if "tracker" in roles and tracker in {"br", "bead"}:
+    if "tracker" in runtime_roles and tracker in {"br", "bead"}:
         required[tracker] = None
     for reviewer in host.get("reviewers", []):
         if reviewer not in {"codex", "claude", "cursor"}:
@@ -556,8 +561,6 @@ def preflight(config, host_id):
         tools.append(item)
     installations = []
     for profile in profiles:
-        if not isinstance(profile, dict) or not isinstance(profile.get("agent_home"), str) or not Path(profile["agent_home"]).is_absolute():
-            raise RuntimeErrorDetail("invalid_config", "Each profile needs its actual absolute agent_home")
         paths = profile.get("skill_paths", {})
         profile_roles = profile.get("roles", roles)
         wanted = set(profile.get("required_skills", []))

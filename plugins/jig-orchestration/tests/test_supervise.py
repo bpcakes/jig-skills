@@ -1026,6 +1026,54 @@ class RuntimeTests(unittest.TestCase):
             self.assertIsNone(result["task"])
             self.assertNotIn("config", result)
 
+    def test_restricted_route_rejects_coordinator_and_unverified_routes(self):
+        request = {"op": "control", "control": "pause", "action_id": "forbidden-control", "expected_policy": 1}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            with self.assertRaises(runtime.RuntimeErrorDetail) as caught:
+                runtime.serve(self.run, "coordinator", request)
+            self.assertEqual(caught.exception.code, "unknown_caller")
+            for route in (False, None):
+                with self.subTest(helper_route=route):
+                    actor = self.config["actors"]["worker"]
+                    actor.pop("helper_route", None)
+                    if route is not None:
+                        actor["helper_route"] = route
+                    run = self.root / ("unverified-" + str(route))
+                    Engine.initialize(run, self.config)
+                    with self.assertRaises(runtime.RuntimeErrorDetail) as caught:
+                        runtime.serve(run, "worker", {"op": "query", "task_id": "A"})
+                    self.assertEqual(caught.exception.code, "unknown_caller")
+            self.assertFalse(Engine.read(self.run)["controls"]["paused"])
+            self.assertIsNone(Engine.action(self.run, request["action_id"]))
+
+    def test_restricted_route_only_returns_own_action_records(self):
+        self.config["actors"]["other-worker"] = {
+            "role": "driver", "task_ids": ["B"], "host": "local", "helper_route": True}
+        run = self.root / "action-isolation"
+        Engine.initialize(run, self.config)
+        proof = {"ref": "fixture:action-isolation", "observed_at": self.now.isoformat()}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            for task_id, caller in (("A", "worker"), ("B", "other-worker")):
+                admitted = Engine.apply(run, {
+                    "op": "admit", "action_id": "admit-" + task_id, "expected_policy": 1,
+                    "task_id": task_id, "host": "local", "driver": caller, "branch": "task/" + task_id,
+                    "worktree": str(self.root / "trees" / task_id),
+                    "claim": {**proof, "authority": "fixture-db", "task_id": task_id, "owner": caller,
+                              "confirmed": True, "ready": True, "unpublished": False}})
+                request = {"op": "observe", "action_id": "observe-" + task_id, "expected_policy": 1,
+                           "task_id": task_id, "expected_task": admitted["task_version"],
+                           "fields": {"next_action": "implement"}, "evidence": proof}
+                result = runtime.serve(run, caller, request)
+                record = runtime.serve(run, caller, {"op": "action", "action_id": request["action_id"]})
+                self.assertEqual(record["caller"], caller)
+                self.assertEqual(record["request"], request)
+                self.assertEqual(record["result"], result)
+            for action_id in ("admit-A", "observe-B"):
+                with self.subTest(action_id=action_id):
+                    with self.assertRaises(runtime.RuntimeErrorDetail) as caught:
+                        runtime.serve(run, "worker", {"op": "action", "action_id": action_id})
+                    self.assertEqual(caught.exception.code, "wrong_caller")
+
     def test_restricted_query_follows_task_handoff(self):
         self.config["hosts"]["remote"] = {
             "slots": 1, "worktree_root": str(self.root / "remote-trees"),
@@ -1085,6 +1133,43 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result["missing_role_skills"], ["comprehensive-review", "review-fix-loop"])
         self.assertIn("gh", [item["tool"] for item in result["tools"]])
         self.assertIn("reviewer authentication/model access", result["unchecked"])
+
+    def test_profile_only_review_role_checks_runtime_presence_and_versions(self):
+        profiles = []
+        for name, skills in (("coordinator", ("herdr-orchestrate", "herdr")),
+                             ("review", ("comprehensive-review", "review-fix-loop"))):
+            home = self.root / name
+            profile = {"id": name, "agent_home": str(home), "skill_paths": {}}
+            if name == "review":
+                profile["roles"] = ["review"]
+            for skill in skills:
+                directory = home / "skills" / skill
+                directory.mkdir(parents=True)
+                (directory / "SKILL.md").write_text("---\nname: " + skill + "\n---\n")
+                profile["skill_paths"][skill] = str(directory)
+            profiles.append(profile)
+        self.config["hosts"]["local"]["profiles"] = profiles
+        for name, overrides, failures in (
+                ("missing", {"node": None, "codex": None}, {"node", "codex"}),
+                ("old-git", {"git": "2.39.0"}, {"git"}),
+                ("old-node", {"node": "20.0.0"}, {"node"}),
+                ("supported", {}, set())):
+            with self.subTest(name=name):
+                binary_dir = self.root / name
+                binary_dir.mkdir()
+                versions = {"git": "2.42.0", "herdr": "1.0.0", "gh": "2.0.0",
+                            "python3": "3.10.0", "node": "22.0.0", "codex": "1.0.0", **overrides}
+                for tool, version in versions.items():
+                    if version is not None:
+                        executable = binary_dir / tool
+                        executable.write_text(f"#!/bin/sh\necho '{tool} {version}'\n")
+                        executable.chmod(0o700)
+                with patch.dict(os.environ, {"PATH": str(binary_dir)}):
+                    result = runtime.preflight(self.config, "local")
+                self.assertEqual(result["local_inventory_ok"], not failures)
+                self.assertEqual({item["tool"] for item in result["tools"] if not item["ok"]}, failures)
+                self.assertEqual(result["missing_role_skills"], [])
+                self.assertTrue(all(item["ok"] for item in result["installations"]))
 
     def test_review_pair_cannot_be_split_across_profiles(self):
         profiles = []
