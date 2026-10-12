@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import childProcess, { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -95,7 +95,7 @@ test("all Git-declared repository-local environment variables are isolated", () 
   assert.deepEqual(gitEnvironment(inherited), { PATH: "/toolchain", GIT_CONFIG_GLOBAL: "/global-policy", GIT_OPTIONAL_LOCKS: "0" });
 });
 
-test("copies preserve local conversion, file modes, attribute precedence, ignores and staged/unstaged diffs", t => {
+for (const splitIndex of [false, true]) test(`copies preserve local conversion, file modes, attribute precedence, ignores and staged/unstaged diffs (split index: ${splitIndex})`, t => {
   const run = fixture(t);
   git(run.root, "config", "core.autocrlf", "true"); git(run.root, "config", "core.filemode", "false");
   const globalAttributes = path.join(run.temporary, "attributes"), globalIgnore = path.join(run.temporary, "ignore");
@@ -108,10 +108,16 @@ test("copies preserve local conversion, file modes, attribute precedence, ignore
   git(run.root, "add", "."); git(run.root, "commit", "-qm", "comparison inputs");
   // Same bytes and content, changed executable bit: core.filemode=false matters.
   chmodSync(path.join(run.root, "unchanged"), 0o755);
+  // Force a stat-only mismatch regardless of the filesystem's timestamp resolution.
+  utimesSync(path.join(run.root, "unchanged"), new Date(1000), new Date(1000));
   writeFileSync(path.join(run.root, "value"), "staged\r\n"); git(run.root, "add", "value");
   writeFileSync(path.join(run.root, "value"), "unstaged\r\n");
   for (const name of ["global-ignored", "local-ignored", "untracked"]) writeFileSync(path.join(run.root, name), name);
+  if (splitIndex) git(run.root, "update-index", "--split-index");
   const index = readFileSync(path.join(run.root, ".git/index"));
+  const sharedIndexes = () => readdirSync(path.join(run.root, ".git")).filter(name => name.startsWith("sharedindex."))
+    .sort().map(name => [name, readFileSync(path.join(run.root, ".git", name))]);
+  const shared = sharedIndexes();
   run.expected = snapshot(run.root, run.directory);
   assert.equal(pathsDifferFromIndex(run.root, ["unchanged", "a.global", "a.info", "a.local"], run.expected.repositories), false);
   assert.equal(pathsDifferFromIndex(run.root, ["value"], run.expected.repositories), true);
@@ -119,6 +125,7 @@ test("copies preserve local conversion, file modes, attribute precedence, ignore
   assert.deepEqual(diff(overlay), diff(run.root));
   assert.deepEqual(snapshot(overlay).files, run.expected.files);
   assert.deepEqual(readFileSync(path.join(run.root, ".git/index")), index);
+  assert.deepEqual(sharedIndexes(), shared);
   assert.equal(existsSync(path.join(overlay, "global-ignored")), false);
 });
 
