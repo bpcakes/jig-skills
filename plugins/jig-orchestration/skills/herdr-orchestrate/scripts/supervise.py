@@ -76,7 +76,7 @@ def read_json(source):
 
 
 def output(value):
-    print(json.dumps(value, ensure_ascii=False, sort_keys=True), flush=True)
+    print(json.dumps(value, ensure_ascii=True, sort_keys=True), flush=True)
 
 
 def positive_seconds(value, name):
@@ -258,7 +258,7 @@ def tick(run_dir, now=None):
                 previous = current["scheduler"].get("failure") or {}
                 continuing = previous.get("code") == code or previous.get("id") == "endpoint-" + code
                 return {"failure": {"id": previous["id"] if continuing else "endpoint-" + uuid.uuid4().hex,
-                                    "code": code, "at": previous["at"] if continuing else timestamp(now),
+                                    "code": code, "at": (previous.get("at") or timestamp(now)) if continuing else timestamp(now),
                                     "reason": str(exc)}}
             recorded = scheduler_patch(run_dir, failed)
             return {"status": "endpoint_unavailable", "failure": recorded["scheduler"]["failure"]}
@@ -434,14 +434,21 @@ def health(run_dir, now=None):
             last = alerts.get(failure["id"])
             attempts = 0
             if last is not None:
-                if last.get("status") != "not_started":
+                if (last.get("status") != "not_started" or type(last.get("attempts")) is not int
+                        or last["attempts"] < 1):
+                    decision["result"]["alert"] = "already_attempted"
+                    return fields or None
+                try:
+                    retry_at = scheduler_deadline(parse_time(last["at"]), HEALTH_ALERT_RETRY_SECONDS)
+                except (KeyError, TypeError, AttributeError, ValueError, RuntimeErrorDetail):
+                    # An incomplete receipt cannot establish that another send is safe.
                     decision["result"]["alert"] = "already_attempted"
                     return fields or None
                 attempts = last["attempts"]
                 if attempts >= HEALTH_ALERT_MAX_ATTEMPTS:
                     decision["result"]["alert"] = "retry_exhausted"
                     return fields or None
-                if now < scheduler_deadline(parse_time(last["at"]), HEALTH_ALERT_RETRY_SECONDS):
+                if now < retry_at:
                     decision["result"]["alert"] = "retry_pending"
                     return fields or None
             claim = {"failure_id": failure["id"], "status": "dispatching", "at": timestamp(now),

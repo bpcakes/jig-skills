@@ -153,6 +153,8 @@ Optional `busy_timeout_seconds` is positive finite seconds; its default is three
 
 Scheduler durations must also fit the supported timestamp range, including derived health deadlines. Initialization and configuration reject unrepresentable values before persisting state. A scheduler `failure` record must be null or contain a nonempty string `id` so completion and health checks can identify the incident.
 
+When a continuing endpoint failure lacks its original timestamp, the next observation supplies one while retaining its incident ID. Incomplete notification retry receipts are treated as already attempted: inspect their outcome before retrying; missing evidence never authorizes another send.
+
 ```sh
 python3 <skill-root>/scripts/supervise.py supervise --run-dir <private-run-dir>
 python3 <skill-root>/scripts/supervise.py tick --run-dir <private-run-dir>

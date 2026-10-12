@@ -1054,6 +1054,66 @@ class RuntimeTests(unittest.TestCase):
                                      "already_attempted")
                     self.assertEqual(delivered.read_bytes().splitlines(), notices)
 
+    def test_tick_preserves_incident_without_original_timestamp(self):
+        failure = {"id": "endpoint-existing", "code": "coordinator_blocked"}
+        self.schedule(failure=failure)
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            result = runtime.tick(self.run, self.now)
+        self.assertEqual(result["status"], "endpoint_unavailable")
+        self.assertEqual(result["failure"]["id"], failure["id"])
+        self.assertEqual(result["failure"]["at"], self.now.isoformat())
+        with patch.object(runtime, "herdr_call", return_value=self.response("blocked")):
+            repeated = runtime.tick(self.run, self.now + timedelta(seconds=61))
+        self.assertEqual(repeated["failure"], result["failure"])
+
+    def test_health_incomplete_retry_receipts_do_not_crash_or_resend(self):
+        self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/notifier"],
+                                  "notification_authorized": True})
+        failure = {"id": "endpoint-existing", "reason": "fixture"}
+        self.schedule(heartbeat_at=self.now.isoformat(), failure=failure)
+        for receipt in ({"status": "not_started"},
+                        {"status": "not_started", "attempts": "1", "at": self.now.isoformat()},
+                        {"status": "not_started", "attempts": 1},
+                        {"status": "not_started", "attempts": 1, "at": "invalid"},
+                        {"status": "not_started", "attempts": 1, "at": None}):
+            with self.subTest(receipt=receipt), patch.object(runtime.subprocess, "run") as notify:
+                self.schedule(health_alerts={failure["id"]: receipt})
+                result = runtime.health(self.run, self.now)
+                self.assertEqual(result["status"], "unhealthy")
+                self.assertEqual(result["alert"], "already_attempted")
+                notify.assert_not_called()
+                self.assertEqual(Engine.read(self.run)["scheduler"]["health_alerts"][failure["id"]], receipt)
+
+    def test_cli_round_trips_surrogates_and_unicode_in_stored_json(self):
+        value = "\\ud800 marker: " + "\ud800" + " ž 😀"
+        proof = {"ref": value, "observed_at": self.now.isoformat()}
+        Engine.apply(self.run, {
+            "op": "admit", "action_id": "admit-A", "expected_policy": 1,
+            "task_id": "A", "host": "local", "driver": "worker", "branch": "task/A",
+            "worktree": str(self.root / "trees" / "A"),
+            "claim": {**proof, "authority": "fixture-db", "task_id": "A", "owner": "worker",
+                      "confirmed": True, "ready": True, "unpublished": False}})
+        def cli(arguments, request=None):
+            with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": "", "PYTHONIOENCODING": "utf-8:strict"}):
+                result = subprocess.run([sys.executable, "-B", str(SCRIPTS / "supervise.py"),
+                                         *arguments, "--run-dir", str(self.run)],
+                                        input=json.dumps(request) if request else None,
+                                        capture_output=True, text=True, check=True)
+            self.assertEqual(result.stderr, "")
+            return json.loads(result.stdout)
+        claimed = cli(["apply"], {"op": "claim_intent", "action_id": "unicode-claim", "expected_policy": 1,
+                                   "task_id": "B", "target": {"authority": "fixture-db", "owner": "worker"},
+                                   "evidence": proof})
+        self.assertEqual(claimed["claim_intent"]["evidence"]["ref"], value)
+        observed = cli(["serve", "--caller", "worker"], {
+            "op": "observe", "action_id": "unicode-observe", "expected_policy": 1, "task_id": "A",
+            "expected_task": Engine.read(self.run)["tasks"]["A"]["version"],
+            "fields": {"findings": value}, "evidence": proof})
+        self.assertEqual(observed["observed"], ["findings"])
+        self.assertEqual(cli(["status"])["tasks"]["A"]["findings"], value)
+        self.assertEqual(cli(["status", "--task", "A"])["findings"], value)
+        self.assertEqual(cli(["action", "--id", "unicode-observe"])["request"]["fields"]["findings"], value)
+
     def test_health_never_replays_a_notifier_that_may_have_sent(self):
         notifier = self.root / "notifier"
         delivered = self.root / "delivered"
