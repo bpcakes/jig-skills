@@ -276,7 +276,10 @@ function classifyFailure(error, transcript, started = null) {
   if (status && !error.timedOut && !error.cancelled) {
     error.message = `codex exited with ${status}${structured.length
       ? `: ${structured.join("; ")}`
-      : "; no structured provider error was reported (see transcript)"}`;
+      : "; no structured provider error was reported"}`;
+    // runCommand bounds stderr to its diagnostic tail. Both the standalone CLI
+    // and bridge expose message; only providerError controls retryability.
+    if (error.transcript) error.message += `\nCodex stderr (untrusted diagnostic tail):\n${error.transcript}`;
   }
   return error;
 }

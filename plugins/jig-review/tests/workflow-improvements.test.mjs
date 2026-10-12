@@ -129,6 +129,14 @@ test("bridge marks only recognized permanent errors non-retryable", () => {
   for (const error of ["authentication failed", "quota exceeded", "usage limit reached",
     "jig exited with 1: No eligible Claude home with fresh subscription headroom; inspect `jig claude homes --usage` or pass HOME explicitly",
     "jig exited with 2: error: unexpected argument '--auto' found"]) assert.equal(failureResult(new Error(error)).retryable, false);
+  for (const provider of ["Claude", "Codex"]) {
+    for (const diagnostic of [`No ${provider} homes found under the configured search roots`,
+      `${provider} home 'missing' was not found at /tmp/missing`]) {
+      assert.equal(failureResult(new Error(`jig exited with 1: ${diagnostic}`)).retryable, false, diagnostic);
+      assert.equal(failureResult(Object.assign(new Error(diagnostic), { providerError: "", transcript: diagnostic })).retryable, undefined,
+        "quoted missing-home errors must not disable a provider that has already started");
+    }
+  }
   // An adapter that separates the provider's error channel from transcript text decides through providerError.
   assert.equal(failureResult(Object.assign(new Error("codex exited with 1; no structured provider error was reported"), { providerError: "", transcript: "ENOENT quota exceeded" })).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("codex exited with 1: usage limit reached"), { providerError: "usage limit reached" })).retryable, false);

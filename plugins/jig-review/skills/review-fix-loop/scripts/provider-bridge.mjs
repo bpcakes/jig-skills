@@ -47,12 +47,12 @@ export async function reviewAssignment(assignment, dependencies = {}) {
 export function failureResult(error) {
   // Only known stable configuration/authentication failures disable a provider.
   // Transient capacity errors retain the controller's bounded retry policy.
-  // A Jig launcher that finds no home with headroom, or that predates the
-  // selected option, is a stable configuration failure for this run.
+  // A Jig launcher that cannot find the selected home or any home with headroom,
+  // or that predates the selected option, is a stable configuration failure.
   // Adapters that separate the provider's own error channel from transcript
   // text expose it as providerError; quoted repository output never classifies.
   const reported = error.providerError !== undefined ? error.providerError : error.message;
-  const permanent = /(?:invalid (?:api key|model)|incorrect api key|\b401\s+unauthorized\b|authentication (?:failed|required)|not (?:logged in|authenticated)|insufficient[_ ]quota|quota exceeded|usage limit (?:reached|exceeded)|out of credits|credit balance.*(?:low|exhausted)|unknown (?:option|model)|no eligible (?:claude|codex) home|requires file-based credentials|isolation incomplete|does not permit executing|unexpected argument|unrecognized subcommand|ENOENT)/i.test(reported);
+  const permanent = /(?:invalid (?:api key|model)|incorrect api key|\b401\s+unauthorized\b|authentication (?:failed|required)|not (?:logged in|authenticated)|insufficient[_ ]quota|quota exceeded|usage limit (?:reached|exceeded)|out of credits|credit balance.*(?:low|exhausted)|unknown (?:option|model)|no eligible (?:claude|codex) home|no (?:claude|codex) homes found|(?:claude|codex) home '[^\r\n]*' was not found|requires file-based credentials|isolation incomplete|does not permit executing|unexpected argument|unrecognized subcommand|ENOENT)/i.test(reported);
   return { error: error.message, ...(permanent ? { retryable: false } : {}),
     ...(error.timedOut || error.parentSignal ? { execution: "uncertain" } : {}) };
 }

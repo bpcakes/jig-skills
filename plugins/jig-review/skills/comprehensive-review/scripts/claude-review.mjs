@@ -267,7 +267,8 @@ async function runClaudeReview(options, dependencies = {}) {
       env: gitEnvironment(childEnvironment(process.env, {
         ...(options.configDir == null ? {} : { CLAUDE_CONFIG_DIR: options.configDir }),
         ...(options.launcher !== "none" || options.configDir != null
-          ? Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, null]))
+          // A gateway URL must not survive removal of its matching credentials.
+          ? { ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, null])), ANTHROPIC_BASE_URL: null }
           : {}),
       })),
     });
