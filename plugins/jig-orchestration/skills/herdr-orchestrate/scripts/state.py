@@ -289,6 +289,7 @@ class Engine:
 
     @staticmethod
     def action(run_dir, action_id):
+        require(nonempty(action_id), "invalid", "action_id must be a nonempty string")
         with locked(run_dir) as path:
             filename = hashlib.sha256(action_id.encode()).hexdigest() + ".json"
             record = path / "actions" / filename

@@ -1074,6 +1074,25 @@ class RuntimeTests(unittest.TestCase):
                         runtime.serve(run, "worker", {"op": "action", "action_id": action_id})
                     self.assertEqual(caught.exception.code, "wrong_caller")
 
+    def test_restricted_action_cli_rejects_malformed_ids_as_json(self):
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "serve",
+                   "--run-dir", str(self.run), "--caller", "worker"]
+        before = Engine.read(self.run)
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            for action_id in (1, 1.5, True, None, [], {}, "", " "):
+                with self.subTest(action_id=action_id):
+                    result = subprocess.run(command, input=json.dumps({"op": "action", "action_id": action_id}),
+                                            capture_output=True, text=True, check=False)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stderr, "")
+                    self.assertEqual(json.loads(result.stdout), {
+                        "ok": False, "error": {"code": "invalid", "message": "action_id must be a nonempty string"}})
+                    self.assertEqual(Engine.read(self.run), before)
+            result = subprocess.run(command, input=json.dumps({"op": "action", "action_id": "absent"}),
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(json.loads(result.stdout), {"status": "not_found"})
+            self.assertEqual(result.stderr, "")
+
     def test_restricted_query_follows_task_handoff(self):
         self.config["hosts"]["remote"] = {
             "slots": 1, "worktree_root": str(self.root / "remote-trees"),
