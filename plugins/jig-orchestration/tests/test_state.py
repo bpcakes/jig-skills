@@ -5,6 +5,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -94,6 +95,71 @@ class EngineTests(unittest.TestCase):
         self.run = self.base / f"private-run-{self.serial}"
         self.serial += 1
         Engine.initialize(self.run, self.config)
+
+    def assert_cli_object_error(self, command, request, *arguments):
+        before = Engine.read(self.run)
+        argv = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), command]
+        if command != "preflight":
+            argv.extend(["--run-dir", str(self.run)])
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            result = subprocess.run([*argv, *arguments], input=json.dumps(request),
+                                    capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "")
+        response = json.loads(result.stdout)
+        self.assertIs(response["ok"], False)
+        self.assertEqual(response["error"]["code"], "invalid_input")
+        self.assertTrue(response["error"]["message"])
+        self.assertEqual(Engine.read(self.run), before)
+        self.assertFalse((self.run / "transaction.json").exists())
+
+    def test_cli_rejects_wrong_shape_successor_on_restricted_route(self):
+        self.admit()
+        self.apply("observe", "A", fields={"refs": {"session": "old"}}, evidence=self.proof())
+        for successor in ("x", [], 1, None):
+            with self.subTest(successor=successor):
+                request = self.request("observe", "A", fields={"refs": {"session": "new"}},
+                                       successor=successor, evidence=self.proof())
+                self.assert_cli_object_error("serve", request, "--caller", "worker-a")
+        self.apply("observe", "A", caller="worker-a", fields={"refs": {"session": "new"}},
+                   successor={"previous_refs": {"session": "old"}, "evidence": self.proof(True)},
+                   evidence=self.proof())
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["refs"]["session"], "new")
+
+    def test_cli_rejects_wrong_shape_merge_gates_on_restricted_route(self):
+        self.admit()
+        self.apply("delegate", "A", executor="worker-a", actions=["merge"])
+        reservation = self.reserve(kind="merge", caller="worker-a")
+        target = {"repository": str(self.repo), "base": "main", "pr": 10, "head": "H2"}
+        for gates in ([], "x", 1, None):
+            with self.subTest(gates=gates):
+                request = self.request("intent", "A", kind="merge", target=target,
+                                       reservation_id=reservation["reservation_id"], gates=gates, evidence=self.proof())
+                self.assert_cli_object_error("serve", request, "--caller", "worker-a")
+
+    def test_cli_rejects_wrong_shape_claim_and_reopen_targets(self):
+        for target in ("x", [], 1, None):
+            with self.subTest(op="claim_intent", target=target):
+                self.assert_cli_object_error("apply", self.request(
+                    "claim_intent", "A", target=target, evidence=self.proof()))
+        self.admit()
+        self.apply("close", "A", receipt={
+            **self.proof(), "authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor",
+            "status": "closed", "criteria_met": True, "acceptance_ref": "/proof", "unpublished": False})
+        for target in ("x", [], 1, None):
+            with self.subTest(op="reopen_intent", target=target):
+                self.assert_cli_object_error("apply", self.request(
+                    "reopen_intent", "A", target=target, evidence=self.proof()))
+
+    def test_cli_rejects_wrong_shape_configuration_objects(self):
+        for field in ("repository", "scope", "tracker"):
+            for value in ("x", [], 1, None):
+                with self.subTest(field=field, value=value):
+                    config = {**self.config, field: value}
+                    self.assert_cli_object_error("init", config, "--config", "-")
+        self.assert_cli_object_error("init", {**self.config, "hosts": {"local": "x"}}, "--config", "-")
+        self.assert_cli_object_error("preflight", {**self.config, "hosts": []},
+                                     "--config", "-", "--host", "local")
 
     def test_private_external_state_and_unsupported_capabilities(self):
         self.assertEqual(self.run.stat().st_mode & 0o777, 0o700)

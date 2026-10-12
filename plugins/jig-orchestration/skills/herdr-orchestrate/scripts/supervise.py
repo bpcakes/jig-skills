@@ -693,6 +693,6 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         output(main())
-    except (StateError, RuntimeErrorDetail, OSError, ValueError, KeyError, TypeError) as error:
+    except (StateError, RuntimeErrorDetail, OSError, ValueError, KeyError, TypeError, AttributeError) as error:
         output({"ok": False, "error": {"code": getattr(error, "code", "invalid_input"), "message": str(error)}})
         sys.exit(1)
