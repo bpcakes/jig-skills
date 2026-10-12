@@ -10,6 +10,7 @@ import { storeBlob } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { advance } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
 import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { gitEnvironment } from "../skills/comprehensive-review/scripts/git-environment.mjs";
+import { assertCommitScope } from "../skills/review-fix-loop/scripts/round-commits.mjs";
 
 function fixture(t) {
   const directory = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-git-copy-")));
@@ -127,6 +128,40 @@ for (const splitIndex of [false, true]) test(`copies preserve local conversion, 
   assert.deepEqual(readFileSync(path.join(run.root, ".git/index")), index);
   assert.deepEqual(sharedIndexes(), shared);
   assert.equal(existsSync(path.join(overlay, "global-ignored")), false);
+});
+
+for (const splitIndex of [false, true]) test(`private diff preserves racy-clean edits and copy parity (split index: ${splitIndex})`, t => {
+  const run = fixture(t), file = path.join(run.root, "value"), indexPath = path.join(run.root, ".git/index");
+  const stamp = new Date("2025-01-01T00:00:00Z");
+  git(run.root, "config", "core.trustctime", "false");
+  utimesSync(file, stamp, stamp); git(run.root, "add", "value");
+  if (splitIndex) git(run.root, "update-index", "--split-index");
+  utimesSync(indexPath, stamp, stamp);
+  writeFileSync(file, "next\n"); utimesSync(file, stamp, stamp);
+  const index = readFileSync(indexPath);
+  const args = ["diff", "--raw", "--no-ext-diff", "--no-textconv"];
+  const ordinary = execFileSync("git", args, { cwd: run.root, env: gitEnvironment() });
+  assert.match(ordinary.toString(), / M\tvalue/);
+  assert.deepEqual(git(run.root, ...args), ordinary);
+  run.expected = snapshot(run.root, run.directory);
+  const overlay = makeOverlay(run, run.expected, "racy-clean");
+  assert.deepEqual(diff(overlay), diff(run.root));
+  assert.equal(readFileSync(path.join(overlay, "value"), "utf8"), "next\n");
+  assert.deepEqual(readFileSync(indexPath), index);
+});
+
+for (const splitIndex of [false, true]) test(`commit-scope rejection preserves a stale index (split index: ${splitIndex})`, t => {
+  const run = fixture(t);
+  writeFileSync(path.join(run.root, "excluded"), "base\n");
+  git(run.root, "add", "excluded"); git(run.root, "commit", "-qm", "excluded input");
+  if (splitIndex) git(run.root, "update-index", "--split-index");
+  utimesSync(path.join(run.root, "value"), new Date(1000), new Date(1000));
+  writeFileSync(path.join(run.root, "excluded"), "changed\n");
+  const indexes = () => readdirSync(path.join(run.root, ".git")).filter(name => name === "index" || name.startsWith("sharedindex."))
+    .sort().map(name => [name, readFileSync(path.join(run.root, ".git", name))]);
+  const before = indexes(), current = snapshot(run.root);
+  assert.throws(() => assertCommitScope(run.root, current, ["excluded"]), /Dirty excluded path excluded/);
+  assert.deepEqual(indexes(), before);
 });
 
 test("each initialized submodule retains its own conversion settings", t => {

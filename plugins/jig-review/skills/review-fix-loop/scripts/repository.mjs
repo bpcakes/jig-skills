@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, closeSync, constants, copyFileSync, existsSync, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readlinkSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, constants, copyFileSync, existsSync, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readlinkSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { contentHash, copyBlob, hash, json, readBlob, readJSON, storeBlob, storeFile } from "./run-store.mjs";
@@ -13,16 +13,24 @@ import { assertStorage, DEFAULT_STORAGE, storageLimit } from "./storage-budget.m
 export function git(cwd, ...args) {
   const env = gitEnvironment();
   const execute = argv => execFileSync("git", argv, { cwd, env, maxBuffer: 64 * 1024 * 1024, timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
-  if (args[0] !== "diff") return execute(args);
+  let command = 0;
+  while (args[command] === "-c") command += 2;
+  if (args[command] !== "diff") return execute(args);
   // Porcelain diff can refresh stat-only changes even with optional locks off.
   // Preserve its content-aware raw output while confining writes to a private index.
   const index = execute(["rev-parse", "--path-format=absolute", "--git-path", "index"]).toString("utf8").trim();
   const scratch = mkdtempSync(path.join(os.tmpdir(), "jig-diff-index-"));
   try {
     env.GIT_INDEX_FILE = path.join(scratch, "index");
-    if (existsSync(index)) copyFileSync(index, env.GIT_INDEX_FILE);
+    if (existsSync(index)) {
+      const stat = lstatSync(index);
+      copyFileSync(index, env.GIT_INDEX_FILE);
+      // Git uses the index timestamp to detect same-size, same-tick edits.
+      // Round down so lost sub-millisecond precision only adds content checks.
+      utimesSync(env.GIT_INDEX_FILE, stat.atime, new Date(Math.floor(stat.mtimeMs)));
+    }
     // Read existing split indexes, but never write shared indexes in the source repository.
-    return execute(["-c", "core.splitIndex=false", ...args]);
+    return execute([...args.slice(0, command), "-c", "core.splitIndex=false", ...args.slice(command)]);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
