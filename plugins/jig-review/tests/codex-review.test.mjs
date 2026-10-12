@@ -303,11 +303,34 @@ test("a missing final message fails the review instead of returning an empty rep
   assert.equal(failureResult(failure).retryable, false);
 });
 
+test("Codex incorrect API key errors disable the provider through the bridge", async (t) => {
+  const f = await adapterFixture(t);
+  const message = "unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]";
+  const events = [
+    { type: "error", message },
+    { type: "turn.failed", error: { message } },
+  ];
+  const codex = fakeProvider(f.scratch, "invalid-key-codex.mjs", { exitCode: 1,
+    stdout: events.map(event => JSON.stringify(event)).join("\n") + "\n" });
+  let failure;
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: codex }), error => { failure = error; return true; });
+  assert.equal(failure.providerError, `${message}\n${message}`);
+  assert.equal(failureResult(failure).retryable, false);
+
+  // Each supported error envelope must work without another event carrying the message.
+  for (const event of [...events, { type: "error", error: { message } },
+    { type: "error", error: message }, { type: "turn.failed", error: message }]) {
+    const error = classifyFailure(new Error("codex exited with 1"), Buffer.from(JSON.stringify(event) + "\n"));
+    assert.equal(error.providerError, message);
+    assert.equal(failureResult(error).retryable, false, JSON.stringify(event));
+  }
+});
+
 test("transcript text never classifies a failure; only Codex's structured error events do", async (t) => {
   const f = await adapterFixture(t);
   const transcript = [
     JSON.stringify({ type: "thread.started", thread_id: "t1" }),
-    JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "cat README.md", aggregated_output: "ENOENT: quota exceeded, usage limit reached, authentication failed" } }),
+    JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "cat README.md", aggregated_output: "ENOENT: quota exceeded, usage limit reached, authentication failed; unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]" } }),
   ].join("\n") + "\n";
   const noisy = fakeProvider(f.scratch, "noisy-codex.mjs", { exitCode: 1, stdout: transcript, stderr: "cat README.md\nENOENT: quota exceeded\n" });
   let failure;

@@ -117,7 +117,7 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
   assert.deepEqual(result, vote(a));
   assert.throws(() => parseReport(a, JSON.stringify({ ...vote(a), fingerprint: "wrong" })), /Malformed/);
   // Report formatting failures stay retryable even when the report text quotes a permanent-failure phrase.
-  for (const report of ["ENOENT: no such file quota exceeded", JSON.stringify({ ...vote(a), fingerprint: "wrong authentication failed" })]) {
+  for (const report of ["ENOENT: no such file quota exceeded", "unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]", JSON.stringify({ ...vote(a), fingerprint: "wrong authentication failed" })]) {
     let failure;
     assert.throws(() => parseReport(a, report), (error) => { failure = error; return true; });
     assert.equal(failure.providerError, "");
@@ -132,6 +132,12 @@ test("bridge marks only recognized permanent errors non-retryable", () => {
   // An adapter that separates the provider's error channel from transcript text decides through providerError.
   assert.equal(failureResult(Object.assign(new Error("codex exited with 1; no structured provider error was reported"), { providerError: "", transcript: "ENOENT quota exceeded" })).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("codex exited with 1: usage limit reached"), { providerError: "usage limit reached" })).retryable, false);
+  for (const providerError of ["unexpected status 401 Unauthorized", "Incorrect API key provided: [redacted]"]) {
+    assert.equal(failureResult(Object.assign(new Error("codex exited with 1"), { providerError })).retryable, false);
+  }
+  for (const providerError of ["unexpected status 429 Too Many Requests", "unexpected status 503 Service Unavailable"]) {
+    assert.equal(failureResult(Object.assign(new Error("codex exited with 1"), { providerError })).retryable, undefined);
+  }
   assert.equal(failureResult(new Error("temporary capacity exceeded")).retryable, undefined);
   assert.equal(failureResult(Object.assign(new Error("timed out"), { timedOut: true })).execution, "uncertain");
 });
@@ -302,6 +308,23 @@ test("a known permanent provider failure is retained and never repeatedly dispat
   const run = await runUntilBoundary((await f.start({ reviewers: [{ id: "claude", command }], reviewConcurrency: 1 }, ["--reviewers", "claude"])).directory);
   assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
   assert.equal(run.attempts.length, 1); assert.ok(run.providerFailures.claude);
+  assert.deepEqual(status(run).providerCoverage.completed, []);
+});
+
+test("Codex incorrect API key errors stop controller retries after one attempt", async t => {
+  const f = fixture(t), file = path.join(f.root, ".git", "invalid-key-provider.mjs");
+  writeFileSync(file, `import { classifyFailure } from ${JSON.stringify(import.meta.resolve("../skills/comprehensive-review/scripts/codex-review.mjs"))};
+import { failureResult } from ${JSON.stringify(import.meta.resolve("../skills/review-fix-loop/scripts/provider-bridge.mjs"))};
+for await (const chunk of process.stdin) {}
+const event = { type: "turn.failed", error: { message: "unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]" } };
+const error = classifyFailure(new Error("codex exited with 1"), Buffer.from(JSON.stringify(event) + "\\n"));
+process.stdout.write(JSON.stringify(failureResult(error)) + "\\n");`);
+  const run = await runUntilBoundary((await f.start({
+    reviewers: [{ id: "codex", command: [process.execPath, file] }], reviewConcurrency: 1,
+  }, ["--reviewers", "codex"])).directory);
+  assert.equal(run.phase, "REVIEW_INCOMPLETE", JSON.stringify(run.outcome));
+  assert.equal(run.attempts.length, 1);
+  assert.match(run.providerFailures.codex.error, /401 Unauthorized: Incorrect API key provided/);
   assert.deepEqual(status(run).providerCoverage.completed, []);
 });
 
