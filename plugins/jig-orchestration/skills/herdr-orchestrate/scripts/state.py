@@ -54,10 +54,15 @@ def nonempty(value):
 
 
 def host_roles(info):
-    roles = info.get("roles", [])
-    require(isinstance(roles, list) and all(nonempty(role) for role in roles),
-            "invalid", "host roles must be a list of nonempty strings")
-    return roles
+    """Validate host/profile role lists without changing profile inheritance."""
+    profiles = info.get("profiles", [])
+    require(isinstance(profiles, list), "invalid", "host profiles must be a list")
+    for binding in [info, *profiles]:
+        require(isinstance(binding, dict), "invalid", "host profiles must contain objects")
+        roles = binding.get("roles", [])
+        require(isinstance(roles, list) and all(nonempty(role) for role in roles),
+                "invalid", "host and profile roles must be lists of nonempty strings")
+    return info.get("roles", [])
 
 
 def scheduler_deadline(at, seconds):

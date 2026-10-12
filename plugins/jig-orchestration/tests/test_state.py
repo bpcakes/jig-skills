@@ -161,31 +161,54 @@ class EngineTests(unittest.TestCase):
         self.assert_cli_object_error("preflight", {**self.config, "hosts": []},
                                      "--config", "-", "--host", "local")
 
-    def test_cli_rejects_host_roles_before_configuration_persistence(self):
+    def assert_cli_rejects_role_config(self, config):
         fresh_run = self.base / "invalid-roles-run"
         before = Engine.read(self.run)
+        request = self.request("configure", fields={"hosts": config["hosts"]}, evidence=self.proof())
+        commands = (("init", ["--run-dir", str(fresh_run), "--config", "-"], config),
+                    ("preflight", ["--config", "-", "--host", "local"], config),
+                    ("apply", ["--run-dir", str(self.run)], request))
+        for command, arguments, payload in commands:
+            with self.subTest(command=command):
+                with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                    result = subprocess.run(
+                        [sys.executable, "-B", str(SCRIPTS / "supervise.py"), command, *arguments],
+                        input=json.dumps(payload), capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stderr, "")
+                response = json.loads(result.stdout)
+                self.assertIs(response["ok"], False)
+                self.assertIn("roles", response["error"]["message"])
+                self.assertFalse(fresh_run.exists())
+                self.assertEqual(Engine.read(self.run), before)
+                self.assertFalse((self.run / "transaction.json").exists())
+
+    def test_cli_rejects_host_roles_before_configuration_persistence(self):
         for roles in (None, 5, "coordinator", {}, [None], [5], [""], ["coordinator", " "]):
-            config = copy.deepcopy(self.config)
-            config["hosts"]["local"]["roles"] = roles
-            request = self.request("configure", fields={"hosts": config["hosts"]}, evidence=self.proof())
-            commands = (("init", ["--run-dir", str(fresh_run), "--config", "-"], config),
-                        ("preflight", ["--config", "-", "--host", "local"], config),
-                        ("apply", ["--run-dir", str(self.run)], request))
-            for command, arguments, payload in commands:
-                with self.subTest(roles=roles, command=command):
-                    with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
-                        result = subprocess.run(
-                            [sys.executable, "-B", str(SCRIPTS / "supervise.py"), command, *arguments],
-                            input=json.dumps(payload), capture_output=True, text=True, check=False)
-                    self.assertEqual(result.returncode, 1)
-                    self.assertEqual(result.stderr, "")
-                    response = json.loads(result.stdout)
-                    self.assertIs(response["ok"], False)
-                    self.assertIn("roles", response["error"]["message"])
-                    self.assertFalse(fresh_run.exists())
-                    self.assertEqual(Engine.read(self.run), before)
-                    self.assertFalse((self.run / "transaction.json").exists())
+            with self.subTest(roles=roles):
+                config = copy.deepcopy(self.config)
+                config["hosts"]["local"]["roles"] = roles
+                self.assert_cli_rejects_role_config(config)
         self.admit()
+
+    def test_cli_rejects_profile_roles_before_configuration_persistence(self):
+        for roles in (None, 5, "review", "coordinator", {}, [None], [5], [""], ["review", " "]):
+            with self.subTest(roles=roles):
+                config = copy.deepcopy(self.config)
+                config["hosts"]["local"]["profiles"] = [
+                    {"agent_home": str(self.base / "profile"), "roles": roles}]
+                self.assert_cli_rejects_role_config(config)
+        for roles in (None, [], ["review"]):
+            with self.subTest(valid_roles=roles):
+                hosts = copy.deepcopy(self.config["hosts"])
+                profile = {"agent_home": str(self.base / "profile")}
+                if roles is not None:
+                    profile["roles"] = roles
+                hosts["local"]["profiles"] = [profile]
+                self.reset(hosts=hosts)
+                self.apply("configure", fields={"hosts": hosts}, evidence=self.proof())
+                self.assertEqual(Engine.read(self.run)["config"]["hosts"]["local"]["profiles"], [profile])
+                self.admit()
 
     def test_host_role_lists_preserve_legacy_repository_protection(self):
         for roles in (None, [], ["worker"], ["worker", "coordinator"]):
