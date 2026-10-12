@@ -524,12 +524,15 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
     "",
   ].join("\n"));
   chmodSync(fakeJig, 0o755);
+  const cloudProviderVariables = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"];
   const previous = { FAKE_CLAUDE_CAPTURE: process.env.FAKE_CLAUDE_CAPTURE, CLAUDECODE: process.env.CLAUDECODE,
     ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+    ...Object.fromEntries(cloudProviderVariables.map((name) => [name, process.env[name]])),
     CLAUDE_CODE_MESSAGING_SOCKET: process.env.CLAUDE_CODE_MESSAGING_SOCKET, CLAUDE_EFFORT: process.env.CLAUDE_EFFORT, JIG_LAUNCHER_BIN: process.env.JIG_LAUNCHER_BIN,
     ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, process.env[name]])) };
   Object.assign(process.env, { FAKE_CLAUDE_CAPTURE: capturePath, CLAUDECODE: "1", CLAUDE_CODE_MESSAGING_SOCKET: "/run/parent.sock", CLAUDE_EFFORT: "xhigh",
     ANTHROPIC_BASE_URL: "https://gateway.example.invalid",
+    ...Object.fromEntries(cloudProviderVariables.map((name) => [name, "1"])),
     ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, `inherited-${name}`])) });
   delete process.env.JIG_LAUNCHER_BIN;
   t.after(() => {
@@ -562,6 +565,7 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   assert.equal(captured.env.CLAUDE_CODE_MESSAGING_SOCKET, undefined);
   assert.equal(captured.env.CLAUDE_EFFORT, undefined);
   for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], undefined, `${name} must not override the launcher-selected home`);
+  for (const name of cloudProviderVariables) assert.equal(captured.env[name], undefined, `${name} must not bypass the launcher-selected subscription`);
   assert.equal(captured.env.ANTHROPIC_BASE_URL, undefined, "the inherited gateway must not outlive its removed credentials");
   assert.equal(captured.env.FAKE_CLAUDE_CAPTURE, capturePath, "unrelated variables are inherited");
 
@@ -571,6 +575,7 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   assert.deepEqual(captured.argv.slice(0, 5), ["claude", "launch", "work", "--", "-p"]);
   assert.equal(captured.env.CLAUDE_CONFIG_DIR, undefined, "the launcher, not the adapter, selects the home");
   for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], undefined, `${name} must not override the named home`);
+  for (const name of cloudProviderVariables) assert.equal(captured.env[name], undefined, `${name} must not bypass the named subscription`);
   assert.equal(captured.env.ANTHROPIC_BASE_URL, undefined);
 
   // An explicit --config-dir is also an account selection; a plain launch keeps the environment's own credentials.
@@ -579,9 +584,11 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   captured = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.equal(captured.env.CLAUDE_CONFIG_DIR, path.join(os.homedir(), ".claude-work"));
   for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], undefined, `${name} must not override --config-dir`);
+  for (const name of cloudProviderVariables) assert.equal(captured.env[name], undefined, `${name} must not bypass --config-dir`);
   assert.equal(captured.env.ANTHROPIC_BASE_URL, undefined);
   await runClaudeReview(parse([]), { claudeBin: fakeJig });
   captured = JSON.parse(readFileSync(capturePath, "utf8"));
   for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], `inherited-${name}`, `${name} is the environment's own account without a selection`);
+  for (const name of cloudProviderVariables) assert.equal(captured.env[name], "1", `${name} remains the environment's own routing without a selection`);
   assert.equal(captured.env.ANTHROPIC_BASE_URL, "https://gateway.example.invalid", "a plain launch retains its gateway and credentials together");
 });

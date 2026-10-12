@@ -267,8 +267,14 @@ async function runClaudeReview(options, dependencies = {}) {
       env: gitEnvironment(childEnvironment(process.env, {
         ...(options.configDir == null ? {} : { CLAUDE_CONFIG_DIR: options.configDir }),
         ...(options.launcher !== "none" || options.configDir != null
-          // A gateway URL must not survive removal of its matching credentials.
-          ? { ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, null])), ANTHROPIC_BASE_URL: null }
+          // Inherited credentials or provider routing must not bypass the selected subscription.
+          ? {
+            ...Object.fromEntries(CREDENTIAL_VARIABLES.map((name) => [name, null])),
+            ANTHROPIC_BASE_URL: null,
+            CLAUDE_CODE_USE_BEDROCK: null,
+            CLAUDE_CODE_USE_VERTEX: null,
+            CLAUDE_CODE_USE_FOUNDRY: null,
+          }
           : {}),
       })),
     });
