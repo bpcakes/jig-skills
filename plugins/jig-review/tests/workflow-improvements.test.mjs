@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { advance, runUntilBoundary, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
+import { commandEnvironment } from "../skills/review-fix-loop/scripts/job-runtime.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { loadRun, resultFile } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { resultSchema } from "../skills/review-fix-loop/scripts/assignment-schema.mjs";
@@ -184,6 +185,18 @@ test("launcher-selected bundled bridges preflight the Jig executable instead of 
   await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "cli" }] }, ["--reviewers", "codex", "--codex-effort", "ultra"]), /not valid for the cli Codex runtime/);
   // A native entry overriding --codex-runtime cli must not admit a CLI-only effort.
   await assert.rejects(f.start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--reviewers", "codex", "--codex-runtime", "cli", "--codex-effort", "minimal"]), /not valid for the native Codex runtime/);
+});
+
+test("review workers inherit every credential their provider CLI honors and nothing else", () => {
+  const inherited = { PATH: "/usr/bin", HOME: "/home/u", SECRET_TOKEN: "no", CODEX_API_KEY: "ck", CODEX_ACCESS_TOKEN: "ct", OPENAI_API_KEY: "ok", CODEX_HOME: "/home/u/.codex-work",
+    ANTHROPIC_API_KEY: "ak", ANTHROPIC_AUTH_TOKEN: "at", CLAUDE_CODE_OAUTH_TOKEN: "ot", CLAUDE_CONFIG_DIR: "/home/u/.claude-work", CURSOR_API_KEY: "cu", JIG_LAUNCHER_BIN: "/opt/jig" };
+  const codex = commandEnvironment({ role: "review", assignment: { provider: "codex" } }, inherited);
+  for (const name of ["CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY", "CODEX_HOME", "JIG_LAUNCHER_BIN", "PATH", "HOME"]) assert.equal(codex[name], inherited[name], name);
+  for (const name of ["SECRET_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CURSOR_API_KEY"]) assert.equal(codex[name], undefined, name);
+  const claude = commandEnvironment({ role: "review", assignment: { provider: "claude" } }, inherited);
+  for (const name of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "JIG_LAUNCHER_BIN"]) assert.equal(claude[name], inherited[name], name);
+  assert.equal(claude.CODEX_API_KEY, undefined);
+  assert.equal(commandEnvironment({ role: "validate", assignment: {} }, inherited).CODEX_API_KEY, undefined, "validation never receives provider credentials");
 });
 
 test("the CLI Codex runtime without a launcher preflights only the codex executable", async t => {

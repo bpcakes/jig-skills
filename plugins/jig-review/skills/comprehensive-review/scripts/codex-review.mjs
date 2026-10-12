@@ -29,8 +29,9 @@ import {
 const DEFAULT_TIMEOUT_MS = 28 * 60 * 1000;
 const MAX_CODEX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const LAST_MESSAGE_FILE = "codex-last-message.txt";
-// Environment credentials that Codex would use instead of the selected home's.
-const API_KEY_VARIABLES = Object.freeze(["CODEX_API_KEY", "OPENAI_API_KEY"]);
+// Environment credentials that Codex would use instead of the selected home's,
+// and that Jig refuses to combine with automatic selection.
+const API_KEY_VARIABLES = Object.freeze(["CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY"]);
 const PRIVATE_HOME_DIR = "codex-home";
 const SHIM_FILE = "codex-shim.sh";
 const MAX_TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024;

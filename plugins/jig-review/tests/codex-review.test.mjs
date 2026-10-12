@@ -236,12 +236,12 @@ test("the adapter runs Codex directly with a scrubbed environment and shell-orie
   assert.equal(captured.env.JIG_REVIEW_CODEX_BIN, fakeCodex);
 });
 
-test("without a launcher the environment's own API key is left to Codex's precedence", async (t) => {
+test("without a launcher the environment's own credentials are left to Codex's precedence", async (t) => {
   const f = await adapterFixture(t);
-  withEnvironment(t, { OPENAI_API_KEY: "sk-own-key" });
+  withEnvironment(t, Object.fromEntries(API_KEY_VARIABLES.map((name) => [name, `own-${name}`])));
   const fakeCodex = fakeProvider(f.scratch, "keyed-codex.mjs");
   await runCodexReview(f.parse(), { codexBin: fakeCodex });
-  assert.equal(f.captured().env.OPENAI_API_KEY, "sk-own-key");
+  for (const name of API_KEY_VARIABLES) assert.equal(f.captured().env[name], `own-${name}`);
 });
 
 test("without a launcher the shim runs through sh, and an unexecutable shim is a permanent failure under a launcher", async (t) => {
@@ -403,7 +403,8 @@ test("a selected home without file-based credentials is a permanent failure", as
 test("under a launcher the shim passes inspection through and isolates only exec", async (t) => {
   const f = await adapterFixture(t);
   // Environment API keys would take precedence over the selected home's credentials.
-  withEnvironment(t, { CODEX_API_KEY: "sk-other-account", OPENAI_API_KEY: "sk-other-account-2" });
+  withEnvironment(t, Object.fromEntries(API_KEY_VARIABLES.map((name) => [name, `other-${name}`])));
+  assert.ok(API_KEY_VARIABLES.includes("CODEX_ACCESS_TOKEN"), "Jig refuses automatic selection while an access token is inherited");
   const fakeCodex = fakeProvider(f.scratch, "launched-codex.mjs");
   const inspection = path.join(f.scratch, "inspection.json");
   const fakeJig = path.join(f.scratch, "fake-jig.mjs");
