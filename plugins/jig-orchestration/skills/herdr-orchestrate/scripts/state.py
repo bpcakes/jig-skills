@@ -53,6 +53,13 @@ def nonempty(value):
     return isinstance(value, str) and bool(value.strip())
 
 
+def host_roles(info):
+    roles = info.get("roles", [])
+    require(isinstance(roles, list) and all(nonempty(role) for role in roles),
+            "invalid", "host roles must be a list of nonempty strings")
+    return roles
+
+
 def scheduler_deadline(at, seconds):
     try:
         return at + timedelta(seconds=seconds)
@@ -245,6 +252,7 @@ class Engine:
             info["worktree_root"] = host_path(info["worktree_root"])
             require(isinstance(info.get("endpoint"), dict) and info["endpoint"],
                     "invalid", "each host needs a registered endpoint")
+            host_roles(info)
             if "repository_path" in info:
                 require(nonempty(info["repository_path"]) and Path(info["repository_path"]).is_absolute(),
                         "invalid", "host repository_path must be absolute")

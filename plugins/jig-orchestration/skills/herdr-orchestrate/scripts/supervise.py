@@ -23,7 +23,7 @@ import sys
 import time
 import uuid
 
-from state import Engine, StateError, scheduler_deadline, scheduler_identity, scheduler_seconds
+from state import Engine, StateError, host_roles, scheduler_deadline, scheduler_identity, scheduler_seconds
 
 MAX_INPUT = 1024 * 1024
 MAX_JSON_DEPTH = 64
@@ -542,7 +542,7 @@ def preflight(config, host_id):
     host = config.get("hosts", {}).get(host_id)
     if not isinstance(host, dict):
         raise RuntimeErrorDetail("unknown_host", "Choose a registered host ID")
-    roles = host.get("roles", [])
+    roles = host_roles(host)
     profiles = host.get("profiles", [])
     runtime_roles = set(roles)
     for profile in profiles:

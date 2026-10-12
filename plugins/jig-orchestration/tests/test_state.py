@@ -161,6 +161,49 @@ class EngineTests(unittest.TestCase):
         self.assert_cli_object_error("preflight", {**self.config, "hosts": []},
                                      "--config", "-", "--host", "local")
 
+    def test_cli_rejects_host_roles_before_configuration_persistence(self):
+        fresh_run = self.base / "invalid-roles-run"
+        before = Engine.read(self.run)
+        for roles in (None, 5, "coordinator", {}, [None], [5], [""], ["coordinator", " "]):
+            config = copy.deepcopy(self.config)
+            config["hosts"]["local"]["roles"] = roles
+            request = self.request("configure", fields={"hosts": config["hosts"]}, evidence=self.proof())
+            commands = (("init", ["--run-dir", str(fresh_run), "--config", "-"], config),
+                        ("preflight", ["--config", "-", "--host", "local"], config),
+                        ("apply", ["--run-dir", str(self.run)], request))
+            for command, arguments, payload in commands:
+                with self.subTest(roles=roles, command=command):
+                    with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                        result = subprocess.run(
+                            [sys.executable, "-B", str(SCRIPTS / "supervise.py"), command, *arguments],
+                            input=json.dumps(payload), capture_output=True, text=True, check=False)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stderr, "")
+                    response = json.loads(result.stdout)
+                    self.assertIs(response["ok"], False)
+                    self.assertIn("roles", response["error"]["message"])
+                    self.assertFalse(fresh_run.exists())
+                    self.assertEqual(Engine.read(self.run), before)
+                    self.assertFalse((self.run / "transaction.json").exists())
+        self.admit()
+
+    def test_host_role_lists_preserve_legacy_repository_protection(self):
+        for roles in (None, [], ["worker"], ["worker", "coordinator"]):
+            with self.subTest(roles=roles):
+                hosts = copy.deepcopy(self.config["hosts"])
+                hosts["local"].pop("roles", None)
+                hosts["remote"].pop("roles", None)
+                for info in hosts.values():
+                    info["worktree_root"] = str(self.base)
+                if roles is not None:
+                    hosts["remote"]["roles"] = roles
+                self.reset(hosts=hosts)
+                self.apply("configure", fields={"hosts": hosts}, evidence=self.proof())
+                protected = "remote" if roles and "coordinator" in roles else "local"
+                other = "local" if protected == "remote" else "remote"
+                self.assert_error("ownership", self.admit, "B", host=protected, worktree=str(self.repo))
+                self.admit("B", host=other, worktree=str(self.repo))
+
     def test_private_external_state_and_unsupported_capabilities(self):
         self.assertEqual(self.run.stat().st_mode & 0o777, 0o700)
         self.assertEqual((self.run / "state.json").stat().st_mode & 0o777, 0o600)
