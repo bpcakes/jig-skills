@@ -607,8 +607,11 @@ def serve(run_dir, caller, request):
         task_id = request.get("task_id")
         if task_id not in actor.get("task_ids", []):
             raise RuntimeErrorDetail("wrong_task", "Caller is not assigned this task")
+        task = state["tasks"].get(task_id)
+        if task is not None and (task["driver"] != caller or task["host"] != actor["host"]):
+            raise RuntimeErrorDetail("wrong_task", "Caller does not drive this task on its registered host")
         return {"policy_version": state["policy_version"], "controls": state["controls"],
-                "task": state["tasks"].get(task_id), "staging": state["staging"]}
+                "task": task, "staging": state["staging"]}
     if request.get("op") == "action":
         record = Engine.action(run_dir, request["action_id"])
         if record is None:

@@ -122,6 +122,8 @@ An SSH forced command pins the actual executable, `--run-dir`, and `--caller <re
 
 `{"op":"query","task_id":"example-A"}` returns that actor's task, current policy/controls, and staging. `{"op":"action","action_id":"previous-id"}` inspects its own action. Other requests use the transition shape above. Workers cannot admit tasks, alter controls, change delegation, close tracker state through the coordinator-only operation, or inspect another actor's records. A route flag or untrusted reply header alone is not authentication.
 
+Task queries require the registered task scope and, once admitted, the current driver and host binding. Handoff revokes the former driver's task query access; configured task IDs do not grant persistent read access. An authorized task that has not yet been admitted returns `task: null`.
+
 ## Scheduler
 
 Enable scheduling only with a registered **local named coordinator session**. Remote worker forwarding is separate from this scheduler. The `scheduler` config contains:

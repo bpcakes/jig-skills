@@ -1023,7 +1023,58 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(runtime.serve(self.run, "worker", {"op": "action", "action_id": "absent"}), {"status": "not_found"})
             result = runtime.serve(self.run, "worker", {"op": "query", "task_id": "A"})
             self.assertEqual(result["policy_version"], 1)
+            self.assertIsNone(result["task"])
             self.assertNotIn("config", result)
+
+    def test_restricted_query_follows_task_handoff(self):
+        self.config["hosts"]["remote"] = {
+            "slots": 1, "worktree_root": str(self.root / "remote-trees"),
+            "endpoint": {"profile": "remote"}}
+        query = {"op": "query", "task_id": "A"}
+        proof = {"ref": "fixture:handoff", "observed_at": self.now.isoformat()}
+        for destination in ("local", "remote"):
+            with self.subTest(destination=destination), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                self.config["actors"]["successor"] = {
+                    "role": "driver", "task_ids": ["A"], "host": destination, "helper_route": True}
+                run = self.root / ("handoff-" + destination)
+                Engine.initialize(run, self.config)
+                Engine.apply(run, {
+                    "op": "admit", "action_id": "admit-A", "expected_policy": 1, "task_id": "A",
+                    "host": "local", "driver": "worker", "branch": "task/A",
+                    "worktree": str(self.root / "trees" / "A"),
+                    "claim": {**proof, "authority": "fixture-db", "task_id": "A", "owner": "worker",
+                              "confirmed": True, "ready": True, "unpublished": False}})
+                result = runtime.serve(run, "worker", query)
+                self.assertEqual(result["task"]["driver"], "worker")
+                self.assertEqual(result["task"]["host"], "local")
+                self.assertEqual(result["controls"], Engine.read(run)["controls"])
+                self.assertEqual(result["staging"], Engine.read(run)["staging"])
+                with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "does not drive"):
+                    runtime.serve(run, "successor", query)
+
+                Engine.apply(run, {
+                    "op": "handoff", "action_id": "handoff-A", "expected_policy": 1,
+                    "task_id": "A", "expected_task": result["task"]["version"],
+                    "host": destination, "driver": "successor", "branch": "task/A",
+                    "worktree": str(Path(self.config["hosts"][destination]["worktree_root"]) / "A"),
+                    "identity": {"session": "successor-session", "agent_id": "successor-agent"},
+                    "source": {**proof, "revision": "published-head", "published": True},
+                    "evidence": {**proof, "all_jobs_settled": True}})
+                with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "does not drive"):
+                    runtime.serve(run, "worker", query)
+                successor = runtime.serve(run, "successor", query)["task"]
+                self.assertEqual(successor["driver"], "successor")
+                self.assertEqual(successor["host"], destination)
+                self.assertEqual(successor["identity"]["agent_id"], "successor-agent")
+
+    def test_restricted_query_rejects_mismatched_host_binding(self):
+        # Check the route boundary also fails closed on an inconsistent state snapshot.
+        snapshot = Engine.read(self.run)
+        snapshot["tasks"]["A"] = {"id": "A", "driver": "worker", "host": "remote"}
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}), patch.object(
+                Engine, "read", return_value=snapshot):
+            with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "does not drive"):
+                runtime.serve(self.run, "worker", {"op": "query", "task_id": "A"})
 
     def test_roles_require_installed_skills_and_no_auth_claim(self):
         self.config["hosts"]["local"].update(roles=["review"], profiles=[{
