@@ -2,6 +2,8 @@
 
 Use `python3 <skill-root>/scripts/supervise.py --help` for installed commands. Python 3.10+ on Linux/macOS is required. The helper serializes state and authority checks; it does not launch task workers, perform tracker/GitHub operations, cancel processes, or determine whether supplied external evidence is true. The authorized coordinator/driver performs those operations and records observed receipts. The scheduler's only Herdr mutation is a guarded wake prompt to its registered coordinator.
 
+CLI JSON input allows at most 64 nested objects or arrays, counting the root object as level 1. Deeper input is rejected before routing or persistence with an `invalid_input` JSON error, keeping later copying and serialization within safe recursion depth.
+
 ## Initialize and inspect
 
 ```sh

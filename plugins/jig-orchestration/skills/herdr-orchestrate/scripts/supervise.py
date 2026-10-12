@@ -27,6 +27,7 @@ import uuid
 from state import Engine, StateError, scheduler_identity
 
 MAX_INPUT = 1024 * 1024
+MAX_JSON_DEPTH = 64
 HEALTH_ALERT_MAX_ATTEMPTS = 3
 HEALTH_ALERT_RETRY_SECONDS = 60
 
@@ -64,6 +65,14 @@ def read_json(source):
         raise RuntimeErrorDetail("invalid_input", "JSON input is nested too deeply") from error
     if not isinstance(value, dict):
         raise RuntimeErrorDetail("invalid_input", "Expected a JSON object")
+    # Parsing may tolerate more nesting than later copying and serialization.
+    pending = [(value, 1)]
+    while pending:
+        container, depth = pending.pop()
+        if depth > MAX_JSON_DEPTH:
+            raise RuntimeErrorDetail("invalid_input", "JSON input is nested too deeply")
+        children = container.values() if isinstance(container, dict) else container
+        pending.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
     return value
 
 

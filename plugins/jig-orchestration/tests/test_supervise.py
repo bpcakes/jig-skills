@@ -1106,6 +1106,37 @@ class RuntimeTests(unittest.TestCase):
             "ok": False, "error": {"code": "invalid_input", "message": "JSON input is nested too deeply"}})
         self.assertEqual(Engine.read(self.run), before)
 
+    def test_restricted_observe_cli_bounds_json_depth_before_copying(self):
+        proof = {"ref": "fixture:json-depth", "observed_at": self.now.isoformat()}
+        Engine.apply(self.run, {
+            "op": "admit", "action_id": "admit-A", "expected_policy": 1,
+            "task_id": "A", "host": "local", "driver": "worker", "branch": "task/A",
+            "worktree": str(self.root / "trees" / "A"),
+            "claim": {**proof, "authority": "fixture-db", "task_id": "A", "owner": "worker",
+                      "confirmed": True, "ready": True, "unpublished": False}})
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "serve",
+                   "--run-dir", str(self.run), "--caller", "worker"]
+        # The request and fields objects add two levels above findings.
+        for depth in (62, 63, 600):
+            with self.subTest(depth=depth), patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+                before = Engine.read(self.run)
+                request = {"op": "observe", "action_id": "observe-" + str(depth), "expected_policy": 1,
+                           "task_id": "A", "expected_task": before["tasks"]["A"]["version"],
+                           "fields": {"refs": {}, "findings": "DEPTH_PAYLOAD"}, "evidence": proof}
+                nested = "[" * depth + "0" + "]" * depth
+                raw = json.dumps(request).replace('"DEPTH_PAYLOAD"', nested)
+                result = subprocess.run(command, input=raw, capture_output=True, text=True, check=False)
+                self.assertEqual(result.stderr, "")
+                if depth == 62:
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(json.loads(result.stdout)["observed"], ["findings", "refs"])
+                    self.assertEqual(Engine.read(self.run)["tasks"]["A"]["findings"], json.loads(nested))
+                else:
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(json.loads(result.stdout), {
+                        "ok": False, "error": {"code": "invalid_input", "message": "JSON input is nested too deeply"}})
+                    self.assertEqual(Engine.read(self.run), before)
+
     def test_restricted_query_follows_task_handoff(self):
         self.config["hosts"]["remote"] = {
             "slots": 1, "worktree_root": str(self.root / "remote-trees"),
