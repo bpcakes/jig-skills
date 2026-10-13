@@ -221,6 +221,8 @@ function configure(options, config) {
   const reviewers = (config.reviewers ?? options.review.reviewers.map(id => ({ id }))).map(provider => {
     if (provider.runtime !== undefined && (provider.id !== "codex" || !["native", "cli"].includes(provider.runtime))) throw new Error("runtime applies only to the codex reviewer and must be native or cli.");
     if (provider.id === "codex" && !provider.command) provider = { ...provider, runtime: codexRuntime(provider, options) };
+    // A custom command skips runtime resolution but still carries its runtime to the assignment.
+    else if (provider.id === "codex") assertHostRuntime(options.review.host, provider.runtime);
     const bundled = !provider.command && (provider.id !== "codex" || provider.runtime === "cli");
     return bundled ? { ...provider, bundled: true,
       command: [process.execPath, fileURLToPath(new URL("./provider-bridge.mjs", import.meta.url)), provider.id] } : provider;

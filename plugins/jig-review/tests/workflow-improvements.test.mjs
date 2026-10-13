@@ -296,6 +296,10 @@ test("a Claude Code host dispatches every reviewer through a bundled bridge", as
   assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
   // A native entry would hand the review to a Claude subagent labeled as Codex.
   await assert.rejects(fixture(t).start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--host", "claude", "--reviewers", "codex"]), /Claude Code has no native Codex subagent/);
+  // A custom command does not make a native runtime valid on this host.
+  await assert.rejects(fixture(t).start({ reviewers: [{ id: "codex", runtime: "native", command: [process.execPath, "provider.mjs"] }] }, ["--host", "claude", "--reviewers", "codex"]), /Claude Code has no native Codex subagent/);
+  const custom = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli", command: [process.execPath, "provider.mjs"] }] }, ["--host", "claude", "--reviewers", "codex"]);
+  assert.deepEqual(custom.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", undefined]]);
 });
 
 test("evidence declarations reject broad paths and policy files", () => {
