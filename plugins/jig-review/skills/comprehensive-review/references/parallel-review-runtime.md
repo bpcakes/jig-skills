@@ -10,6 +10,8 @@ The guidance requires evidence for requirement coverage, causal ownership, and c
 
 ## Spawn every selected child
 
+On Claude Code, start the adapters as background commands as [claude-code-host.md](claude-code-host.md) describes instead of spawning children; the rest of this file applies unchanged.
+
 Attempt one transient, context-free child for each selected reviewer before waiting for any result. Use the host option that disables conversation inheritance (`fork_context: false`, `fork_turns: "none"`, or its exact runtime equivalent). Continue spawn attempts after any earlier failure. Never run a selected reviewer in the parent context and never start a reviewer sequentially after showing it another report.
 
 - When Codex is selected with the `native` runtime, read [native-reviewer.md](native-reviewer.md) and construct its self-contained assignment.

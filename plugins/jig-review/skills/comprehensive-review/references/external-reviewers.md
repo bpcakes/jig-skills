@@ -50,6 +50,8 @@ To verify real CLI evidence access after adapter changes, run `JIG_REVIEW_LIVE=c
 
 ## External CLI Forwarders
 
+Forwarders apply to Codex hosts. On Claude Code, the parent starts each adapter as a background command; see [claude-code-host.md](claude-code-host.md).
+
 The Claude, Codex CLI, and Cursor children are pure forwarders. Give each only its fully resolved adapter command, repository working directory, the recipe below, and the shared [waiting policy](waiting.md). It must:
 
 - start exactly one non-interactive foreground command and execute its assigned adapter once;
