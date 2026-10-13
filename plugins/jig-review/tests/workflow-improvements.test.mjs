@@ -112,6 +112,8 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
     assert.equal(options.cwd, a.repository); assert.equal(options.expectedFingerprint, a.fingerprint);
     assert.equal(options.effort, "high"); assert.equal(options.fileAccess, "restricted"); assert.equal(options.includeWorkingTree, true);
     assert.deepEqual(options.excludePaths, ["private"]); assert.ok(dependencies.promptSuffix.includes('"resultSchema"'));
+    // Without a recorded receipt, reviewers must still name the checks for every criterion.
+    assert.match(dependencies.promptSuffix, /acceptance entry for each criterion \("value"\)[^\n]*naming the required checks \("unit"\)[^\n]*even when no receipt has been recorded yet\. Example entry: \{"criterionId":"value","status":"uncertain","evidence":"\.\.\.","validationIds":\["unit"\]\}\n$/);
     return dependencies.parseReport(JSON.stringify(vote(a)));
   } });
   assert.deepEqual(result, vote(a));
@@ -396,7 +398,7 @@ import fs from 'node:fs';
 let prompt='';
 if(${JSON.stringify(provider)}==='claude'){ for await(const chunk of process.stdin) prompt+=chunk; }
 else {const arg=process.argv.at(-1);const file=arg.match(/from (.+)\\. Follow/)[1];prompt=fs.readFileSync(file,'utf8');}
-const assignment=JSON.parse(prompt.trim().split('\\n').at(-1));
+const assignment=JSON.parse(prompt.split('\\n').findLast(line=>line.startsWith('{')));
 if(!assignment.instructions.includes('read-only')) throw new Error('Role omitted');
 const report=JSON.stringify({assignmentId:assignment.id,fingerprint:assignment.fingerprint,complete:true,findings:[],acceptance:[{criterionId:'value',status:'satisfied',evidence:'Checked source',validationIds:['unit']}]});
 process.stdout.write(${JSON.stringify(provider)}==='claude'?JSON.stringify({type:'result',result:report,is_error:false}):report);

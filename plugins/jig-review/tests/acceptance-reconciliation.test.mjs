@@ -100,6 +100,8 @@ test("review input supplies current receipt facts and explicit logs without revi
     assert.ok(a.validationEvidence.contentHash);
     const check = a.validationEvidence.checks[0];
     assert.equal(check.checkId, "unit");
+    // Discovery reviews run before validation; their acceptance entries must still name the checks.
+    assert.match(a.instructions, /at least one required check ID in acceptance\.validationIds, naming the checks that bear on that criterion even when their receipts are null/);
     if (!a.correct) { assert.equal(check.receipt, null); continue; }
     assert.equal(check.receipt.outcome, "succeeded");
     assert.equal(check.receipt.fingerprint, a.fingerprint);
