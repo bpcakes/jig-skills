@@ -285,6 +285,17 @@ test("the configured codex runtime is resolved once and travels with the capabil
   assert.equal(minimal.options.review.codex.effort, "minimal");
 });
 
+test("a Claude Code host dispatches every reviewer through a bundled bridge", async t => {
+  const balanced = await fixture(t).start({}, ["--host", "claude"]);
+  assert.deepEqual(balanced.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["claude", undefined, true]]);
+  const strict = await fixture(t).start({}, ["--host", "claude", "--review-policy", "strict"]);
+  assert.deepEqual(strict.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["claude", undefined, true], ["codex", "cli", true]]);
+  const configured = await fixture(t).start({ reviewers: [{ id: "codex" }] }, ["--host", "claude", "--reviewers", "codex"]);
+  assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
+  // A native entry would hand the review to a Claude subagent labeled as Codex.
+  await assert.rejects(fixture(t).start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--host", "claude", "--reviewers", "codex"]), /Claude Code has no native Codex subagent/);
+});
+
 test("evidence declarations reject broad paths and policy files", () => {
   const base = { goal: "test", nonGoals: [], compatibilityConstraints: [], permittedBehaviorChanges: [], acceptanceCriteria: [{ id: "v", description: "v" }], requiredValidation: [{ id: "v", argv: ["true"] }] };
   for (const file of [".agent/*", ".agent/jig-contract.json", ".agent/jig-contract.jsonl", "../receipts.jsonl", "AGENTS.jsonl"]) {

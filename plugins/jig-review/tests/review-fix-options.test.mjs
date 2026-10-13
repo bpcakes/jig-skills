@@ -74,3 +74,15 @@ test("Codex runtime and launcher selections reach the loop's review options", ()
   assert.equal(parseArgs(["--codex-runtime", "cli", "--codex-effort", "ultra"]).review.codex.effort, "ultra");
   assert.throws(() => parseArgs(["--codex-effort", "extreme"]), /Unsupported --codex-effort/);
 });
+
+test("a Claude Code host defaults to independent Claude reviews and Codex through its CLI", () => {
+  const balanced = parseArgs(["--host", "claude"]);
+  assert.equal(balanced.review.host, "claude"); assert.deepEqual(balanced.review.reviewers, ["claude"]); assert.equal(balanced.explicitReviewers, false);
+  const strict = parseArgs(["--host", "claude", "--review-policy", "strict"]);
+  assert.deepEqual(strict.review.reviewers, ["claude", "codex"]); assert.equal(strict.review.codex.runtime, "cli");
+  assert.deepEqual(parseArgs(["--host", "claude", "--reviewers", "codex"]).review.codex.runtime, "cli");
+  assert.throws(() => parseArgs(["--host", "claude", "--reviewers", "codex", "--codex-runtime", "native"]), /no native Codex subagent/);
+  // Codex hosts keep their native default.
+  assert.deepEqual(parseArgs(["--host", "codex"]).review.reviewers, ["codex"]);
+  assert.throws(() => parseArgs(["--host", "gemini"]), /Unsupported --host value/);
+});

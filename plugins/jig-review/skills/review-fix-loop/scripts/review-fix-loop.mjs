@@ -18,7 +18,7 @@ import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
 import { preflightExecutables } from "../../comprehensive-review/scripts/provider-launch.mjs";
-import { codexEfforts } from "../../comprehensive-review/scripts/review-options.mjs";
+import { assertHostRuntime, codexEfforts } from "../../comprehensive-review/scripts/review-options.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
@@ -205,11 +205,13 @@ function assertLegacyAdmission(root, runsRoot) {
 // or --codex-runtime selects the bundled CLI bridge. The effective runtime is
 // resolved once, so dispatch, preflight, launcher and effort validation agree:
 // a configured native entry cannot silently drop a requested launcher, and a
-// configured CLI entry cannot admit a native-only effort.
+// configured CLI entry cannot admit a native-only effort. A Claude Code host has
+// no Codex subagent, so a native entry there would be a mislabeled Claude review.
 const BUNDLED_EXECUTABLES = Object.freeze({ claude: "claude", codex: "codex", cursor: "cursor-agent" });
 function codexRuntime(provider, options) {
   const selected = options.review.codex ?? {};
   const runtime = provider.runtime ?? selected.runtime ?? "native";
+  assertHostRuntime(options.review.host, runtime);
   if (runtime === "native" && selected.launcher && selected.launcher !== "none") throw new Error("--codex-launcher requires the cli runtime, but the codex reviewer entry selects runtime native.");
   const efforts = codexEfforts(runtime);
   if (selected.effort && !efforts.has(selected.effort)) throw new Error(`--codex-effort ${selected.effort} is not valid for the ${runtime} Codex runtime, which accepts ${[...efforts].join(", ")}.`);
