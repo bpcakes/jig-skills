@@ -2,6 +2,7 @@
 // provider home (account) immediately before the CLI starts; without one the
 // adapters spawn the provider executable directly. The same resolution serves
 // capability preflight, so the controller checks the executable that will run.
+import { spawnSync } from "node:child_process";
 
 const LAUNCHER_KINDS = new Set(["none", "auto"]);
 const LAUNCHER_COMMANDS = Object.freeze({ claude: "claude", codex: "codex" });
@@ -54,6 +55,22 @@ function launcherBinary(inherited = process.env, override = null) {
   return binary;
 }
 
+// Help is local and does not inspect accounts or start a provider. Check each
+// provider separately: older Jig releases can support only one launch command.
+function supportsAutoLauncher(provider, { inherited = process.env, cwd = process.cwd(), timeoutMs = 1000 } = {}) {
+  assertLauncherProvider(provider);
+  try {
+    const result = spawnSync(launcherBinary(inherited), [provider, "launch", "--help"], {
+      cwd, env: childEnvironment(inherited), encoding: "utf8", timeout: timeoutMs,
+      killSignal: "SIGKILL", maxBuffer: 64 * 1024, stdio: ["ignore", "pipe", "pipe"],
+    });
+    const help = result.stdout ?? "";
+    return !result.error && result.status === 0
+      && new RegExp(`Usage:\\s+\\S+\\s+${provider}\\s+launch\\b`, "i").test(help)
+      && /^\s*--auto(?:\s|$)/m.test(help);
+  } catch { return false; }
+}
+
 // The executable that a launch will actually start, for preflight checks.
 function launchExecutable(provider, launcher, executable, inherited = process.env, override = null) {
   if (normalizeLauncher(launcher) === "none") return executable;
@@ -103,4 +120,5 @@ export {
   normalizeLauncher,
   preflightExecutables,
   resolveProviderLaunch,
+  supportsAutoLauncher,
 };

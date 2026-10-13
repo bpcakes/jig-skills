@@ -10,7 +10,7 @@ The default reviewers are Claude Code and Codex. Cursor is optional. Review-only
 
 Install `jig-review` using the [marketplace instructions](../README.md#install-with-codex). You need Node.js 22 or newer and a Codex host with subagents. External adapters support Linux, macOS, and Windows through WSL.
 
-Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries only the selected account's `auth.json`. These passes consume provider usage. A native Codex-only review does not need any external CLI. With `--claude-launcher auto` or `--codex-launcher auto`, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
+Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries only the selected account's `auth.json`. These passes consume provider usage. A native Codex-only review does not need any external CLI. When compatible Jig is available, omitted Claude and Codex launchers default to `auto` (Codex uses the CLI runtime). Explicit `none` disables detection; a Claude config directory or explicit native Codex runtime preserves that choice. Native-only Codex effort also preserves native execution. With automatic launchers, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
 
 Enter these prompts in Codex from the repository being reviewed:
 
@@ -19,14 +19,14 @@ Enter these prompts in Codex from the repository being reviewed:
 | Review working changes with the defaults | `$jig-review:comprehensive-review` |
 | Review with all three providers | `$jig-review:comprehensive-review --all-reviewers` |
 | Store final findings in Beads | `$jig-review:comprehensive-review --log-to-beads` |
-| Use only native Codex | `$jig-review:comprehensive-review --reviewers codex` |
+| Use only native Codex | `$jig-review:comprehensive-review --reviewers codex --codex-runtime native` |
 | Add Cursor | `$jig-review:comprehensive-review --reviewers claude,codex,cursor` |
 | Use Codex and Cursor | `$jig-review:comprehensive-review --reviewers codex,cursor` |
 | Review a branch against a named base | `$jig-review:comprehensive-review --base main` |
 | Review a branch together with local changes | `$jig-review:comprehensive-review --base main --include-working-tree` |
 | Choose Cursor effort | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh` |
 | Enable Cursor fast mode | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
-| Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-effort high` |
+| Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-runtime native --codex-effort high` |
 | Select Astra explicitly | `$jig-review:comprehensive-review --reviewers codex --codex-model gpt-6-astra --codex-effort high` |
 | Use a separate Claude profile | `$jig-review:comprehensive-review --claude-config-dir ~/.claude-appleid` |
 | Spread reviewer usage across accounts | `$jig-review:comprehensive-review --claude-launcher auto --codex-launcher auto` |

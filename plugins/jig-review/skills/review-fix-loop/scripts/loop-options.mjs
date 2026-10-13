@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseArgs as reviewArgs, readOptionValue, reviewOptionTakesValue } from "../../comprehensive-review/scripts/review-options.mjs";
+import { defaultLauncherCandidates, parseArgs as reviewArgs, readOptionValue, reviewOptionTakesValue } from "../../comprehensive-review/scripts/review-options.mjs";
 import { DEFAULT_FIX_MODE, repairPolicy } from "./repair-policy.mjs";
 
 export const DEFAULT_MAX_ROUNDS = 3;
@@ -49,7 +49,8 @@ export function parseArgs(argv) {
   }
   // A reviewer configuration file may override the Codex runtime at init, where
   // the effort is validated against the effective runtime.
-  options.review = reviewArgs(forwarded, { deferCodexEffort: true });
+  options.review = reviewArgs(forwarded, { deferCodexEffort: true, deferLauncherDefaults: true });
+  options.defaultLaunchers = defaultLauncherCandidates(options.review, forwarded);
   return options;
 }
 
