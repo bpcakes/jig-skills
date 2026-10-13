@@ -8,8 +8,12 @@ import { fileURLToPath } from "node:url";
 
 import {
   CURSOR_MODELS,
-  parseArgs,
+  parseArgs as parseReviewArgs,
 } from "../skills/comprehensive-review/scripts/review-options.mjs";
+
+// These baseline cases exercise hosts without Jig; launcher-defaults covers
+// capability detection using isolated executables, independent of the test host.
+const parseArgs = (argv, options = {}) => parseReviewArgs(argv, { launcherAvailable: () => false, ...options });
 
 test("default reviewers remain Claude and Codex", () => {
   assert.deepEqual(parseArgs([]), {

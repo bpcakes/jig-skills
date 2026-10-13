@@ -5,7 +5,7 @@ description: Run independent Claude and Codex reviews of Git diffs and merge fin
 
 # Comprehensive Review
 
-Produce one consolidated code review from one or more reviewers in independent contexts. Default to Claude Code and Codex; include Cursor Agent with Grok 4.6 only when selected. On a Codex host, Codex reviews as a native subagent by default and can instead run as an independent CLI process; on Claude Code it always runs as a CLI process. Jig launchers can select the Claude or Codex account per launch; see the reviewer controls.
+Produce one consolidated code review from one or more reviewers in independent contexts. Default to Claude Code and Codex; include Cursor Agent with Grok 4.6 only when selected. For each selected provider, prefer Jig automatic account selection when its launch command supports it; this uses the CLI runtime for Codex. Without compatible Jig, use direct Claude, and native Codex on a Codex host; on Claude Code, Codex always runs as a CLI process. Preserve explicit launcher, profile, runtime, and effort choices; see the reviewer controls.
 
 Resolve the user's checkout with `git rev-parse --show-toplevel` from the requested repository, or the starting working directory when none is specified. Keep that root for review, handoff, and subsequent repairs. Reviewer independence means separate agent contexts; it does not require separate source trees. Do not create or switch to a temporary worktree, clone, or source copy to obtain a clean checkout or preserve unrelated edits. A user-selected linked worktree is a valid checkout; a different source location requires explicit user direction. Temporary directories hold review artifacts only.
 

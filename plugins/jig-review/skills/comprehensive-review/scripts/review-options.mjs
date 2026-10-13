@@ -3,7 +3,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { normalizeClaudeConfigDir } from "./claude-config.mjs";
-import { normalizeLauncher } from "./provider-launch.mjs";
+import { normalizeLauncher, supportsAutoLauncher } from "./provider-launch.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
 const REVIEWER_ORDER = ["claude", "codex", "cursor"];
@@ -127,6 +127,36 @@ function codexOptions(raw, provided, host, { deferCodexEffort = false } = {}) {
   };
 }
 
+function defaultLauncherCandidates(review, argv) {
+  return ["claude", "codex"].filter(provider => review[provider]
+    && !argv.includes(`--${provider}-launcher`)
+    && (provider !== "claude" || review.claude.configDir == null)
+    && (provider !== "codex" || !(argv.includes("--codex-runtime") && review.codex.runtime === "native")));
+}
+
+// Resolve only omitted choices, after controller config has selected the runtime
+// and custom adapters. Persist this concrete result; resume never probes again.
+function withDefaultLaunchers(review, candidates, reviewers = [], available = supportsAutoLauncher) {
+  const resolved = structuredClone(review);
+  for (const provider of candidates) {
+    const settings = resolved[provider];
+    const configured = reviewers.find(entry => entry.id === provider);
+    if (!settings || settings.launcher !== "none" || configured?.command) continue;
+    if (provider === "claude" && settings.configDir != null) continue;
+    if (provider === "codex") {
+      const runtime = configured?.runtime ?? settings.runtime;
+      if (configured?.runtime === "native") continue;
+      // An explicitly requested native-only effort must not be silently changed.
+      if (runtime === "native" && settings.effort != null && !CODEX_CLI_EFFORTS.has(settings.effort)) continue;
+    }
+    if (available(provider)) {
+      settings.launcher = "auto";
+      if (provider === "codex") settings.runtime = "cli";
+    }
+  }
+  return resolved;
+}
+
 function parseArgs(argv, parseOptions = {}) {
   const raw = {
     host: "codex",
@@ -207,7 +237,7 @@ function parseArgs(argv, parseOptions = {}) {
   if (claude && claude.launcher !== "none" && claude.configDir != null) {
     throw new Error("--claude-config-dir cannot be combined with --claude-launcher; the launcher selects the Claude home.");
   }
-  const codex = selected.has("codex") ? codexOptions(raw, provided, host, parseOptions) : null;
+  const codex = selected.has("codex") ? codexOptions(raw, provided, host, { deferCodexEffort: true }) : null;
   let cursor = null;
   if (selected.has("cursor")) {
     const cursorEffort = effort(
@@ -223,7 +253,7 @@ function parseArgs(argv, parseOptions = {}) {
     };
   }
 
-  return {
+  const review = {
     ...(provided.has("--log-to-beads") ? { logToBeads: true } : {}),
     host,
     reviewers,
@@ -232,6 +262,12 @@ function parseArgs(argv, parseOptions = {}) {
     cursor,
     excludePaths: normalizeExcludePaths(raw.excludePaths),
   };
+  const resolved = parseOptions.deferLauncherDefaults ? review
+    : withDefaultLaunchers(review, defaultLauncherCandidates(review, argv), [], parseOptions.launcherAvailable);
+  if (resolved.codex?.effort != null && !parseOptions.deferCodexEffort) {
+    effort("--codex-effort", resolved.codex.effort, codexEfforts(resolved.codex.runtime));
+  }
+  return resolved;
 }
 
 function main() {
@@ -258,7 +294,9 @@ export {
   assertHostRuntime,
   codexEfforts,
   cursorModel,
+  defaultLauncherCandidates,
   parseArgs,
   readOptionValue,
   reviewOptionTakesValue,
+  withDefaultLaunchers,
 };

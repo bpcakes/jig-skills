@@ -10,7 +10,7 @@ Pass `--host claude` to `review-options.mjs`, to `loop-options.mjs`, and to the 
 - review-fix loop, balanced policy: two independent Claude reviews;
 - review-fix loop, strict policy: Claude plus Codex.
 
-Every reviewer is an independent CLI process started by a bundled adapter; none runs as a subagent of this session. Without `--claude-config-dir` or `--claude-launcher`, the Claude reviewer uses the same Claude account as this session. The Codex reviewer needs the prerequisites in [external reviewers](external-reviewers.md).
+Every reviewer is an independent CLI process started by a bundled adapter; none runs as a subagent of this session. When compatible Jig is available, omitted launchers default to `auto`, so a reviewer may run under a different account than this session; with `--claude-launcher none` and no `--claude-config-dir`, the Claude reviewer uses the same Claude account as this session. The Codex reviewer needs the prerequisites in [external reviewers](external-reviewers.md).
 
 The adapters need network access, their provider's home, and the temporary directory. If Claude Code's command sandbox blocks an adapter, request the host's approval to run that command outside the sandbox; do not substitute another provider.
 
