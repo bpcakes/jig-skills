@@ -140,7 +140,7 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
 | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, one commit per repair round by default, local validation, and independent terminal reviews of the full fixed-base range. | Code changes and run record |
 
-Both skills run in Codex and require its subagent facility; the plugin is not listed in the Claude Code marketplace. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
+Both skills run in Codex and Claude Code. In Codex, the Codex reviewer defaults to a native subagent; in Claude Code, every reviewer, including Codex, runs as an independent CLI process. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 
 ### Jig Privacy Audit
 
@@ -203,7 +203,7 @@ Start a new session, then invoke a skill as `/plugin:skill` followed by your req
 /jig-rust:rust-error-handling-review Review my current working changes. Report findings with file locations; do not edit code.
 ```
 
-The Claude marketplace lists six plugins. `jig-review` requires Codex subagents, and `jig-orchestration` currently requires a Codex coordinator and the review pair; both are omitted. See the [Codex-only note](#direct-skill-copy). Explicit-only skills appear in the `/` menu but do not trigger automatically. These commands were checked with Claude Code 2.1.296.
+The Claude marketplace lists seven plugins. `jig-orchestration` currently requires a Codex coordinator and is omitted. See the [Codex-only note](#direct-skill-copy). Explicit-only skills appear in the `/` menu but do not trigger automatically. These commands were checked with Claude Code 2.1.296.
 
 ### Direct Skill Copy
 
@@ -233,7 +233,7 @@ Omit the skill name to install every compatible skill, or pass multiple names to
 
 Start a new agent session in the project you want to review after copying. Direct copies use the skill name without the plugin prefix. Claude's `/skill-name` syntax is documented in its [skills guide](https://code.claude.com/docs/en/skills).
 
-`comprehensive-review`, `review-fix-loop`, and `herdr-orchestrate` are Codex-only. The installer excludes them when installing all skills for Claude and rejects explicit requests for them there. Selecting either review skill installs both matching skills so review-and-fix routing works; selecting `herdr-orchestrate` includes that pair and the Herdr skill exported by the local `herdr --skill` command. Each user-facing privacy skill includes `audit-common`. Existing dependencies must match their source: this checkout for bundled skills, or the installed Herdr release for `herdr`. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Calling Claude as an external reviewer from Codex is supported.
+`herdr-orchestrate` is Codex-only. The installer excludes it when installing all skills for Claude and rejects explicit requests for it there. Selecting either review skill installs both matching skills so review-and-fix routing works; selecting `herdr-orchestrate` includes that pair and the Herdr skill exported by the local `herdr --skill` command. Each user-facing privacy skill includes `audit-common`. Existing dependencies must match their source: this checkout for bundled skills, or the installed Herdr release for `herdr`. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Each host can run the other as an external reviewer.
 
 The installer preserves automatic dependencies even with `--force`. To replace a differing dependency, select both explicitly: `scripts/install.sh codex --force comprehensive-review review-fix-loop`, or `scripts/install.sh codex --force audit-common network-payload-zero-knowledge-test`. Use `--dest <directory>` before skill names to select a different skills directory; this also supports isolated installation checks without changing your agent configuration.
 
@@ -278,10 +278,10 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Privacy-audit helper scripts | Python ≥ 3.10 |
 | Ruby/Rails scanner | Ruby; Minitest for its smoke tests |
 | TypeScript/React scanners | Node.js; use Node 22 or newer. The duplication scanner also needs an existing `typescript` package in the target repository or a global installation. |
-| Comprehensive review and review-fix loop | Node.js ≥ 22 and Codex subagents. Linux, macOS, or Windows through WSL; native Windows is unsupported by the external adapters. |
+| Comprehensive review and review-fix loop | Node.js ≥ 22, in Codex or Claude Code. The native Codex reviewer needs Codex subagents. Linux, macOS, or Windows through WSL; native Windows is unsupported by the external adapters. |
 | Review-fix controller | Git ≥ 2.42; Linux `flock` or macOS Python 3. Uses the existing project's validation environment; isolated validation is opt-in. |
 | Claude pass in comprehensive review | Installed, authenticated [Claude Code](https://claude.ai/code) CLI |
-| Codex CLI pass in comprehensive review (`--codex-runtime cli`) | Installed, authenticated Codex CLI with file-based credentials (`auth.json`) in the selected home |
+| Codex CLI pass in comprehensive review (`--codex-runtime cli`, and every Codex pass in Claude Code) | Installed, authenticated Codex CLI with file-based credentials (`auth.json`) in the selected home |
 | Account selection per launch (`--claude-launcher`, `--codex-launcher`) | [Jig](https://github.com/bpcakes/jig-sh) `jig` CLI from a release that includes `launch --auto` (newer than 0.8.0) |
 | Cursor pass in comprehensive review | Installed, authenticated [Cursor Agent](https://cursor.com/) CLI |
 
@@ -291,7 +291,7 @@ Scanners generate investigation leads; the agent validates them against source a
 
 Run skills from the project you want assessed. Name the scope in your request: current working changes, a feature branch, a base reference, or specific files and directories. For most focused diff reviews, current working changes means staged and unstaged changes; consult the selected skill for exclusions and other supported inputs.
 
-Enter these examples in Codex with the relevant plugins installed. For skills supported in Claude Code, replace the leading `$` with `/`; the orchestration and multi-model review examples require Codex. Replace sample paths and branch names with yours.
+Enter these examples in Codex with the relevant plugins installed. For skills supported in Claude Code, replace the leading `$` with `/`; the orchestration example requires Codex. Replace sample paths and branch names with yours.
 
 Deliver a selected batch across registered machines:
 

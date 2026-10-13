@@ -9,10 +9,9 @@ const repo = fileURLToPath(new URL('..', import.meta.url));
 const read = file => readFileSync(path.join(repo, file), 'utf8');
 const json = file => JSON.parse(read(file));
 
-// jig-review uses Codex subagents; jig-orchestration currently requires a Codex
-// coordinator and installs that review pair. Neither has a Claude manifest or
-// marketplace entry. Keep these exclusions aligned with scripts/install.sh.
-const codexOnlyPlugins = ['jig-review', 'jig-orchestration'];
+// jig-orchestration currently requires a Codex coordinator, so it has no Claude
+// manifest or marketplace entry. Keep this exclusion aligned with scripts/install.sh.
+const codexOnlyPlugins = ['jig-orchestration'];
 
 const plugins = readdirSync(path.join(repo, 'plugins')).sort();
 const codexMarketplace = json('.agents/plugins/marketplace.json');

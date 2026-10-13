@@ -18,7 +18,7 @@ EOF
 
 is_codex_only_skill() {
     case "$1" in
-        comprehensive-review|review-fix-loop|herdr-orchestrate)
+        herdr-orchestrate)
             return 0
             ;;
         *)
