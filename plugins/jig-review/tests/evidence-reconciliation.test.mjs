@@ -1,3 +1,4 @@
+import "./fixtures/no-default-launcher.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

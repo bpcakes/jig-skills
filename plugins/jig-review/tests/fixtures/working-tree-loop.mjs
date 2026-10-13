@@ -1,3 +1,4 @@
+import "./no-default-launcher.mjs";
 import { createRun } from "../../skills/review-fix-loop/scripts/review-fix-loop.mjs";
 import { parseArgs } from "../../skills/review-fix-loop/scripts/loop-options.mjs";
 
