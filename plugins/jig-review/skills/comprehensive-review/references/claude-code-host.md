@@ -4,7 +4,7 @@ Read this when the parent agent is Claude Code. It replaces only the Codex-speci
 
 ## Options
 
-Pass `--host claude` to `review-options.mjs`, to `loop-options.mjs`, and to the review-fix controller's `init`. Claude Code has no native Codex subagent, so Codex always reviews through the `codex-review.mjs` CLI adapter: `codex.runtime` is `cli`, and `--codex-runtime native` is rejected. Defaults on this host:
+Pass `--host claude` to `review-options.mjs`, to `loop-options.mjs`, and to the review-fix controller's `init`. Claude Code has no native Codex subagent, so Codex always reviews through the `codex-review.mjs` CLI adapter: `codex.runtime` is `cli`, and `--codex-runtime native` is rejected. That reviewer uses the model and reasoning effort from the selected Codex home's `config.toml` unless `--codex-model` or `--codex-effort` is given. Defaults on this host:
 
 - comprehensive review: Claude plus Codex;
 - review-fix loop, balanced policy: two independent Claude reviews;
