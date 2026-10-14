@@ -37,7 +37,6 @@ Run commands from the repository root. Select the checks for the helper you chan
 | Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
 | Herdr orchestration state and supervisor | `python3 -B -m unittest discover -s plugins/jig-orchestration/tests -v` |
 | Orchestration installation and evidence fixtures | `node --test plugins/jig-review/tests/install.test.mjs evals/orchestration-fixtures.test.mjs` |
-| Privacy-audit scripts | `bash plugins/jig-privacy-audit/scripts/test_fixtures.sh` |
 | Rust abstraction-police collector | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-abstraction-police/tests -v` |
 | Rust duplication scanner | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-dup-unifier/tests -v` |
 | Fowler Rust scanner | `python3 plugins/jig-rust/skills/fowler-rust-refactoring/scripts/test_scan_refactoring_opportunities.py` |

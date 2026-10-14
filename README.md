@@ -1,6 +1,6 @@
 # jig-skills
 
-Focused skills for implementation planning, code review, refactoring, and privacy audits in Codex and Claude Code. Each skill supplies an agent with a workflow, evidence standards, and an output format; some include optional scanners.
+Focused skills for implementation planning, code review, and refactoring in Codex and Claude Code. Each skill supplies an agent with a workflow, evidence standards, and an output format; some include optional scanners.
 
 Use them to investigate a specific concern in Rust, Ruby and Rails, Swift, or TypeScript/React, or to review changes with multiple models. The catalog identifies which skills report findings, produce plans, or change files.
 
@@ -47,17 +47,16 @@ This example uses your Codex session without a second reviewer CLI. The commands
 | Check a specific correctness or testing concern | Focused reviews in [Rust](#jig-rust) or [TypeScript/React](#jig-typescript) | Findings |
 | Get independent reviews of the same diff | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Combined findings and coverage notes |
 | Review, fix, test, and re-review working changes | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Reviewed commit series and convergence report |
-| Assess privacy or encryption claims | Relevant [privacy skills](#jig-privacy-audit); use [audit intake](plugins/jig-privacy-audit/skills/audit-intake-and-evidence-map/SKILL.md) when requesting scope or evidence planning | Findings or an audit plan |
 
 ## Plugins
 
-The eight plugins contain 39 task skills and one shared support skill. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
+The seven plugins contain 28 task skills. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
 Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, and query-analysis skills are explicit-only in both hosts (`allow_implicit_invocation: false` in `agents/openai.yaml` for Codex, `disable-model-invocation: true` in `SKILL.md` for Claude Code); invoke the named skill when you want one. General-purpose editing skills and the comprehensive-review/review-fix-loop workflows remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
 
 For marketplace installs, invoke `$plugin:skill` in Codex or `/plugin:skill` in Claude Code, followed by your request. For example: `$jig-rust:rust-simplify Simplify my current working changes.` or `/jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
 
-[Planning](#jig-planning) · [Orchestration](#jig-orchestration) · [Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review) · [Privacy audit](#jig-privacy-audit)
+[Planning](#jig-planning) · [Orchestration](#jig-orchestration) · [Rust](#jig-rust) · [Ruby/Rails](#jig-ruby) · [Swift](#jig-swift) · [TypeScript/React](#jig-typescript) · [Multi-model review](#jig-review)
 
 ### Jig Planning
 
@@ -142,26 +141,6 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 
 Both skills run in Codex and Claude Code. In Codex, the Codex reviewer defaults to a native subagent; in Claude Code, every reviewer, including Codex, runs as an independent CLI process. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 
-### Jig Privacy Audit
-
-Plugin: `jig-privacy-audit` · [Browse files](plugins/jig-privacy-audit)
-
-| Skill | Use it for | Default result |
-|---|---|---|
-| [audit-intake-and-evidence-map](plugins/jig-privacy-audit/skills/audit-intake-and-evidence-map/SKILL.md) | Scopes privacy, zero-knowledge, and E2EE audits and produces an evidence map. | Audit report |
-| [privacy-claims-field-classifier](plugins/jig-privacy-audit/skills/privacy-claims-field-classifier/SKILL.md) | Builds a field-level privacy matrix from schemas, APIs, code, and traces. | Audit report |
-| [threat-model-and-dataflow-builder](plugins/jig-privacy-audit/skills/threat-model-and-dataflow-builder/SKILL.md) | Produces evidence-focused security and privacy threat models. | Audit report |
-| [network-payload-zero-knowledge-test](plugins/jig-privacy-audit/skills/network-payload-zero-knowledge-test/SKILL.md) | Scans HAR/network captures for controlled sentinels in requests, responses, telemetry, and third-party traffic. | Audit report |
-| [client-encryption-boundary-audit](plugins/jig-privacy-audit/skills/client-encryption-boundary-audit/SKILL.md) | Traces whether protected plaintext is encrypted before serialization, upload, local persistence, logs, or telemetry. | Audit report |
-| [crypto-architecture-review](plugins/jig-privacy-audit/skills/crypto-architecture-review/SKILL.md) | Reviews key hierarchy, primitives, nonce strategy, recovery, sharing, and server influence. | Audit report |
-| [crypto-implementation-static-review](plugins/jig-privacy-audit/skills/crypto-implementation-static-review/SKILL.md) | Statically scans cryptographic API use, randomness, KDFs, envelope fields, and plaintext sinks. | Audit report |
-| [server-decryptability-and-plaintext-path-audit](plugins/jig-privacy-audit/skills/server-decryptability-and-plaintext-path-audit/SKILL.md) | Inspects backend decryptability, plaintext stores, queues, logs, support tools, and admin paths. | Audit report |
-| [metadata-leakage-inventory](plugins/jig-privacy-audit/skills/metadata-leakage-inventory/SKILL.md) | Inventories visible metadata and maps privacy risks and claim conflicts. | Audit report |
-| [telemetry-crash-logs-support-leakage-audit](plugins/jig-privacy-audit/skills/telemetry-crash-logs-support-leakage-audit/SKILL.md) | Checks logs, traces, crash reporters, analytics, and support tooling for sensitive leakage. | Audit report |
-| [vulnerability-disclosure-and-retest-manager](plugins/jig-privacy-audit/skills/vulnerability-disclosure-and-retest-manager/SKILL.md) | Normalizes findings, tracks remediation status, and produces retest summaries. | Audit report |
-
-[audit-common](plugins/jig-privacy-audit/skills/audit-common/SKILL.md) supplies severity, confidence, evidence, and redaction rules. Its standalone automatic selection is disabled in both hosts (`agents/openai.yaml` for Codex, `disable-model-invocation` frontmatter for Claude Code); specialized audits load it directly. Use intake when requesting scope or evidence planning. Focused questions with supplied artifacts or established scope go directly to the relevant audit. Finding summaries, disclosure drafts, and retest plans do not initiate runtime testing or additional audits.
-
 ## Installation
 
 ### Install With Codex
@@ -233,9 +212,9 @@ Omit the skill name to install every compatible skill, or pass multiple names to
 
 Start a new agent session in the project you want to review after copying. Direct copies use the skill name without the plugin prefix. Claude's `/skill-name` syntax is documented in its [skills guide](https://code.claude.com/docs/en/skills).
 
-`herdr-orchestrate` is Codex-only. The installer excludes it when installing all skills for Claude and rejects explicit requests for it there. Selecting either review skill installs both matching skills so review-and-fix routing works; selecting `herdr-orchestrate` includes that pair and the Herdr skill exported by the local `herdr --skill` command. Each user-facing privacy skill includes `audit-common`. Existing dependencies must match their source: this checkout for bundled skills, or the installed Herdr release for `herdr`. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Each host can run the other as an external reviewer.
+`herdr-orchestrate` is Codex-only. The installer excludes it when installing all skills for Claude and rejects explicit requests for it there. Selecting either review skill installs both matching skills so review-and-fix routing works; selecting `herdr-orchestrate` includes that pair and the Herdr skill exported by the local `herdr --skill` command. Existing dependencies must match their source: this checkout for bundled skills, or the installed Herdr release for `herdr`. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Each host can run the other as an external reviewer.
 
-The installer preserves automatic dependencies even with `--force`. To replace a differing dependency, select both explicitly: `scripts/install.sh codex --force comprehensive-review review-fix-loop`, or `scripts/install.sh codex --force audit-common network-payload-zero-knowledge-test`. Use `--dest <directory>` before skill names to select a different skills directory; this also supports isolated installation checks without changing your agent configuration.
+The installer preserves automatic dependencies even with `--force`. To replace a differing dependency, select both explicitly: `scripts/install.sh codex --force comprehensive-review review-fix-loop`. Use `--dest <directory>` before skill names to select a different skills directory; this also supports isolated installation checks without changing your agent configuration.
 
 ### Cross-machine Orchestration Setup
 
@@ -275,7 +254,6 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Herdr orchestration | Python ≥ 3.10 on POSIX, installed Herdr CLI and its matching skill on controlling profiles, genuine managed Herdr sessions, Git and authenticated GitHub CLI, Beads Rust (`br`) or working Python Beadroll (`bead`), registered SSH routes for remote hosts, and the review requirements below on review drivers. |
 | Rust abstraction-police collector | Python ≥ 3.11 |
 | Rust Fowler and duplication scanners | Python ≥ 3.10 |
-| Privacy-audit helper scripts | Python ≥ 3.10 |
 | Ruby/Rails scanner | Ruby; Minitest for its smoke tests |
 | TypeScript/React scanners | Node.js; use Node 22 or newer. The duplication scanner also needs an existing `typescript` package in the target repository or a global installation. |
 | Comprehensive review and review-fix loop | Node.js ≥ 22, in Codex or Claude Code. The native Codex reviewer needs Codex subagents. Linux, macOS, or Windows through WSL; native Windows is unsupported by the external adapters. |
@@ -345,7 +323,6 @@ Some skills use different inputs:
 
 - Fowler refactoring, abstraction police, and duplication unification can assess requested repositories or paths, including unchanged code. The TypeScript duplication skill defaults to the current directory.
 - `swift-simplify` focuses on uncommitted Swift code and directly related support files. `typescript-type-system-review` can review pasted code.
-- Privacy audits start from product claims and explicitly authorized evidence: repositories, documentation, test accounts, network captures, and storage or logging artifacts.
 
 ## Troubleshooting and Updates
 

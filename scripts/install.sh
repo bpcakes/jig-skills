@@ -47,12 +47,6 @@ required_dependencies() {
         herdr-orchestrate) printf '%s\n' 'review-fix-loop herdr' ;;
         review-fix-loop) printf '%s\n' comprehensive-review ;;
         comprehensive-review) printf '%s\n' review-fix-loop ;;
-        audit-common) ;;
-        *)
-            if [ -f "$plugins_dir/jig-privacy-audit/skills/$1/SKILL.md" ]; then
-                printf '%s\n' audit-common
-            fi
-            ;;
     esac
 }
 
@@ -200,7 +194,7 @@ case " $* " in
         ;;
 esac
 
-for dependency in review-fix-loop comprehensive-review audit-common herdr; do
+for dependency in review-fix-loop comprehensive-review herdr; do
     case " $skipped_dependents " in *" $dependency "*) continue ;; esac
     dependents=
     selected_dependency=0

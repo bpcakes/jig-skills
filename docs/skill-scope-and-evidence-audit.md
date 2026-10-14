@@ -1,5 +1,7 @@
 # Skill scope, evidence, and context audit
 
+Historical record: the privacy-audit plugin described here was retired on 2026-10-14.
+
 Investigated on 2026-09-11 against baseline commit `0f106352c36bde312a0621971c2a894a6f51be3c`. The working tree was clean before this task. All three reported problems were confirmed in the instructions; related problems extended beyond the two simplification skills and the conversion-count rule.
 
 ## Scope expansion
