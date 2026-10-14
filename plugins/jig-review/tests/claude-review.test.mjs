@@ -504,9 +504,13 @@ test("adapter terminates a Claude process at its internal deadline", async (t) =
 test("a Jig launcher wraps the Claude command, forwards its arguments, and excludes an explicit config directory", async (t) => {
   const repo = makeRepository();
   const scratch = mkdtempSync(path.join(os.tmpdir(), "jig-claude-launcher-"));
+  // A Claude Code session exports its profile's directory; this test checks what the adapter adds.
+  const inheritedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
   t.after(() => {
     rmSync(repo, { recursive: true, force: true });
     rmSync(scratch, { recursive: true, force: true });
+    if (inheritedConfigDir !== undefined) process.env.CLAUDE_CONFIG_DIR = inheritedConfigDir;
   });
   writeFileSync(path.join(repo, "example.js"), "export function value() {\n  return 2;\n}\n");
   const capturePath = path.join(scratch, "capture.json");

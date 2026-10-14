@@ -10,6 +10,14 @@ import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
 import { CODEX_CLI_EFFORTS } from "./review-options.mjs";
+import {
+  ambientSkills,
+  instructionsLoaded,
+  isolate,
+  isolationOverrides,
+  listedSkills,
+  renderPrompt,
+} from "./codex-session.mjs";
 
 import {
   buildReviewPrompt,
@@ -41,145 +49,28 @@ const MAX_TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024;
 const MISSING_CREDENTIALS = "the Codex CLI reviewer requires file-based credentials in the selected home";
 
 const RENDER_TIMEOUT_MS = 60 * 1000;
-const MAX_RENDER_BYTES = 64 * 1024 * 1024;
-const PROJECT_DOC_OVERRIDES = Object.freeze(["-c", "project_doc_max_bytes=0"]);
-
-function renderedText(value, parts = []) {
-  if (typeof value === "string") parts.push(value);
-  else if (Array.isArray(value)) for (const item of value) renderedText(item, parts);
-  else if (value && typeof value === "object") for (const item of Object.values(value)) renderedText(item, parts);
-  return parts.join("\n");
-}
-
-// Codex's own renderer is the authority on what it would load for this working
-// directory, home, and configuration. Rendering needs no credentials or network.
-async function renderPrompt(codexBin, { cwd, privateHome, overrides, deadlineAt, signal, environment }) {
-  const result = await runCommand(codexBin, ["debug", "prompt-input", ...overrides, "isolation check"], {
-    cwd,
-    timeoutMs: Math.min(RENDER_TIMEOUT_MS, remainingAdapterTime(deadlineAt)),
-    maxBuffer: MAX_RENDER_BYTES,
-    signal,
-    env: { ...environment, CODEX_HOME: privateHome },
-  });
-  try {
-    return renderedText(JSON.parse(result.stdout.toString("utf8")));
-  } catch {
-    throw isolationError("codex debug prompt-input did not return a JSON prompt rendering.");
-  }
-}
-
-// Skills are listed as "(file: rN/relative/SKILL.md)" under a roots table of
-// "- `rN` = `absolute root`" lines. Anything else is unrecognized: an entry
-// that cannot be resolved cannot be disabled, so it must fail isolation rather
-// than pass as "no ambient skills".
-const SKILL_ROOTS_HEADING = "### Skill roots";
-const SKILL_LIST_HEADING = "### Available skills";
-function listedSkills(text) {
-  const roots = new Map();
-  for (const match of text.matchAll(/^- `(r\d+)` = `(.+)`$/gm)) roots.set(match[1], match[2]);
-  const files = [];
-  const unrecognized = [];
-  for (const match of text.matchAll(/\(file: ([^)]+)\)/g)) {
-    const reference = match[1];
-    const rooted = /^(r\d+)\/(.+)$/.exec(reference);
-    if (rooted && roots.has(rooted[1])) files.push(path.join(roots.get(rooted[1]), rooted[2]));
-    else if (path.isAbsolute(reference)) files.push(path.normalize(reference));
-    else unrecognized.push(reference);
-  }
-  // Every entry under the skill list must carry a file reference.
-  const listStart = text.indexOf(SKILL_LIST_HEADING);
-  if (listStart >= 0) {
-    const listEnd = text.indexOf("</skills_instructions>", listStart);
-    const section = text.slice(listStart + SKILL_LIST_HEADING.length, listEnd >= 0 ? listEnd : undefined);
-    for (const line of section.split("\n")) {
-      if (line.startsWith("- ") && !/\(file: [^)]+\)/.test(line)) unrecognized.push(line.trim());
-    }
-  }
-  if (!text.includes(SKILL_ROOTS_HEADING)) unrecognized.push("no skill roots table");
-  return { files, unrecognized };
-}
-
-function within(file, directory) {
-  const relative = path.relative(directory, file);
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-}
-
-// Everything Codex lists outside the private home is ambient: repository,
-// user, or system skills. Codex's embedded skills live inside the private home.
-function ambientSkills(text, privateHome) {
-  let home = path.resolve(privateHome);
-  try {
-    home = realpathSync(privateHome);
-  } catch {
-    // The directory is created before rendering; fall back to the given path.
-  }
-  return [...new Set(listedSkills(text).files.filter((file) => {
-    let real = file;
-    try {
-      real = realpathSync(file);
-    } catch {
-      // A listed but unreadable path is still ambient.
-    }
-    return !within(file, home) && !within(real, home);
-  }))].sort();
-}
-
-function instructionsLoaded(text) {
-  return /^# AGENTS\.md instructions for /m.test(text);
-}
-
-// Configuration overrides that keep ambient instructions out of the reviewer:
-// no project AGENTS.md files, and every listed ambient skill disabled by its
-// SKILL.md path, which is how skills.config identifies a skill.
-function isolationOverrides(skillFiles = []) {
-  const overrides = [...PROJECT_DOC_OVERRIDES];
-  const files = [...new Set(skillFiles)].sort();
-  if (files.length) {
-    overrides.push("-c", `skills.config=[${files.map((file) => `{path=${JSON.stringify(file)},enabled=false}`).join(",")}]`);
-  }
-  return overrides;
-}
-
-function isolationError(message) {
-  return Object.assign(new Error(`Codex isolation incomplete: ${message}`), { providerError: `Codex isolation incomplete: ${message}` });
-}
-
-function assertRecognizedSkills(text) {
-  const { unrecognized } = listedSkills(text);
-  if (unrecognized.length) throw isolationError(`Codex listed skills in an unrecognized format and they cannot be disabled: ${unrecognized.join(", ")}`);
-}
-
-// Ask Codex what it would load, disable all of it, then prove that only its own
-// embedded skills and no AGENTS.md instructions remain. Fails closed, including
-// when the rendering uses a format this adapter cannot interpret.
-async function isolate(codexBin, context) {
-  let baseline;
-  try {
-    baseline = await renderPrompt(codexBin, { ...context, overrides: PROJECT_DOC_OVERRIDES });
-  } catch (error) {
-    throw classifyFailure(error, Buffer.alloc(0));
-  }
-  assertRecognizedSkills(baseline);
-  const overrides = isolationOverrides(ambientSkills(baseline, context.privateHome));
-  let verification;
-  try {
-    verification = await renderPrompt(codexBin, { ...context, overrides });
-  } catch (error) {
-    throw classifyFailure(error, Buffer.alloc(0));
-  }
-  assertRecognizedSkills(verification);
-  const leftover = ambientSkills(verification, context.privateHome);
-  if (leftover.length) throw isolationError(`Codex still lists skills outside the private home: ${leftover.join(", ")}`);
-  if (instructionsLoaded(verification)) throw isolationError("AGENTS.md instructions still load.");
-  return overrides;
-}
+const SESSION_SCRIPT = fileURLToPath(new URL("./codex-session.mjs", import.meta.url));
+const PINNED_SETTINGS = Object.freeze([
+  'approval_policy="never"',
+  'web_search="disabled"',
+  "features.multi_agent=false",
+  "features.memories=false",
+  "features.hooks=false",
+  "features.apps=false",
+  "features.plugins=false",
+  "notify=[]",
+  'developer_instructions=""',
+]);
 
 // Jig and the adapter both start Codex through this shim. For `exec` it swaps in
-// a private CODEX_HOME holding only a symlink to the selected home's auth.json,
-// so credentials (including refreshed tokens, which Codex writes in place) stay
-// with the real home while its instructions, skills, and configuration do not
-// reach the reviewer. Jig's usage inspection and any other invocation pass
-// through unchanged.
+// a private CODEX_HOME holding a symlink to the selected home's auth.json, so
+// credentials (including refreshed tokens, which Codex writes in place) stay
+// with the real home, then hands over to codex-session.mjs. That script copies
+// the home's configuration (minus project trust and instruction files), asks
+// Codex what it would load, and starts the session with every instruction,
+// skill, and MCP server that did not come from Codex itself switched off. Under
+// a launcher the home is known only here. Jig's usage inspection and any other
+// invocation pass through unchanged.
 const SHIM_PROBE = "--jig-review-probe";
 const SHIM = `#!/bin/sh
 # Generated by codex-review.mjs for one review; removed with its evidence directory.
@@ -201,8 +92,19 @@ if [ -z "$source_home" ] || [ ! -f "$source_home/auth.json" ]; then
   exit 1
 fi
 ln -sfn "$source_home/auth.json" "$private/auth.json" || exit 1
-CODEX_HOME="$private" exec "$real" "$@"
+JIG_REVIEW_SOURCE_HOME="$source_home" CODEX_HOME="$private" exec "$JIG_REVIEW_NODE" "$JIG_REVIEW_SESSION" "$real" "$@"
 `;
+
+// The variables the shim reads: the real Codex executable, the private home,
+// and the session script with the Node executable that runs it.
+function shimVariables(codexBin, privateHome) {
+  return {
+    JIG_REVIEW_CODEX_BIN: codexBin,
+    JIG_REVIEW_PRIVATE_HOME: privateHome,
+    JIG_REVIEW_NODE: process.execPath,
+    JIG_REVIEW_SESSION: SESSION_SCRIPT,
+  };
+}
 
 // Jig can only start an executable, so under a launcher the shim must run from
 // the evidence directory. A noexec temporary filesystem makes that fail with
@@ -390,35 +292,25 @@ function parseArgs(argv) {
   return options;
 }
 
-// A read-only, ephemeral, configuration-independent Codex session. The private
-// home carries only credentials, user configuration and execpolicy rules are
-// ignored, and the isolation overrides disable project instructions and every
-// ambient skill, so neither the selected home nor the reviewed repository can
-// add instructions or widen command approval past the read-only sandbox, which
-// denies writes and network access. --json keeps the event stream on stdout for
+// A read-only, ephemeral Codex session that uses the selected home's model
+// settings. Command-line values outrank its configuration, so they pin what the
+// review requires: the read-only sandbox (which denies writes and network
+// access), no approval requests, no execpolicy rules, and none of web search,
+// subagents, memories, hooks, apps, plugins, notifications, or configured
+// developer instructions. codex-session.mjs adds the isolation overrides that
+// depend on the selected home. --json keeps the event stream on stdout for
 // failure classification.
-function buildCodexArgs(options, scope, lastMessagePath, overrides = isolationOverrides()) {
+function buildCodexArgs(options, scope, lastMessagePath) {
   const args = [
     "exec",
     "--json",
     "--ephemeral",
-    "--ignore-user-config",
     "--ignore-rules",
-    ...overrides,
     "--sandbox",
     "read-only",
     "--color",
     "never",
-    "-c",
-    'approval_policy="never"',
-    "-c",
-    "mcp_servers={}",
-    "-c",
-    'web_search="disabled"',
-    "-c",
-    "features.multi_agent=false",
-    "-c",
-    "features.memories=false",
+    ...PINNED_SETTINGS.flatMap((setting) => ["-c", setting]),
     "--cd",
     scope.repoRoot,
     "--output-last-message",
@@ -469,13 +361,10 @@ async function runCodexReview(options, dependencies = {}) {
     const lastMessagePath = path.join(evidence.directory, LAST_MESSAGE_FILE);
     const { shim, privateHome } = writeShim(evidence.directory);
     const launched = options.launcher !== "none";
-    const overrides = await isolate(codexBin, {
-      cwd: scope.repoRoot, privateHome, deadlineAt, signal, environment: gitEnvironment(childEnvironment(process.env)),
-    });
     // Without a launcher the shim is read by /bin/sh, so the evidence directory
     // need not be executable; Jig has to exec it, so that path is probed first.
     if (launched) await probeShim(shim, { deadlineAt, signal });
-    const codexArgs = buildCodexArgs(options, scope, lastMessagePath, overrides);
+    const codexArgs = buildCodexArgs(options, scope, lastMessagePath);
     const launch = resolveProviderLaunch({
       provider: "codex",
       launcher: options.launcher,
@@ -484,14 +373,14 @@ async function runCodexReview(options, dependencies = {}) {
       inherited: process.env,
       jigBin: dependencies.jigBin ?? null,
     });
-    // JIG_CODEX_BIN makes Jig start the shim; the shim finds the real executable
-    // and the private home through the JIG_REVIEW_* variables. Codex prefers an
-    // API key in the environment over a home's credentials, so under a launcher
-    // the keys are removed and the selected home is the only credential source.
+    // JIG_CODEX_BIN makes Jig start the shim; the shim finds the real executable,
+    // the private home, and the session script through the JIG_REVIEW_*
+    // variables. Codex prefers an API key in the environment over a home's
+    // credentials, so under a launcher the keys are removed and the selected
+    // home is the only credential source.
     const environment = childEnvironment(process.env, {
       JIG_CODEX_BIN: shim,
-      JIG_REVIEW_CODEX_BIN: codexBin,
-      JIG_REVIEW_PRIVATE_HOME: privateHome,
+      ...shimVariables(codexBin, privateHome),
       ...(launched ? Object.fromEntries(API_KEY_VARIABLES.map((name) => [name, null])) : {}),
     });
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
@@ -573,5 +462,6 @@ export {
   probeShim,
   renderPrompt,
   runCodexReview,
+  shimVariables,
   writeShim,
 };

@@ -14,6 +14,8 @@ const CODEX_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]
 // Values of the Codex CLI model_reasoning_effort key; the CLI adapter rejects max and ultra.
 const CODEX_CLI_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
 const CODEX_RUNTIMES = new Set(["native", "cli"]);
+// The agent running the skill. Only Codex hosts a native Codex reviewer subagent.
+const HOSTS = new Set(["codex", "claude"]);
 const CURSOR_MODELS = Object.freeze({
   low: "cursor-grok-4.6-low",
   medium: "cursor-grok-4.6-medium",
@@ -22,6 +24,7 @@ const CURSOR_MODELS = Object.freeze({
 });
 const CURSOR_SPEEDS = new Set(["standard", "fast"]);
 const REVIEW_VALUE_FLAGS = new Map([
+  ["--host", "host"],
   ["--reviewers", "reviewers"],
   ["--claude-model", "claudeModel"],
   ["--claude-effort", "claudeEffort"],
@@ -88,16 +91,24 @@ function parseReviewers(value) {
 
 // Native Codex is the host's own subagent. The CLI runtime runs the codex-review
 // adapter as an independent process, which is the only form a Jig launcher can
-// start, so selecting a launcher selects the CLI runtime.
+// start, so selecting a launcher selects the CLI runtime. A Claude Code host has
+// no Codex subagent, so the CLI runtime is its default and only choice.
 function codexEfforts(runtime) {
   return runtime === "cli" ? CODEX_CLI_EFFORTS : CODEX_EFFORTS;
+}
+
+function assertHostRuntime(host, runtime) {
+  if (host === "claude" && runtime === "native") {
+    throw new Error("Claude Code has no native Codex subagent; Codex reviews there use the cli runtime.");
+  }
 }
 
 // With deferCodexEffort, a reviewer configuration file may still change the
 // runtime, so the effort is only checked against the union here and validated
 // against the effective runtime once that is resolved.
-function codexOptions(raw, provided, { deferCodexEffort = false } = {}) {
-  let runtime = effort("--codex-runtime", raw.codexRuntime, CODEX_RUNTIMES);
+function codexOptions(raw, provided, host, { deferCodexEffort = false } = {}) {
+  let runtime = effort("--codex-runtime", raw.codexRuntime ?? (host === "claude" ? "cli" : "native"), CODEX_RUNTIMES);
+  assertHostRuntime(host, runtime);
   const launcher = normalizeLauncher(raw.codexLauncher, "--codex-launcher");
   if (launcher !== "none") {
     if (provided.has("--codex-runtime") && runtime === "native") {
@@ -148,6 +159,7 @@ function withDefaultLaunchers(review, candidates, reviewers = [], available = su
 
 function parseArgs(argv, parseOptions = {}) {
   const raw = {
+    host: "codex",
     reviewers: "claude,codex",
     claudeModel: "opus",
     claudeEffort: null,
@@ -156,7 +168,7 @@ function parseArgs(argv, parseOptions = {}) {
     claudeLauncher: null,
     codexModel: null,
     codexEffort: null,
-    codexRuntime: "native",
+    codexRuntime: null,
     codexLauncher: null,
     cursorEffort: "high",
     cursorSpeed: "standard",
@@ -185,6 +197,7 @@ function parseArgs(argv, parseOptions = {}) {
   if (provided.has("--all-reviewers") && provided.has("--reviewers")) {
     throw new Error("--all-reviewers cannot be combined with --reviewers.");
   }
+  const host = effort("--host", raw.host, HOSTS);
   const reviewers = provided.has("--all-reviewers")
     ? [...REVIEWER_ORDER]
     : parseReviewers(raw.reviewers);
@@ -224,7 +237,7 @@ function parseArgs(argv, parseOptions = {}) {
   if (claude && claude.launcher !== "none" && claude.configDir != null) {
     throw new Error("--claude-config-dir cannot be combined with --claude-launcher; the launcher selects the Claude home.");
   }
-  const codex = selected.has("codex") ? codexOptions(raw, provided, { deferCodexEffort: true }) : null;
+  const codex = selected.has("codex") ? codexOptions(raw, provided, host, { deferCodexEffort: true }) : null;
   let cursor = null;
   if (selected.has("cursor")) {
     const cursorEffort = effort(
@@ -242,6 +255,7 @@ function parseArgs(argv, parseOptions = {}) {
 
   const review = {
     ...(provided.has("--log-to-beads") ? { logToBeads: true } : {}),
+    host,
     reviewers,
     claude,
     codex,
@@ -277,6 +291,7 @@ export {
   CODEX_EFFORTS,
   CURSOR_MODELS,
   CURSOR_SPEEDS,
+  assertHostRuntime,
   codexEfforts,
   cursorModel,
   defaultLauncherCandidates,

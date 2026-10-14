@@ -26,6 +26,7 @@ import {
   runCodexReview,
   writeShim,
 } from "../skills/comprehensive-review/scripts/codex-review.mjs";
+import { mcpOverrides, mcpServers, pinnedOverrides, prepareHome, reviewerConfig } from "../skills/comprehensive-review/scripts/codex-session.mjs";
 import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
 
@@ -53,9 +54,11 @@ async function workingTreeFingerprint(repo) {
 // renders Codex's roots table and skill entries from the same locations Codex
 // scans (CODEX_HOME/skills, cwd .agents/skills and .codex/skills, ~/.agents/skills)
 // honoring skills.config and project_doc_max_bytes unless told to ignore them.
-// Other invocations record argv, prompt, and environment, then write the report
-// to the --output-last-message path.
-function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "", report = "No actionable findings from Codex.", writeReport = true, ignoreSkillsConfig = false, keepDocs = false, skillEntryFormat = "rooted" } = {}) {
+// `mcp list --json` lists the [mcp_servers.NAME] tables in CODEX_HOME/config.toml,
+// honoring mcp_servers.NAME.enabled=false unless told to ignore it. Other
+// invocations record argv, prompt, environment, and the home's files, then
+// write the report to the --output-last-message path.
+function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "", report = "No actionable findings from Codex.", writeReport = true, ignoreSkillsConfig = false, keepDocs = false, skillEntryFormat = "rooted", ignoreMcpOverrides = false } = {}) {
   const file = path.join(directory, name);
   writeFileSync(file, [
     "#!/usr/bin/env node",
@@ -64,8 +67,15 @@ function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "",
     "const argv = process.argv.slice(2);",
     "function skillFiles(root, out = []) { let entries = []; try { entries = readdirSync(root, { withFileTypes: true }); } catch { return out; }",
     "  for (const entry of entries) { const full = path.join(root, entry.name); if (entry.name === 'SKILL.md') out.push(full); else if (entry.isDirectory()) skillFiles(full, out); } return out; }",
+    "const overrides = argv.filter((a, i) => argv[i - 1] === '-c');",
+    "const positional = argv.filter((a, i) => a !== '-c' && argv[i - 1] !== '-c');",
+    "if (positional[0] === 'mcp') {",
+    "  let config = ''; try { config = readFileSync(path.join(process.env.CODEX_HOME, 'config.toml'), 'utf8'); } catch {}",
+    "  const names = [...config.matchAll(/^\\[mcp_servers\\.([^\\].]+)\\]/gm)].map(m => m[1]);",
+    `  process.stdout.write(JSON.stringify(names.map(name => ({ name, enabled: ${ignoreMcpOverrides} || !overrides.includes('mcp_servers.' + name + '.enabled=false') }))));`,
+    "  process.exit(0);",
+    "}",
     "if (argv[0] === 'debug') {",
-    "  const overrides = argv.filter((a, i) => argv[i - 1] === '-c');",
     `  const disabled = ${ignoreSkillsConfig} ? new Set() : new Set(overrides.filter(o => o.startsWith('skills.config=')).flatMap(o => [...o.matchAll(/path="((?:[^"\\\\]|\\\\.)*)"/g)].map(m => JSON.parse('"' + m[1] + '"'))));`,
     `  const docs = ${keepDocs} || !overrides.includes('project_doc_max_bytes=0');`,
     "  const system = path.join(process.env.CODEX_HOME, 'skills', '.system', 'fake-system-skill'); mkdirSync(system, { recursive: true });",
@@ -86,7 +96,7 @@ function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "",
     "let prompt = '';",
     "for await (const chunk of process.stdin) prompt += chunk;",
     "let home = null;",
-    "try { home = { path: process.env.CODEX_HOME, entries: readdirSync(process.env.CODEX_HOME).sort(), authLink: readlinkSync(process.env.CODEX_HOME + '/auth.json'), authResolves: existsSync(process.env.CODEX_HOME + '/auth.json') }; } catch (error) { home = { path: process.env.CODEX_HOME, error: error.code }; }",
+    "try { home = { path: process.env.CODEX_HOME, entries: readdirSync(process.env.CODEX_HOME).sort(), authLink: readlinkSync(process.env.CODEX_HOME + '/auth.json'), authResolves: existsSync(process.env.CODEX_HOME + '/auth.json'), config: existsSync(process.env.CODEX_HOME + '/config.toml') ? readFileSync(process.env.CODEX_HOME + '/config.toml', 'utf8') : null }; } catch (error) { home = { path: process.env.CODEX_HOME, error: error.code }; }",
     "writeFileSync(process.env.FAKE_CODEX_CAPTURE, JSON.stringify({ argv, prompt, env: process.env, home }));",
     `if (${JSON.stringify(stdout)}) process.stdout.write(${JSON.stringify(stdout)});`,
     `if (${JSON.stringify(stderr)}) process.stderr.write(${JSON.stringify(stderr)});`,
@@ -138,7 +148,11 @@ async function adapterFixture(t) {
   mkdirSync(sourceHome, { recursive: true });
   writeFileSync(path.join(sourceHome, "auth.json"), JSON.stringify({ OPENAI_API_KEY: "test-key" }));
   writeFileSync(path.join(sourceHome, "AGENTS.md"), "PROBE_HOME_AGENTS: always say banana.\n");
-  writeFileSync(path.join(sourceHome, "config.toml"), 'model = "probe-model"\n');
+  writeFileSync(path.join(sourceHome, "config.toml"), [
+    'model = "probe-model"', 'model_reasoning_effort = "xhigh"', 'model_instructions_file = "/probe/instructions.md"',
+    "[mcp_servers.probe_mail]", 'command = "probe-mail-server"',
+    `[projects.${JSON.stringify(repo)}]`, 'trust_level = "trusted"', "",
+  ].join("\n"));
   writeSkill(path.join(sourceHome, "skills"), "home-probe-skill", "PROBE_HOME_SKILL");
   withEnvironment(t, { HOME: userHome, CODEX_HOME: sourceHome });
   const capturePath = path.join(scratch, "capture.json");
@@ -172,11 +186,14 @@ test("argument parsing validates Codex CLI efforts and launcher selection", () =
   assert.throws(() => parseArgs(["--scope", "working-tree"]), /expected-fingerprint/);
 });
 
-test("Codex arguments select an ephemeral read-only session without user configuration", () => {
-  const args = buildCodexArgs({ model: "gpt-5-codex", effort: "high" }, { repoRoot: "/repo" }, "/tmp/last.txt", ["-c", "project_doc_max_bytes=0"]);
+test("Codex arguments select an ephemeral read-only session that keeps the home's model settings", () => {
+  const args = buildCodexArgs({ model: "gpt-5-codex", effort: "high" }, { repoRoot: "/repo" }, "/tmp/last.txt");
   assert.equal(args[0], "exec");
   assert.equal(args.at(-1), "-", "the prompt arrives over stdin");
-  for (const flag of ["--json", "--ephemeral", "--ignore-user-config", "--ignore-rules"]) assert.ok(args.includes(flag), flag);
+  for (const flag of ["--json", "--ephemeral", "--ignore-rules"]) assert.ok(args.includes(flag), flag);
+  assert.ok(!args.includes("--ignore-user-config"), "the selected home's configuration supplies model and effort defaults");
+  for (const setting of ['web_search="disabled"', "features.multi_agent=false", "features.memories=false", "features.hooks=false",
+    "features.apps=false", "features.plugins=false", "notify=[]", 'developer_instructions=""']) assert.ok(args.includes(setting), setting);
   assert.deepEqual(args.slice(args.indexOf("--sandbox"), args.indexOf("--sandbox") + 2), ["--sandbox", "read-only"]);
   assert.deepEqual(args.slice(args.indexOf("--cd"), args.indexOf("--cd") + 2), ["--cd", "/repo"]);
   assert.deepEqual(args.slice(args.indexOf("--output-last-message"), args.indexOf("--output-last-message") + 2), ["--output-last-message", "/tmp/last.txt"]);
@@ -184,8 +201,7 @@ test("Codex arguments select an ephemeral read-only session without user configu
   assert.ok(args.includes('model_reasoning_effort="high"'));
   assert.ok(args.includes('approval_policy="never"'));
   assert.ok(!args.includes("--add-dir"), "a read-only sandbox needs no writable directories");
-  assert.ok(args.includes("project_doc_max_bytes=0"));
-  const defaults = buildCodexArgs({ model: null, effort: null }, { repoRoot: "/repo" }, "/tmp/last.txt", []);
+  const defaults = buildCodexArgs({ model: null, effort: null }, { repoRoot: "/repo" }, "/tmp/last.txt");
   assert.ok(!defaults.includes("--model"));
   assert.ok(!defaults.some((arg) => arg.startsWith("model_reasoning_effort")));
 });
@@ -221,12 +237,18 @@ test("the adapter runs Codex directly with a scrubbed environment and shell-orie
   assert.equal(captured.env.CLAUDE_CODE_SESSION_ID, undefined);
   assert.equal(captured.env.CODEX_SANDBOX_NETWORK_DISABLED, undefined);
   assert.equal(captured.env.GIT_OPTIONAL_LOCKS, "0");
-  // The reviewer runs in a private home that holds the selected credentials and
-  // only what Codex itself writes there; the selected home's instructions,
-  // skills, and configuration are absent.
+  // The reviewer runs in a private home that holds the selected credentials, a
+  // copy of the selected configuration, and only what Codex itself writes there;
+  // the selected home's instructions and skills are absent.
   assert.notEqual(captured.home.path, f.sourceHome);
   assert.ok(captured.home.entries.includes("auth.json"), JSON.stringify(captured.home.entries));
-  for (const name of ["AGENTS.md", "config.toml"]) assert.ok(!captured.home.entries.includes(name), name);
+  assert.ok(!captured.home.entries.includes("AGENTS.md"));
+  assert.match(captured.home.config, /^model = "probe-model"$/m);
+  assert.match(captured.home.config, /^model_reasoning_effort = "xhigh"$/m);
+  assert.doesNotMatch(captured.home.config, /projects|trust_level/, "project trust would load the reviewed repository's own configuration");
+  assert.doesNotMatch(captured.home.config, /instructions_file/);
+  assert.ok(captured.argv.includes("mcp_servers.probe_mail.enabled=false"), "configured MCP servers never start");
+  assert.ok(!captured.argv.includes("--ignore-user-config"));
   assert.equal(captured.home.authLink, path.join(f.sourceHome, "auth.json"));
   assert.equal(captured.home.authResolves, true);
   assert.ok(captured.argv.includes("project_doc_max_bytes=0"));
@@ -305,12 +327,18 @@ test("a missing final message fails the review instead of returning an empty rep
   const f = await adapterFixture(t);
   const silent = fakeProvider(f.scratch, "silent-codex.mjs", { writeReport: false, stdout: "progress only" });
   await assert.rejects(runCodexReview(f.parse(), { codexBin: silent }), /did not write a final message/);
-  const broken = path.join(f.scratch, "broken-render-codex.mjs");
-  writeFileSync(broken, "#!/usr/bin/env node\nprocess.stdout.write('not json');\n");
-  chmodSync(broken, 0o755);
-  let failure;
-  await assert.rejects(runCodexReview(f.parse(), { codexBin: broken }), (error) => { failure = error; return /did not return a JSON prompt rendering/.test(error.message); });
-  assert.equal(failureResult(failure).retryable, false);
+  // Unreadable inspection output from either Codex command fails isolation permanently.
+  for (const [name, script, message] of [
+    ["broken-mcp-codex.mjs", "process.stdout.write('not json');", /codex mcp list did not return a JSON server list/],
+    ["broken-render-codex.mjs", "process.stdout.write(process.argv.includes('mcp') ? '[]' : 'not json');", /did not return a JSON prompt rendering/],
+  ]) {
+    const broken = path.join(f.scratch, name);
+    writeFileSync(broken, `#!/usr/bin/env node\n${script}\n`);
+    chmodSync(broken, 0o755);
+    let failure;
+    await assert.rejects(runCodexReview(f.parse(), { codexBin: broken }), (error) => { failure = error; return message.test(error.message); });
+    assert.equal(failureResult(failure).retryable, false);
+  }
 });
 
 test("Codex incorrect API key errors disable the provider through the bridge", async (t) => {
@@ -416,8 +444,34 @@ test("rendered prompts are parsed into absolute skill paths, ambient skills, and
   assert.deepEqual(listedSkills("no skills section at all").unrecognized, ["no skill roots table"]);
   assert.equal(instructionsLoaded("# AGENTS.md instructions for /srv/repo\n<INSTRUCTIONS>x</INSTRUCTIONS>"), true);
   assert.equal(instructionsLoaded("no instructions here"), false);
-  assert.deepEqual(isolationOverrides([]), ["-c", "project_doc_max_bytes=0"]);
+  assert.deepEqual(isolationOverrides([]), ["-c", "project_doc_max_bytes=0", "-c", "skills.config=[]"], "the list always replaces a configured one");
   assert.deepEqual(isolationOverrides(["/b/SKILL.md", "/a/SKILL.md", "/a/SKILL.md"]), ["-c", "project_doc_max_bytes=0", "-c", 'skills.config=[{path="/a/SKILL.md",enabled=false},{path="/b/SKILL.md",enabled=false}]']);
+});
+
+test("the reviewer's configuration keeps model settings and drops project trust and instruction files", () => {
+  const config = [
+    'model = "gpt-6-astra"', 'model_reasoning_effort = "xhigh"', 'projects_dir = "/kept"',
+    'model_instructions_file = "/x.md"', '  experimental_instructions_file = "/y.md"',
+    'projects."/inline/dotted".trust_level = "trusted"', 'projects = { "/inline/table" = { trust_level = "trusted" } }',
+    "[profiles.work]", 'model = "gpt-6-sol"', 'model_instructions_file = "/z.md"',
+    '[projects."/home/u/repo.with.dots"]', 'trust_level = "trusted"',
+    "[ projects ] # comment", '"/under/table" = { trust_level = "trusted" }',
+    "[[projects.list]]", 'path = "/array"',
+    "[mcp_servers.mail]", 'command = "mail"',
+    "[projects_extra]", "kept = true", "",
+  ].join("\n");
+  const kept = reviewerConfig(config);
+  for (const line of ['model = "gpt-6-astra"', 'model_reasoning_effort = "xhigh"', 'projects_dir = "/kept"', "[profiles.work]", 'model = "gpt-6-sol"',
+    "[mcp_servers.mail]", 'command = "mail"', "[projects_extra]", "kept = true"]) assert.ok(kept.split("\n").includes(line), line);
+  for (const fragment of ["trust_level", "instructions_file", "/under/table", "/array", "repo.with.dots"]) assert.ok(!kept.includes(fragment), fragment);
+  assert.equal(reviewerConfig('model = "m"\r\n[projects."/r"]\r\ntrust_level = "trusted"\r\n'), 'model = "m"\r');
+});
+
+test("MCP servers are disabled by name, and names a dotted key cannot address fail closed", () => {
+  assert.deepEqual(mcpOverrides(["mail", "a-b_1", "mail"]), ["-c", "a-b_1.enabled=false".replace(/^/, "mcp_servers."), "-c", "mcp_servers.mail.enabled=false"]);
+  assert.deepEqual(mcpOverrides([]), []);
+  assert.throws(() => mcpOverrides(["ok", "dotted.name", "with space"]), /Codex isolation incomplete: MCP servers whose names cannot be disabled: dotted\.name, with space/);
+  assert.deepEqual(pinnedOverrides(["exec", "--json", "-c", "notify=[]", "--cd", "/r", "-c", "a=1", "-"]), ["-c", "notify=[]", "-c", "a=1"]);
 });
 
 test("isolation fails closed when Codex lists skills in an unrecognized format", async (t) => {
@@ -445,6 +499,9 @@ test("isolation fails closed when Codex still lists ambient skills or instructio
   assert.equal(failureResult(failure).retryable, false);
   const documented = fakeProvider(f.scratch, "documented-codex.mjs", { keepDocs: true });
   await assert.rejects(runCodexReview(f.parse(), { codexBin: documented }), /AGENTS\.md instructions still load/);
+  const serving = fakeProvider(f.scratch, "serving-codex.mjs", { ignoreMcpOverrides: true });
+  await assert.rejects(runCodexReview(f.parse(), { codexBin: serving }), (error) => { failure = error; return /MCP servers are still enabled: probe_mail/.test(error.message); });
+  assert.equal(failureResult(failure).retryable, false);
   assert.ok(!existsSync(f.capturePath), "the provider never started");
 });
 
@@ -468,6 +525,12 @@ test("under a launcher the shim passes inspection through and isolates only exec
   const fakeCodex = fakeProvider(f.scratch, "launched-codex.mjs");
   const inspection = path.join(f.scratch, "inspection.json");
   const fakeJig = path.join(f.scratch, "fake-jig.mjs");
+  // Jig selects a different home than the inherited CODEX_HOME; its
+  // configuration is only known once Jig starts the shim.
+  const selectedHome = path.join(f.scratch, "selected-codex-home");
+  mkdirSync(selectedHome);
+  writeFileSync(path.join(selectedHome, "auth.json"), JSON.stringify({ OPENAI_API_KEY: "selected-key" }));
+  writeFileSync(path.join(selectedHome, "config.toml"), 'model = "selected-model"\n[mcp_servers.selected_only]\ncommand = "selected-server"\n');
   // Like Jig: inspect usage with the configured executable, then launch it with
   // CODEX_HOME set to the selected home and the forwarded arguments.
   writeFileSync(fakeJig, [
@@ -476,7 +539,7 @@ test("under a launcher the shim passes inspection through and isolates only exec
     'import { writeFileSync } from "node:fs";',
     "const argv = process.argv.slice(2);",
     "const forwarded = argv.slice(argv.indexOf('--') + 1);",
-    `const env = { ...process.env, CODEX_HOME: ${JSON.stringify(f.sourceHome)}, FAKE_CODEX_CAPTURE: ${JSON.stringify(inspection)} };`,
+    `const env = { ...process.env, CODEX_HOME: ${JSON.stringify(selectedHome)}, FAKE_CODEX_CAPTURE: ${JSON.stringify(inspection)} };`,
     "spawnSync(process.env.JIG_CODEX_BIN, ['app-server'], { env, stdio: ['ignore', 'ignore', 'inherit'], input: undefined });",
     "const result = spawnSync(process.env.JIG_CODEX_BIN, forwarded, { env: { ...env, FAKE_CODEX_CAPTURE: process.env.FAKE_CODEX_CAPTURE }, stdio: 'inherit' });",
     "process.exit(result.status ?? 1);",
@@ -487,34 +550,56 @@ test("under a launcher the shim passes inspection through and isolates only exec
   assert.equal(report, "No actionable findings from Codex.");
   const inspected = JSON.parse(readFileSync(inspection, "utf8"));
   assert.deepEqual(inspected.argv, ["app-server"]);
-  assert.equal(inspected.home.path, f.sourceHome, "inspection keeps the selected home");
+  assert.equal(inspected.home.path, selectedHome, "inspection keeps the selected home");
   const launched = f.captured();
-  assert.deepEqual(launched.argv.slice(0, 2), ["exec", "--json"]);
+  assert.equal(launched.argv[0], "exec");
+  assert.ok(launched.argv.includes("--json"));
   for (const name of API_KEY_VARIABLES) {
     assert.equal(inspected.env[name], undefined, `${name} must not reach Jig's inspection`);
     assert.equal(launched.env[name], undefined, `${name} must not override the selected home`);
   }
-  assert.notEqual(launched.home.path, f.sourceHome);
+  assert.notEqual(launched.home.path, selectedHome);
   assert.ok(launched.home.entries.includes("auth.json"));
   assert.ok(!launched.home.entries.includes("AGENTS.md"));
-  assert.equal(launched.home.authLink, path.join(f.sourceHome, "auth.json"));
+  assert.equal(launched.home.authLink, path.join(selectedHome, "auth.json"));
+  // Configuration and MCP isolation follow the home Jig selected, not the inherited one.
+  assert.match(launched.home.config, /^model = "selected-model"$/m);
+  assert.ok(launched.argv.includes("mcp_servers.selected_only.enabled=false"));
+  assert.ok(!launched.argv.includes("mcp_servers.probe_mail.enabled=false"));
 });
 
 const codexCli = spawnSync("codex", ["--version"], { encoding: "utf8" }).status === 0;
-test("the installed Codex CLI renders no ambient instructions or skills after the adapter's isolation", { skip: codexCli ? false : "codex CLI not installed" }, async (t) => {
+test("the installed Codex CLI loads the selected configuration without ambient instructions, skills, or MCP servers", { skip: codexCli ? false : "codex CLI not installed" }, async (t) => {
   const f = await adapterFixture(t);
+  // The selected home trusts the reviewed repository, which carries its own Codex
+  // configuration, and adds an MCP server and developer instructions.
+  const repo = realpathSync(f.repo);
+  writeFileSync(path.join(repo, ".codex", "config.toml"), '[mcp_servers.repo_probe]\ncommand = "repo-probe-server"\n');
+  writeFileSync(path.join(f.sourceHome, "config.toml"), [
+    'model = "probe-model"', 'developer_instructions = "PROBE_CONFIG_INSTRUCTIONS"', "[mcp_servers.probe_mail]", 'command = "probe-mail-server"',
+    `[projects.${JSON.stringify(repo)}]`, 'trust_level = "trusted"', "",
+  ].join("\n"));
   const privateHome = path.join(f.scratch, "private-home"); mkdirSync(privateHome, { mode: 0o700 });
-  const context = { cwd: f.repo, privateHome, deadlineAt: Date.now() + 120_000, signal: null, environment: { ...process.env, HOME: f.userHome } };
-  const markers = ["PROBE_REPO_AGENTS", "PROBE_REPO_SKILL", "PROBE_DEEP_SKILL", "PROBE_CODEX_SKILL", "PROBE_USER_SKILL"];
+  assert.equal(prepareHome(f.sourceHome, privateHome), true);
+  const pinned = pinnedOverrides(buildCodexArgs({}, { repoRoot: repo }, path.join(f.scratch, "unused.txt")));
+  const context = { cwd: repo, privateHome, deadlineAt: Date.now() + 120_000, signal: null, environment: { ...process.env, HOME: f.userHome } };
+  const markers = ["PROBE_REPO_AGENTS", "PROBE_REPO_SKILL", "PROBE_DEEP_SKILL", "PROBE_CODEX_SKILL", "PROBE_USER_SKILL", "PROBE_CONFIG_INSTRUCTIONS"];
   const ambient = await renderPrompt("codex", { ...context, overrides: [] });
   const leaked = markers.filter((marker) => ambient.includes(marker));
-  assert.ok(leaked.includes("PROBE_REPO_AGENTS") && leaked.includes("PROBE_REPO_SKILL") && leaked.includes("PROBE_USER_SKILL"), `baseline leaks: ${leaked.join(", ")}`);
-  const overrides = await isolate("codex", context);
-  const isolated = await renderPrompt("codex", { ...context, overrides });
+  for (const marker of ["PROBE_REPO_AGENTS", "PROBE_REPO_SKILL", "PROBE_USER_SKILL", "PROBE_CONFIG_INSTRUCTIONS"]) assert.ok(leaked.includes(marker), `baseline leaks: ${leaked.join(", ")}`);
+  const overrides = await isolate("codex", { ...context, overrides: pinned });
+  const isolated = await renderPrompt("codex", { ...context, overrides: [...pinned, ...overrides] });
   for (const marker of markers) assert.ok(!isolated.includes(marker), `${marker} leaked`);
   assert.deepEqual(ambientSkills(isolated, privateHome), []);
   assert.equal(instructionsLoaded(isolated), false);
   assert.ok(!ambient.includes("PROBE_HOME_AGENTS") && !ambient.includes("PROBE_HOME_SKILL"), "the private home never exposes the selected home's instructions or skills");
+  // The home's own server is disabled; without trust the repository's server never loads.
+  const servers = await mcpServers("codex", { ...context, overrides: [...pinned, ...overrides] });
+  assert.deepEqual(servers.map((server) => [server.name, server.enabled]), [["probe_mail", false]]);
+  const unfiltered = path.join(f.scratch, "unfiltered-home"); mkdirSync(unfiltered, { mode: 0o700 });
+  writeFileSync(path.join(unfiltered, "config.toml"), readFileSync(path.join(f.sourceHome, "config.toml")));
+  const trusted = await mcpServers("codex", { ...context, privateHome: unfiltered, overrides: pinned });
+  assert.ok(trusted.some((server) => server.name === "repo_probe"), "with project trust Codex would load the repository's configuration");
 });
 
 test("a relative CODEX_HOME is resolved against the launch directory before linking credentials", async (t) => {

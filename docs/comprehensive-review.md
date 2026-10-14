@@ -2,17 +2,17 @@
 
 [Back to the skill catalog](../README.md#jig-review)
 
-`jig-review:comprehensive-review` runs independent reviews of the same Git changes and merges their findings. It runs inside Codex, using Codex subagents to perform the native review and forward assignments to selected external CLIs.
+`jig-review:comprehensive-review` runs independent reviews of the same Git changes and merges their findings. It runs inside Codex or Claude Code. In Codex, a native subagent performs the Codex review and forwarders run the selected external CLIs. In Claude Code, every reviewer, including Codex, runs as an independent CLI process.
 
 The default reviewers are Claude Code and Codex. Cursor is optional. Review-only requests stop at the report. Ordinary review-and-fix requests route to [review-fix-loop](review-fix-loop.md) without another authorization question. Explicit “once” or “do not re-review” requests permit one repair phase after all reviewer reports are frozen.
 
 ## Setup and Invocation
 
-Install `jig-review` using the [marketplace instructions](../README.md#install-with-codex). You need Node.js 22 or newer and a Codex host with subagents. External adapters support Linux, macOS, and Windows through WSL.
+Install `jig-review` using the marketplace instructions for [Codex](../README.md#install-with-codex) or [Claude Code](../README.md#install-with-claude-code). You need Node.js 22 or newer. External adapters support Linux, macOS, and Windows through WSL.
 
-Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries only the selected account's `auth.json`. These passes consume provider usage. A native Codex-only review does not need any external CLI. When compatible Jig is available, omitted Claude and Codex launchers default to `auto` (Codex uses the CLI runtime). Explicit `none` disables detection; a Claude config directory or explicit native Codex runtime preserves that choice. Native-only Codex effort also preserves native execution. With automatic launchers, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
+Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries the selected account's `auth.json` and the model settings in its `config.toml`, with its instructions, skills, and MCP servers left out. These passes consume provider usage. A native Codex-only review in Codex does not need any external CLI; in Claude Code, every Codex pass needs the `codex` CLI. When compatible Jig is available, omitted Claude and Codex launchers default to `auto` (Codex uses the CLI runtime). Explicit `none` disables detection; a Claude config directory or explicit native Codex runtime preserves that choice. Native-only Codex effort also preserves native execution. With automatic launchers, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
 
-Enter these prompts in Codex from the repository being reviewed:
+Enter these prompts in Codex from the repository being reviewed. In Claude Code, use `/jig-review:comprehensive-review` with the same options:
 
 | Task | Prompt |
 |---|---|
@@ -34,7 +34,7 @@ Enter these prompts in Codex from the repository being reviewed:
 | Exclude one path for this run | `$jig-review:comprehensive-review --scope branch --exclude-path .agent/` |
 | Exclude several paths | `$jig-review:comprehensive-review --exclude-path .agent/ --exclude-path generated/reports/` |
 
-For a direct-copy install, replace `$jig-review:comprehensive-review` with `$comprehensive-review`. Direct installation into Claude Code is unsupported because orchestration depends on Codex subagents.
+For a direct-copy install, replace `$jig-review:comprehensive-review` with `$comprehensive-review` in Codex or `/comprehensive-review` in Claude Code. In Claude Code, the skill runs Codex only through its CLI adapter: `--codex-runtime native` is rejected, and `--codex-effort` uses the CLI range `minimal|low|medium|high|xhigh`.
 
 Native Codex model and effort inherit the host when omitted. Explicit overrides require host/account support; the parser accepting a value does not prove provider availability. Preserve Claude and Cursor selections independently. See the [evaluation guide](skill-evaluations.md) for controlled Astra trials and the distinction between requested and reported configuration.
 

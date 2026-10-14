@@ -5,7 +5,7 @@ description: Run independent Claude and Codex reviews of Git diffs and merge fin
 
 # Comprehensive Review
 
-Produce one consolidated code review from one or more reviewers in independent contexts. Default to Claude Code and Codex; include Cursor Agent with Grok 4.6 only when selected. For each selected provider, prefer Jig automatic account selection when its launch command supports it; this uses the CLI runtime for Codex. Without compatible Jig, use direct Claude and native Codex. Preserve explicit launcher, profile, runtime, and effort choices; see the reviewer controls.
+Produce one consolidated code review from one or more reviewers in independent contexts. Default to Claude Code and Codex; include Cursor Agent with Grok 4.6 only when selected. For each selected provider, prefer Jig automatic account selection when its launch command supports it; this uses the CLI runtime for Codex. Without compatible Jig, use direct Claude, and native Codex on a Codex host; on Claude Code, Codex always runs as a CLI process. Preserve explicit launcher, profile, runtime, and effort choices; see the reviewer controls.
 
 Resolve the user's checkout with `git rev-parse --show-toplevel` from the requested repository, or the starting working directory when none is specified. Keep that root for review, handoff, and subsequent repairs. Reviewer independence means separate agent contexts; it does not require separate source trees. Do not create or switch to a temporary worktree, clone, or source copy to obtain a clean checkout or preserve unrelated edits. A user-selected linked worktree is a valid checkout; a different source location requires explicit user direction. Temporary directories hold review artifacts only.
 
@@ -19,7 +19,7 @@ If that controller rejects unsupported repository capabilities, stop with its pr
 
 Accept task context in the user's request or referenced specification. The parent turns it into the shared brief below; reviewers do not inherit the conversation. Preserve explicit user constraints and existing authorization.
 
-Normalize reviewer controls with `node "<skill-root>/scripts/review-options.mjs"`, forwarding only supplied reviewer/exclusion options. Use its JSON exactly. Defaults select Claude and Codex; Cursor is opt-in. Read [reviewer-options.md](references/reviewer-options.md) when controls are supplied or provider configuration needs inspection. Do not substitute a rejected model, effort, profile, or access setting. Scope flags are resolved separately.
+Normalize reviewer controls with `node "<skill-root>/scripts/review-options.mjs"`, forwarding only supplied reviewer/exclusion options. When the host is Claude Code, also pass `--host claude` and read [claude-code-host.md](references/claude-code-host.md), which replaces the Codex spawn and wait mechanics. Use its JSON exactly. Defaults select Claude and Codex; Cursor is opt-in. Read [reviewer-options.md](references/reviewer-options.md) when controls are supplied or provider configuration needs inspection. Do not substitute a rejected model, effort, profile, or access setting. Scope flags are resolved separately.
 
 Read [scope.md](references/scope.md) before resolving scope and capturing its fingerprint. It defines branch/working-tree defaults, `--base`, `--include-working-tree`, exclusions, and incomplete-capture handling. Read [Beads logging](references/beads-logging.md) before capture only when `--log-to-beads` is selected; retain that flag in the parent when routing repairs to the loop.
 

@@ -112,6 +112,8 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
     assert.equal(options.cwd, a.repository); assert.equal(options.expectedFingerprint, a.fingerprint);
     assert.equal(options.effort, "high"); assert.equal(options.fileAccess, "restricted"); assert.equal(options.includeWorkingTree, true);
     assert.deepEqual(options.excludePaths, ["private"]); assert.ok(dependencies.promptSuffix.includes('"resultSchema"'));
+    // Without a recorded receipt, reviewers must still name the checks for every criterion.
+    assert.match(dependencies.promptSuffix, /acceptance entry for each criterion \("value"\)[^\n]*naming the required checks \("unit"\)[^\n]*even when no receipt has been recorded yet\. Example entry: \{"criterionId":"value","status":"uncertain","evidence":"\.\.\.","validationIds":\["unit"\]\}\n$/);
     return dependencies.parseReport(JSON.stringify(vote(a)));
   } });
   assert.deepEqual(result, vote(a));
@@ -285,6 +287,21 @@ test("the configured codex runtime is resolved once and travels with the capabil
   assert.equal(minimal.options.review.codex.effort, "minimal");
 });
 
+test("a Claude Code host dispatches every reviewer through a bundled bridge", async t => {
+  const balanced = await fixture(t).start({}, ["--host", "claude"]);
+  assert.deepEqual(balanced.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["claude", undefined, true]]);
+  const strict = await fixture(t).start({}, ["--host", "claude", "--review-policy", "strict"]);
+  assert.deepEqual(strict.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["claude", undefined, true], ["codex", "cli", true]]);
+  const configured = await fixture(t).start({ reviewers: [{ id: "codex" }] }, ["--host", "claude", "--reviewers", "codex"]);
+  assert.deepEqual(configured.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", true]]);
+  // A native entry would hand the review to a Claude subagent labeled as Codex.
+  await assert.rejects(fixture(t).start({ reviewers: [{ id: "codex", runtime: "native" }] }, ["--host", "claude", "--reviewers", "codex"]), /Claude Code has no native Codex subagent/);
+  // A custom command does not make a native runtime valid on this host.
+  await assert.rejects(fixture(t).start({ reviewers: [{ id: "codex", runtime: "native", command: [process.execPath, "provider.mjs"] }] }, ["--host", "claude", "--reviewers", "codex"]), /Claude Code has no native Codex subagent/);
+  const custom = await fixture(t).start({ reviewers: [{ id: "codex", runtime: "cli", command: [process.execPath, "provider.mjs"] }] }, ["--host", "claude", "--reviewers", "codex"]);
+  assert.deepEqual(custom.config.reviewers.map(p => [p.id, p.runtime, p.bundled]), [["codex", "cli", undefined]]);
+});
+
 test("evidence declarations reject broad paths and policy files", () => {
   const base = { goal: "test", nonGoals: [], compatibilityConstraints: [], permittedBehaviorChanges: [], acceptanceCriteria: [{ id: "v", description: "v" }], requiredValidation: [{ id: "v", argv: ["true"] }] };
   for (const file of [".agent/*", ".agent/jig-contract.json", ".agent/jig-contract.jsonl", "../receipts.jsonl", "AGENTS.jsonl"]) {
@@ -385,7 +402,7 @@ import fs from 'node:fs';
 let prompt='';
 if(${JSON.stringify(provider)}==='claude'){ for await(const chunk of process.stdin) prompt+=chunk; }
 else {const arg=process.argv.at(-1);const file=arg.match(/from (.+)\\. Follow/)[1];prompt=fs.readFileSync(file,'utf8');}
-const assignment=JSON.parse(prompt.trim().split('\\n').at(-1));
+const assignment=JSON.parse(prompt.split('\\n').findLast(line=>line.startsWith('{')));
 if(!assignment.instructions.includes('read-only')) throw new Error('Role omitted');
 const report=JSON.stringify({assignmentId:assignment.id,fingerprint:assignment.fingerprint,complete:true,findings:[],acceptance:[{criterionId:'value',status:'satisfied',evidence:'Checked source',validationIds:['unit']}]});
 process.stdout.write(${JSON.stringify(provider)}==='claude'?JSON.stringify({type:'result',result:report,is_error:false}):report);

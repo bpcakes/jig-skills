@@ -1,0 +1,18 @@
+{
+  "name": "jig-review",
+  "version": "0.15.0",
+  "description": "Configurable parallel reviews and bounded review-fix loops with Claude Code, Codex, and Cursor/Grok.",
+  "author": {
+    "name": "Jig"
+  },
+  "homepage": "https://github.com/bpcakes/jig-skills",
+  "repository": "https://github.com/bpcakes/jig-skills",
+  "license": "MIT",
+  "keywords": [
+    "review",
+    "claude-code",
+    "codex",
+    "cursor-agent",
+    "grok"
+  ]
+}

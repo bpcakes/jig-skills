@@ -6,7 +6,7 @@ Keep each skill focused on a concrete task, with clear inputs, default behavior,
 
 ## Repository Layout
 
-- `.agents/plugins/marketplace.json` registers plugins and their installation policies for Codex; `.claude-plugin/marketplace.json` registers them for Claude Code. `jig-review` and `jig-orchestration` currently require Codex and appear only in the Codex marketplace.
+- `.agents/plugins/marketplace.json` registers plugins and their installation policies for Codex; `.claude-plugin/marketplace.json` registers them for Claude Code. `jig-orchestration` currently requires Codex and appears only in the Codex marketplace.
 - `plugins/<plugin>/.codex-plugin/plugin.json` and `plugins/<plugin>/.claude-plugin/plugin.json` declare plugin metadata and version for each host. `evals/host-parity.test.mjs` fails when they drift.
 - `plugins/<plugin>/skills/<skill>/agents/openai.yaml` holds Codex-only interface and policy metadata. A skill with `allow_implicit_invocation: false` there also sets `disable-model-invocation: true` in its `SKILL.md` frontmatter so Claude Code applies the same explicit-only policy; the parity test checks both directions.
 - `plugins/<plugin>/skills/<skill>/SKILL.md` is the skill entrypoint. Supporting references, scanners, examples, and tests stay with the skill.

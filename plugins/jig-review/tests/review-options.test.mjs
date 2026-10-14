@@ -17,6 +17,7 @@ const parseArgs = (argv, options = {}) => parseReviewArgs(argv, { launcherAvaila
 
 test("default reviewers remain Claude and Codex", () => {
   assert.deepEqual(parseArgs([]), {
+    host: "codex",
     reviewers: ["claude", "codex"],
     claude: {
       model: "opus",
@@ -41,6 +42,7 @@ test("all-reviewers selects every provider in canonical order", () => {
       "fast",
     ]),
     {
+      host: "codex",
       reviewers: ["claude", "codex", "cursor"],
       claude: {
         model: "opus",
@@ -81,6 +83,7 @@ test("reviewers and namespaced model settings are normalized", () => {
       "fast",
     ]),
     {
+      host: "codex",
       reviewers: ["claude", "codex", "cursor"],
       claude: {
         model: "sonnet",
@@ -103,6 +106,7 @@ test("reviewers and namespaced model settings are normalized", () => {
 
 test("single-reviewer selection does not configure or require other CLIs", () => {
   assert.deepEqual(parseArgs(["--reviewers", "cursor", "--cursor-effort", "low"]), {
+    host: "codex",
     reviewers: ["cursor"],
     claude: null,
     codex: null,
@@ -243,6 +247,7 @@ test("CLI entrypoint works when the skill directory is reached through a symlink
     { encoding: "utf8" },
   );
   assert.deepEqual(JSON.parse(output), {
+    host: "codex",
     reviewers: ["cursor"],
     claude: null,
     codex: null,
@@ -272,4 +277,21 @@ test("Jig launchers select provider homes and imply the Codex CLI runtime", () =
   assert.throws(() => parseArgs(["--reviewers", "claude", "--codex-launcher", "auto"]), /--codex-launcher requires selecting codex/);
   assert.throws(() => parseArgs(["--reviewers", "codex", "--claude-launcher", "auto"]), /--claude-launcher requires selecting claude/);
   assert.throws(() => parseArgs(["--reviewers", "cursor", "--codex-runtime", "cli"]), /--codex-runtime requires selecting codex/);
+});
+
+test("a Claude Code host reviews with Codex only through its CLI adapter", () => {
+  const claudeHost = parseArgs(["--host", "claude"]);
+  assert.equal(claudeHost.host, "claude");
+  assert.deepEqual(claudeHost.reviewers, ["claude", "codex"]);
+  assert.deepEqual(claudeHost.codex, { model: null, effort: null, runtime: "cli", launcher: "none" });
+  assert.equal(parseArgs(["--host", "Claude", "--codex-effort", "minimal"]).codex.effort, "minimal", "the CLI effort range applies");
+  assert.throws(() => parseArgs(["--host", "claude", "--codex-effort", "ultra"]), /Use minimal, low, medium, high, xhigh/);
+  // An explicit native runtime would make a Claude subagent report as Codex.
+  assert.throws(() => parseArgs(["--host", "claude", "--codex-runtime", "native"]), /Claude Code has no native Codex subagent/);
+  assert.equal(parseArgs(["--host", "claude", "--codex-launcher", "auto"]).codex.runtime, "cli");
+  assert.equal(parseArgs(["--host", "claude", "--reviewers", "claude"]).codex, null);
+  assert.equal(parseArgs(["--host", "codex"]).codex.runtime, "native");
+  assert.throws(() => parseArgs(["--host", "cursor"]), /Unsupported --host value "cursor"\. Use codex, claude/);
+  assert.throws(() => parseArgs(["--host", "claude", "--host", "codex"]), /Duplicate argument: --host/);
+  assert.throws(() => parseArgs(["--host"]), /Missing value for --host/);
 });

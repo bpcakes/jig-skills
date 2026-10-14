@@ -130,7 +130,7 @@ import fs from 'node:fs';
 let prompt='';
 if(${JSON.stringify(provider)}==='claude'){for await(const chunk of process.stdin)prompt+=chunk;}
 else {prompt=fs.readFileSync(process.argv.at(-1).match(/from (.+)\\. Follow/)[1],'utf8');}
-const a=JSON.parse(prompt.trim().split('\\n').at(-1));
+const a=JSON.parse(prompt.split('\\n').findLast(line=>line.startsWith('{')));
 fs.writeFileSync(${JSON.stringify(path.join(f.root, ".git/bridge-input.json"))},JSON.stringify(a));
 ${slow ? "await new Promise(resolve=>setTimeout(resolve,60000));" : ""}
 const report=JSON.stringify({assignmentId:a.id,fingerprint:a.fingerprint,complete:true,findings:[],acceptance:[{criterionId:'value',status:'satisfied',evidence:'Export assertion and source inspected',validationIds:['unit']}]});

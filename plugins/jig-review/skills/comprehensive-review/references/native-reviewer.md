@@ -1,6 +1,6 @@
 # Native Codex reviewer
 
-This file applies only when `codex.runtime` is `native`; the `cli` runtime uses the Codex command in [external-reviewers.md](external-reviewers.md). The native Codex pass requires the host's context-free subagent facility. When `codex.model` or `codex.effort` is non-null, pass it through the host's model and reasoning-effort spawn fields. If the host rejects the combination, mark Codex `not started`; do not retry with a different configuration.
+This file applies only when `codex.runtime` is `native`, which requires a Codex host; Claude Code and the `cli` runtime use the Codex command in [external-reviewers.md](external-reviewers.md). The native Codex pass requires the host's context-free subagent facility. When `codex.model` or `codex.effort` is non-null, pass it through the host's model and reasoning-effort spawn fields. If the host rejects the combination, mark Codex `not started`; do not retry with a different configuration.
 
 The Codex child performs only the native review. Its self-contained prompt includes:
 

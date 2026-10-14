@@ -10,7 +10,7 @@ import path from "node:path";
 import test from "node:test";
 import { ReviewEvidence } from "../skills/comprehensive-review/scripts/review-evidence.mjs";
 import { buildClaudeArgs, parseClaudeResult } from "../skills/comprehensive-review/scripts/claude-review.mjs";
-import { buildCodexArgs, isolationOverrides, parseCodexResult, writeShim } from "../skills/comprehensive-review/scripts/codex-review.mjs";
+import { buildCodexArgs, parseCodexResult, shimVariables, writeShim } from "../skills/comprehensive-review/scripts/codex-review.mjs";
 import { buildCursorArgs, parseCursorResult } from "../skills/comprehensive-review/scripts/cursor-review.mjs";
 import { childEnvironment } from "../skills/comprehensive-review/scripts/provider-launch.mjs";
 import { buildReviewPrompt, runCommand } from "../skills/comprehensive-review/scripts/review-context.mjs";
@@ -37,10 +37,10 @@ test("live codex reads external evidence through the private-home shim with the 
   const prompt = `${buildReviewPrompt(scope, context, { tooling: "codex" })}\nThis is an evidence-access smoke check. In your report also reproduce the removed line from removed.txt exactly. It exists only in the evidence pages, not in the working tree.\n`;
   const { shim, privateHome } = writeShim(evidence.directory);
   const lastMessagePath = path.join(evidence.directory, "codex-last-message.txt");
-  const args = buildCodexArgs({ model: null, effort: null }, scope, lastMessagePath, isolationOverrides());
+  const args = buildCodexArgs({ model: null, effort: null }, scope, lastMessagePath);
   await runCommand("/bin/sh", [shim, ...args], {
     cwd: repo, input: prompt, timeoutMs: 180_000, maxBuffer: 4 * 1024 * 1024, overflow: "truncate",
-    env: childEnvironment(process.env, { JIG_REVIEW_CODEX_BIN: process.env.JIG_CODEX_BIN ?? "codex", JIG_REVIEW_PRIVATE_HOME: privateHome }),
+    env: childEnvironment(process.env, shimVariables(process.env.JIG_CODEX_BIN ?? "codex", privateHome)),
   });
   const parsed = parseCodexResult(lastMessagePath);
   assert.ok(parsed.includes(secret), "reviewer must retrieve the deleted line from external evidence");

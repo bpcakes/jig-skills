@@ -45,7 +45,10 @@ export function parseArgs(argv) {
   if (options.base) options.scope = "branch";
   options.explicitReviewers = forwarded.includes("--reviewers") || forwarded.includes("--all-reviewers");
   if (!options.explicitReviewers) {
-    forwarded.unshift("--reviewers", options.reviewPolicy === "strict" ? "claude,codex" : "codex");
+    // Balanced review defaults to the host's own provider in independent
+    // sessions; the review parser validates the --host value itself.
+    const host = forwarded.includes("--host") ? forwarded[forwarded.indexOf("--host") + 1].trim().toLowerCase() : "codex";
+    forwarded.unshift("--reviewers", options.reviewPolicy === "strict" ? "claude,codex" : host === "claude" ? "claude" : "codex");
   }
   // A reviewer configuration file may override the Codex runtime at init, where
   // the effort is validated against the effective runtime.

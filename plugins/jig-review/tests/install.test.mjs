@@ -160,7 +160,7 @@ test("a differing dependency cannot leave a newly installed loop behind", (t) =>
   assert.equal(existsSync(path.join(destination, "review-fix-loop")), false);
 });
 
-test("all-skills installs include the Codex loop and filter Claude orchestration skills", (t) => {
+test("all-skills installs include the review pair for both hosts and filter Claude orchestration skills", (t) => {
   const { destination, install } = fixture(t);
   const codex = install();
   assert.equal(codex.status, 0, codex.stderr);
@@ -168,13 +168,18 @@ test("all-skills installs include the Codex loop and filter Claude orchestration
   const claudeDestination = path.join(destination, "claude-skills");
   const claude = spawnSync("sh", [installer, "claude", "--dest", claudeDestination], { encoding: "utf8" });
   assert.equal(claude.status, 0, claude.stderr);
-  assert.equal(existsSync(path.join(claudeDestination, "review-fix-loop")), false);
-  assert.equal(existsSync(path.join(claudeDestination, "comprehensive-review")), false);
+  assertInstalledParser(claudeDestination);
+  assert.equal(existsSync(path.join(claudeDestination, "comprehensive-review/references/claude-code-host.md")), true);
   assert.equal(existsSync(path.join(claudeDestination, "herdr-orchestrate")), false);
   assert.equal(existsSync(path.join(claudeDestination, "rust-error-handling-review/SKILL.md")), true);
-  const rejected = spawnSync("sh", [installer, "claude", "--dest", claudeDestination, "review-fix-loop"], { encoding: "utf8" });
+  // Selecting either review entrypoint for Claude installs the pair.
+  const loopDestination = path.join(destination, "claude-loop");
+  const loop = spawnSync("sh", [installer, "claude", "--dest", loopDestination, "review-fix-loop"], { encoding: "utf8" });
+  assert.equal(loop.status, 0, loop.stderr);
+  assertInstalledParser(loopDestination);
+  const rejected = spawnSync("sh", [installer, "claude", "--dest", claudeDestination, "herdr-orchestrate"], { encoding: "utf8" });
   assert.equal(rejected.status, 1);
-  assert.match(rejected.stderr, /Unsupported for Claude direct install: review-fix-loop/);
+  assert.match(rejected.stderr, /Unsupported for Claude direct install: herdr-orchestrate/);
 });
 
 test("orchestration installation includes both usable review entrypoints and its complete helper directory", t => {
