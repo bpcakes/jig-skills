@@ -57,6 +57,8 @@ Every criterion needs evidence in every review report, referring to required val
 
 Discovery normalizes every invocation directory to the repository root, exactly as initialization does. Candidate `source` and `cwd` paths are always repository-relative, including when invoked inside a package. Each validation receipt records its actual execution directory, workspace, source root, validation mode, and sandbox.
 
+When existing changes will be checkpointed, include an optional `baselineCommitMessage` in the task contract, written from that diff before initialization. See [commit messages](commits.md#commit-messages) for the subject/body format and repair-result field.
+
 ## Native assignments
 
 At a native boundary, read [assignments.md](assignments.md), return the result matching the supplied `resultSchema`, submit it, and continue the same run. Reviewers receive only their own assignment in a fresh context. Honor its provider/model/effort settings. Triage and repair may run in the parent, subject to their assignment permissions.

@@ -73,6 +73,31 @@ test("runtime executes the published repair variants, including empty replacemen
   }
 });
 
+test("repair results accept repository-style messages and reject malformed messages", () => {
+  const assignment = { ...base, role: "repair" }, envelope = { assignmentId: base.id, fingerprint: base.fingerprint };
+  const edit = { path: "value.txt", reason: "Restore the expected value", findingIds: ["f-1"] };
+  for (const variant of [{ workspaceEdits: [edit] }, { edits: [{ ...edit, content: "fixed" }] }]) {
+    for (const commitMessage of ["Restore the expected value", "fix(value): restore the expected value\n\nPreserve the consumer contract.",
+      "fix(value): restore the expected value\r\n\r\nPreserve the consumer contract.", "Describe a change with a subject that exceeds the suggested length when the repository requires it"]) {
+      assert.doesNotThrow(() => assertResult(assignment, { ...envelope, ...variant, commitMessage }));
+    }
+    for (const commitMessage of [null, 42, "", " \n ", "Fix\0value", "Fix\nBody without a separating blank line"]) {
+      assert.throws(() => assertResult(assignment, { ...envelope, ...variant, commitMessage }), /Malformed repair|commitMessage/);
+    }
+  }
+});
+
+test("baseline commit messages are validated and normalized in the task contract", () => {
+  const contract = { goal: "Preserve the export", nonGoals: [], compatibilityConstraints: [], permittedBehaviorChanges: [],
+    acceptanceCriteria: [{ id: "value", description: "Export the expected value" }], requiredValidation: [{ id: "unit", argv: ["true"] }] };
+  const baselineCommitMessage = "fix(value): restore the expected value\n\nPreserve compatibility.";
+  assert.equal(validateContract({ ...contract, baselineCommitMessage: ` ${baselineCommitMessage.replaceAll("\n", "\r\n")}\r\n` }).baselineCommitMessage, baselineCommitMessage);
+  assert.equal(validateContract(contract).baselineCommitMessage, undefined);
+  for (const baselineCommitMessage of [null, 42, "", " \n ", "Fix\0value", "Fix\nMissing blank line"]) {
+    assert.throws(() => validateContract({ ...contract, baselineCommitMessage }), /baselineCommitMessage/);
+  }
+});
+
 test("runtime validates complete review and exclusive triage results before interpretation", () => {
   const envelope = { assignmentId: base.id, fingerprint: base.fingerprint };
   const review = { ...envelope, complete: true, findings: [], acceptance: base.contract.acceptanceCriteria.map(c => ({
