@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $comprehensive-review to review my changes with the default Claude and Codex passes."
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

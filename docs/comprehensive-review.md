@@ -4,6 +4,8 @@
 
 `jig-review:comprehensive-review` runs independent reviews of the same Git changes and merges their findings. It runs inside Codex or Claude Code. In Codex, a native subagent performs the Codex review and forwarders run the selected external CLIs. In Claude Code, every reviewer, including Codex, runs as an independent CLI process.
 
+Invoke this skill explicitly by name. Both hosts disable automatic invocation; a request for an adversarial review, first-principles analysis, or ablation tests does not select this workflow.
+
 The default reviewers are Claude Code and Codex. Cursor is optional. Review-only requests stop at the report. Ordinary review-and-fix requests route to [review-fix-loop](review-fix-loop.md) without another authorization question. Explicit “once” or “do not re-review” requests permit one repair phase after all reviewer reports are frozen.
 
 ## Setup and Invocation

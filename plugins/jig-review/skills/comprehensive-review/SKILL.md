@@ -1,9 +1,12 @@
 ---
 name: comprehensive-review
-description: Run independent Claude and Codex reviews of Git diffs and merge findings; Cursor is opt-in. Use for multi-model reviews.
+description: Run independent Claude and Codex reviews of Git diffs and merge findings only when the user explicitly invokes comprehensive-review by name. Cursor is opt-in.
+disable-model-invocation: true
 ---
 
 # Comprehensive Review
+
+Use this workflow only when the user explicitly requests `comprehensive-review`, including `$comprehensive-review`, `$jig-review:comprehensive-review`, or the corresponding slash command. Generic review requests, including adversarial reviews, first-principles analysis, and ablation testing, do not select this workflow. Reading its shared references from another skill does not authorize launching this workflow.
 
 Produce one consolidated code review from one or more reviewers in independent contexts. Default to Claude Code and Codex; include Cursor Agent with Grok 4.6 only when selected. For each selected provider, prefer Jig automatic account selection when its launch command supports it; this uses the CLI runtime for Codex. Without compatible Jig, use direct Claude, and native Codex on a Codex host; on Claude Code, Codex always runs as a CLI process. Preserve explicit launcher, profile, runtime, and effort choices; see the reviewer controls.
 
