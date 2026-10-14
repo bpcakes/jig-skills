@@ -1,6 +1,6 @@
 {
   "name": "jig-skills",
-  "description": "Focused skills for implementation planning, code review, refactoring, and privacy audits.",
+  "description": "Focused skills for implementation planning, code review, and refactoring.",
   "owner": {
     "name": "Jig",
     "url": "https://github.com/bpcakes/jig-skills"
@@ -28,12 +28,6 @@
       "name": "jig-review",
       "source": "./plugins/jig-review",
       "description": "Configurable parallel reviews and bounded review-fix loops with Claude Code, Codex, and Cursor/Grok.",
-      "category": "Coding"
-    },
-    {
-      "name": "jig-privacy-audit",
-      "source": "./plugins/jig-privacy-audit",
-      "description": "Privacy, zero-knowledge, and E2EE audit-support skills for scoped evidence collection and review.",
       "category": "Coding"
     },
     {

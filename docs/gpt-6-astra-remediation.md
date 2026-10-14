@@ -1,5 +1,7 @@
 # Astra priority fixes and remaining audit work
 
+Historical record: the privacy-audit plugin described here was retired on 2026-10-14.
+
 Implementation follow-up to the [2026-09-12 audit](gpt-6-astra-skill-audit.md), against the original skill versions at `9c47b5e36bb641721abeb7343bed82d72350cdb2`. The original audit remains a historical record; its line numbers refer to that revision.
 
 This pass corrects the highest-priority instruction conflicts, delegated completion, and installation failure. It also implements explicit Astra evaluation controls and selected context/output reductions. It does not claim that every skill is fully optimized or that passing fixtures establish a general efficiency gain.
