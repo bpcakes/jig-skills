@@ -1,5 +1,6 @@
 import { lstatSync, readlinkSync } from "node:fs";
 import { validateEvidenceOutputs } from "./evidence-outputs.mjs";
+import { normalizeCommitMessage } from "./commit-messages.mjs";
 import path from "node:path";
 import { safePath, git, repositoryRoot, readRegularFile, unsupported } from "./repository.mjs";
 
@@ -36,6 +37,7 @@ export function validateContract(contract) {
   if (!contract.requiredValidation.some(check => !check.optional)) throw new Error("At least one required validation command is necessary.");
   validateEvidenceOutputs(contract.evidenceOutputs);
   const normalized = structuredClone(contract);
+  if (contract.baselineCommitMessage !== undefined) normalized.baselineCommitMessage = normalizeCommitMessage(contract.baselineCommitMessage, "baselineCommitMessage");
   const validationIds = new Set(contract.requiredValidation.map(check => check.id));
   if (contract.prerequisites?.some(check => validationIds.has(check.id))) throw new Error("Prerequisite IDs must differ from validation IDs.");
   for (const check of [...normalized.requiredValidation, ...(normalized.prerequisites ?? [])]) if (check.cwd === ".") delete check.cwd;

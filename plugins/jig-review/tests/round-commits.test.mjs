@@ -27,7 +27,7 @@ function fixture(t, { dirty = true, value = 0 } = {}) {
       "require('node:assert/strict').equal(require('./value.cjs'),2);require('node:assert/strict').equal(require('node:child_process').execFileSync('git',['status','--porcelain'],{encoding:'utf8'}),'')"] }] };
   return { root, base, contract, start: extra => createRun({ cwd: root, contract, ...extra }) };
 }
-async function drive(run, { secondRepair = false, failFirst = false, modeRepair = false, contentRepair = false, reviewRanges = [] } = {}) {
+async function drive(run, { secondRepair = false, failFirst = false, modeRepair = false, contentRepair = false, reviewRanges = [], commitMessages = [] } = {}) {
   for (let i = 0; i < 350; i++) {
     run = await advance(run.directory);
     if (TERMINAL.has(run.phase) && !run.cleanup?.length && !run.cleanupOverlays?.length) return run;
@@ -58,6 +58,7 @@ async function drive(run, { secondRepair = false, failFirst = false, modeRepair 
           chmodSync(path.join(a.repository, name), 0o755);
         } else writeFileSync(path.join(a.repository, name), correct ? "ready\n" : `module.exports = ${failFirst && run.round === 1 ? 3 : 2};\n`);
         result = { workspaceEdits: [{ path: name, ...(modeRepair ? { mode: "0755" } : {}), reason: "Repair the supported failure", findingIds: a.findings.map(f => f.id) }] };
+        if (commitMessages[run.round - 1]) result.commitMessage = commitMessages[run.round - 1];
       }
       await submit(run.directory, a.id, { assignmentId: a.id, fingerprint: a.fingerprint, ...result });
     }
@@ -68,10 +69,16 @@ async function drive(run, { secondRepair = false, failFirst = false, modeRepair 
 
 test("default appends one commit per repair round and terminal reviews cover one full stable range", async t => {
   const f = fixture(t), reviewRanges = [];
-  const run = await drive(await f.start(), { secondRepair: true, reviewRanges });
+  f.contract.baselineCommitMessage = "fix: set the initial exported value to one";
+  const commitMessages = ["fix(value): export the required value\n\nReturn 2 to satisfy the public value contract.",
+    "fix: add the required support artifact"];
+  const run = await drive(await f.start(), { secondRepair: true, reviewRanges, commitMessages });
   assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
   assert.equal(run.round, 2);
   assert.deepEqual(run.commits.map(c => c.round), [0, 1, 2]);
+  assert.deepEqual(run.commits.map(c => git(f.root, "show", "-s", "--format=%B", c.oid)),
+    [f.contract.baselineCommitMessage, ...commitMessages]);
+  assert.deepEqual(loadRun(run.directory).commits.map(c => c.message), [f.contract.baselineCommitMessage, ...commitMessages]);
   assert.equal(git(f.root, "rev-list", "--count", `${f.base}..HEAD`), "3");
   assert.equal(git(f.root, "status", "--porcelain"), "");
   assert.equal(git(f.root, "show", `${f.base}:value.cjs`), "module.exports = 0;");
@@ -87,9 +94,11 @@ test("default appends one commit per repair round and terminal reviews cover one
 
 test("failed validation keeps its round commit and recovery appends another", async t => {
   const f = fixture(t);
-  const run = await drive(await f.start(), { failFirst: true });
+  const commitMessages = ["Change the exported value to three", "Correct the exported value to two"];
+  const run = await drive(await f.start(), { failFirst: true, commitMessages });
   assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
   assert.deepEqual(run.commits.map(c => c.round), [0, 1, 2]);
+  assert.deepEqual(run.commits.slice(1).map(c => git(f.root, "show", "-s", "--format=%B", c.oid)), commitMessages);
   assert.equal(git(f.root, "show", `${run.commits[1].oid}:value.cjs`), "module.exports = 3;");
   assert.equal(git(f.root, "show", "HEAD:value.cjs"), "module.exports = 2;");
   assert.ok(run.validation.some(v => v.exitCode !== 0));
@@ -109,7 +118,19 @@ test("default commit mode also supports command-backed reviewers and repairs", a
   const run = await drive(await f.start({ config: { reviewers: [{ id: "codex", command }], triageCommand: command, repairCommand: command } }));
   assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
   assert.deepEqual(run.commits.map(c => c.round), [0, 1]);
+  assert.equal(git(f.root, "show", "-s", "--format=%s", run.commits[0].oid), f.contract.goal);
+  assert.equal(git(f.root, "show", "-s", "--format=%s", run.commits[1].oid), "Restore the required exported value.");
+  assert.doesNotMatch(git(f.root, "show", "-s", "--format=%B", run.commits[1].oid), /Wrong exported value|Repair round/);
   assert.equal(git(f.root, "status", "--porcelain"), "");
+});
+
+test("inline adapter messages survive candidate publication and validation", async t => {
+  const f = fixture(t);
+  const command = [process.execPath, new URL("./fixtures/loop-provider.mjs", import.meta.url).pathname, "commit-message"];
+  const run = await drive(await f.start({ config: { reviewers: [{ id: "codex", command }], triageCommand: command, repairCommand: command } }));
+  assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
+  assert.equal(git(f.root, "show", "-s", "--format=%B", "HEAD"), "fix(value): restore the required export\n\nReturn the value required by the consumer contract.");
+  assert.equal(loadRun(run.directory).commits.at(-1).message, git(f.root, "show", "-s", "--format=%B", "HEAD"));
 });
 
 test("isolated validation checks the committed round, including Git-aware checks", async t => {
@@ -117,9 +138,11 @@ test("isolated validation checks the committed round, including Git-aware checks
     t.skip("Bubblewrap/user namespaces unavailable"); return;
   }
   const f = fixture(t);
-  const run = await drive(await f.start({ config: { validationMode: "isolated", validationSandbox: defaultValidationSandbox() } }));
+  const message = "fix(value): export the required value\n\nPreserve the consumer's expected value.";
+  const run = await drive(await f.start({ config: { validationMode: "isolated", validationSandbox: defaultValidationSandbox() } }), { commitMessages: [message] });
   assert.equal(run.phase, "CONVERGED", JSON.stringify(status(run)));
   assert.deepEqual(run.commits.map(c => c.round), [0, 1]);
+  assert.equal(git(f.root, "show", "-s", "--format=%B", "HEAD"), message);
   assert.ok(run.validation.every(v => v.context.mode === "isolated"));
   assert.equal(git(f.root, "status", "--porcelain"), "");
 });
@@ -238,6 +261,8 @@ test("index publication resumes after HEAD update without duplicating a commit",
   const resumed = await advance(run.directory);
   assert.equal(resumed.commitJournal, null, JSON.stringify(status(resumed)));
   assert.equal(resumed.commits.length, 1);
+  assert.equal(git(f.root, "show", "-s", "--format=%B", oid), "Checkpoint for recovery");
+  assert.equal(resumed.commits[0].message, "Checkpoint for recovery");
   assert.equal(git(f.root, "rev-list", "--count", `${f.base}..HEAD`), "1");
   assert.equal(git(f.root, "status", "--porcelain"), "");
 });

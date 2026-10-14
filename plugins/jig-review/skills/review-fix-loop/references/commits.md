@@ -6,7 +6,24 @@ Select `none` before initialization when unrelated local changes must remain unc
 
 In `per-round`, existing included working changes become a baseline commit before discovery. Each completed repair becomes a separate commit before required validation. This also applies with isolated validation: publish the repair, then validate a private copy of that committed tip; failed checks leave the round commit in the original checkout. Imported reviews enter triage directly; any still-uncommitted reviewed work joins the first repair commit, or a baseline commit if no repair is needed. Failed validation leaves its commit in the series; recovery appends another. Incomplete repair assignments retain their visible edits without committing them. No empty commit is created for an unchanged tree. There is no amend, rebase, squash, push, or history rewrite. If later concurrent or validation-generated source changes need a second commit in an already-published round, publication stops with those edits preserved unless triage has allocated another counted repair round. It never creates an unbounded stream of checkpoint commits or silently amends a round.
 
-Commit messages identify the round and its findings. Baseline messages identify the task. The controller publishes the reviewed working-file contents and executable bits, including when `core.filemode=false`, without changing that setting. Included pre-existing staged and unstaged work joins the commit; partial staging is intentionally replaced by the resulting committed tree. Choose `none` when that staging split must remain intact. Dirty excluded files, dirty submodules or changed gitlinks, and skip-worktree/assume-unchanged entries stop commit mode without silently switching modes. Unfinished merges, rebases, cherry-picks, and reverts must be completed or aborted before using commit mode; the controller does not complete another Git operation or discard its metadata. An existing HEAD and usable local Git author/committer identity are required. Clean initialized submodules remain supported. The controller does not provision identities, signing tools, or credentials.
+The controller publishes the reviewed working-file contents and executable bits, including when `core.filemode=false`, without changing that setting. Included pre-existing staged and unstaged work joins the commit; partial staging is intentionally replaced by the resulting committed tree. Choose `none` when that staging split must remain intact. Dirty excluded files, dirty submodules or changed gitlinks, and skip-worktree/assume-unchanged entries stop commit mode without silently switching modes. Unfinished merges, rebases, cherry-picks, and reverts must be completed or aborted before using commit mode; the controller does not complete another Git operation or discard its metadata. An existing HEAD and usable local Git author/committer identity are required. Clean initialized submodules remain supported. The controller does not provision identities, signing tools, or credentials.
+
+## Commit messages
+
+Describe the completed changes and their rationale. Follow applicable repository guidance and recent commit style; otherwise use Conventional Commits (`fix`, `refactor`, `test`, `docs`, or another appropriate type, with an optional scope). Write a concise imperative subject, aiming for 72 characters or fewer. Add a blank line and a body when the cause, rationale, or compatibility implications need explanation. Account for the entire committed diff, including pre-existing work that joins the first repair. Validation and fresh review happen after publication, so do not claim their success in the message.
+
+For example:
+
+```text
+fix(review): reject native Codex on Claude hosts
+
+Validate the runtime selection before launching reviewers so unsupported
+configurations fail immediately with a clear error.
+```
+
+Before initialization, inspect any existing changes that will be checkpointed and put their message in the task contract's `baselineCommitMessage`. Each repair result supplies its own `commitMessage` alongside `workspaceEdits` or inline `edits`. The controller preserves the subject and body, normalizing CRLF and surrounding whitespace. It validates nonempty text, control characters, and the blank line before a body; repository style and subject length remain writing guidance.
+
+These fields are optional in the wire protocol for existing adapters and saved runs. If omitted, repair messages use the accepted edit reasons and paths; baseline messages use the task goal. Messages have no automatic round prefix or finding-title list. Round numbers, finding IDs, and commit OIDs remain linked in the run record. A prepared commit retains its original message through interrupted publication and recovery.
 
 ## Stable review range
 

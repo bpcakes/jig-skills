@@ -23,6 +23,7 @@ import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignm
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
 import { assertCommitScope, assertNoGitOperation, checkoutDirty, prepareRoundCommit, publishRoundCommit } from "./round-commits.mjs";
+import { normalizeCommitMessage, roundCommitMessage } from "./commit-messages.mjs";
 
 export const TERMINAL = new Set(["CONVERGED", "THRESHOLD_MET", "ROUND_LIMIT", "BLOCKED", "VALIDATION_FAILED", "REVIEW_INCOMPLETE", "SCOPE_CHANGED"]);
 const transitions = {
@@ -616,6 +617,7 @@ function completeIssue(run) {
     ? " Edit source files directly in assignment.repository using the normal editing tool (apply_patch when available). Return workspaceEdits containing path, reason, and findingIds for every changed file, including additions and deletions. Preserve existing permissions; declare intentional permission changes with an optional mode of 0644 or 0755. Do not build replacement scripts or embed entire files in JSON for ordinary repairs. Stop editing before submitting. Keep the Git index unchanged."
     : " Keep source files and the Git index read-only.";
   if (role === "review") assignment.instructions += " Use only this assignment, the scoped source, and repository contracts for your independent review. Do not seek out, read, or use controller run records in jig/review-fix under any checkout's Git directory or the legacy common Git directory, except the explicit validation log paths supplied in validationEvidence. Earlier reports, other assignments, transcripts, validation narratives, and repair history are outside your review inputs. Ordinary Git object/index access for inspecting the diff remains allowed. A shared checkout does not authorize inheriting another reviewer's conclusions.";
+  if (role === "repair" && assignment.commitMode === "per-round") assignment.instructions += " Return commitMessage describing the completed diff and its rationale, including any existing uncommitted work that will join the commit. Follow the repository's established commit style; otherwise use Conventional Commits with the appropriate type and optional scope. Use a concise imperative subject, aiming for 72 characters or fewer, and a blank line before an optional body explaining the cause, rationale, or compatibility implications. Keep round numbers and finding IDs in the run record. Do not claim validation or review success before those steps run. Only the controller stages and commits.";
   if (role === "repair" && assignment.contract.evidenceOutputs?.length) assignment.instructions += " Declared evidenceOutputs may receive append-only complete JSONL objects with unchanged permissions. Leave these outputs out of workspaceEdits; the controller records them as generated evidence and revalidates the combined state. Their claims are not controller validation receipts.";
   if (checkout) assignment.instructions += " This is the user's actual checkout, not a temporary copy. Preserve pre-existing work. Repair edits are immediately visible and remain in place on failure or interruption; the controller records them and validates in this checkout without republishing them.";
   else assignment.instructions += " Keep the original checkout read-only; this assignment uses a private copy for isolated execution or assessment of an unpublished candidate. Legacy inline edits are accepted if you leave the assignment copy unchanged.";
@@ -808,6 +810,7 @@ function restoresFailedCheckout(run, candidateHash) {
     && candidateHash === (run.preservationBaseline ?? run.original).contentHash;
 }
 async function repairResult(run, result, current) {
+  const commit = result.commitMessage === undefined ? {} : { commitMessage: normalizeCommitMessage(result.commitMessage) };
   const checkout = run.pending.overlay === run.root;
   const workspace = result.workspaceEdits !== undefined;
   const edits = workspace ? result.workspaceEdits : result.edits;
@@ -913,9 +916,9 @@ async function repairResult(run, result, current) {
     }
     const restoreOriginal = restoresFailedCheckout(run, captured.contentHash);
     run.mutations.push({ round: run.round, paths: patch.map(edit => edit.path), fingerprint: fingerprint.fingerprint,
-      attributions: edits, direct: true });
+      attributions: edits, direct: true, ...commit });
     run.expected = captured; run.fingerprint = fingerprint;
-    run.appliedCandidate = { files: captured.files, patch, attributions: edits };
+    run.appliedCandidate = { files: captured.files, patch, attributions: edits, ...commit };
     run.candidate = null; run.validationCycle = null;
     json(path.join(run.directory, "patches", `round-${run.round}.json`), run.appliedCandidate);
     if (!restoreOriginal && run.seenContents.includes(captured.contentHash)) {
@@ -937,7 +940,7 @@ async function repairResult(run, result, current) {
   if (!patch.length || (!restoreOriginal && run.seenContents.includes(candidateHash))) {
     transition(run, "BLOCKED", patch.length ? "Oscillating repair revisited an earlier file state." : "Repair made no progress."); return;
   }
-  run.candidate = { files: candidate, patch, attributions: edits.map(({ content, ...edit }) => edit), ...(restoreOriginal ? { restoreOriginal: true } : {}) };
+  run.candidate = { files: candidate, patch, attributions: edits.map(({ content, ...edit }) => edit), ...commit, ...(restoreOriginal ? { restoreOriginal: true } : {}) };
   json(path.join(run.directory, "patches", `round-${run.round}.json`), run.candidate);
   run.validationCycle = null;
 }
@@ -1305,7 +1308,8 @@ async function applyCandidate(run) {
   // Commit fixed dispositions only with the verified publication state, using
   // journal evidence so an interrupted application can resume the same step.
   if (journal.reviewedAfterValidation) markValidatedFindingsFixed(run, journal.validation);
-  run.mutations.push({ round: run.round, paths: journal.changes.map(e => e.path), fingerprint: fingerprint.fingerprint, attributions: run.candidate.attributions });
+  run.mutations.push({ round: run.round, paths: journal.changes.map(e => e.path), fingerprint: fingerprint.fingerprint, attributions: run.candidate.attributions,
+    ...(run.candidate.commitMessage === undefined ? {} : { commitMessage: run.candidate.commitMessage }) });
   run.appliedCandidate = journal.reviewedAfterValidation || journal.restoreOriginal ? null : run.candidate;
   queueValidationWorkspace(run);
   (run.completedApplications ??= []).push({ round: run.round, changes: journal.changes.filter(edit => edit.before).map(({ path, before, backup }) => ({ path, before, backup })) });
@@ -1352,11 +1356,7 @@ function failedAdvance(directory, error) {
   return durable;
 }
 async function commitRound(run) {
-  const titles = [...new Set(Object.values(run.ledger).filter(f => f.status === "needs-validation" || f.status === "actionable").map(f => f.title))];
-  const goal = contractOf(run).goal;
-  const summary = (titles[0] ?? goal).replace(/\s+/g, " ").slice(0, 120);
-  const message = `${run.round ? `Repair round ${run.round}` : "Review baseline"}: ${summary}\n\n${goal}${titles.length ? `\n\n${titles.join("\n")}` : ""}`;
-  prepareRoundCommit(run, message);
+  prepareRoundCommit(run, roundCommitMessage(run, contractOf(run)));
   if (!run.commitJournal) return;
   publishRoundCommit(run);
   const journal = run.commitJournal;

@@ -37,6 +37,7 @@ if (a.role === "review") {
   const count = a.validation.filter(v => v.exitCode !== 0).length;
   const next = scenario === "oscillation" ? (correct ? 1 : 2) : scenario === "recovery" && count === 0 ? 3 : 2;
   result.edits = [{ path: "value.cjs", content: `module.exports = ${next};\n`, findingIds: a.findings.map(f => f.id), reason: "Restore the required exported value." }];
+  if (scenario === "commit-message") result.commitMessage = "fix(value): restore the required export\n\nReturn the value required by the consumer contract.";
   if (scenario === "journal") result.edits.push({ path: "support.txt", content: "ready\n", findingIds: a.findings.map(f => f.id), reason: "Supply the required support artifact." });
   if (scenario === "workspace") {
     result.workspaceEdits = result.edits.map(({ content, ...edit }) => { writeFileSync(edit.path, content); return edit; });

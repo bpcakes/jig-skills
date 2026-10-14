@@ -1,3 +1,5 @@
+import { normalizeCommitMessage } from "./commit-messages.mjs";
+
 export const SEVERITY_RANK = Object.freeze({ critical: 0, high: 1, medium: 2, low: 3 });
 
 const text = { type: "string", minLength: 1 };
@@ -30,12 +32,12 @@ export function resultSchema(assignment) {
   } else if (assignment.role === "repair") {
     const attribution = { path: text, reason: text, findingIds: array(choice(assignment.findings.map(f => f.id)), { minItems: 1, uniqueItems: true }) };
     const mode = { type: "string", enum: ["0644", "0755"] };
-    success = { oneOf: [object({ ...envelope, workspaceEdits: array(object({ ...attribution, mode }, Object.keys(attribution)), { minItems: 1, maxItems: 128 }) }),
-      object({ ...envelope, edits: array({ oneOf: [
+    success = { oneOf: [object({ ...envelope, commitMessage: text, workspaceEdits: array(object({ ...attribution, mode }, Object.keys(attribution)), { minItems: 1, maxItems: 128 }) }, [...Object.keys(envelope), "workspaceEdits"]),
+      object({ ...envelope, commitMessage: text, edits: array({ oneOf: [
       object({ ...attribution, content: { type: "string" }, mode }, [...Object.keys(attribution), "content"]),
       object({ ...attribution, delete: { const: true } }),
       object({ ...attribution, mode }),
-    ] }, { minItems: 1, maxItems: 128 }) })] };
+    ] }, { minItems: 1, maxItems: 128 }) }, [...Object.keys(envelope), "edits"])] };
   } else throw new Error(`No result schema for assignment role: ${assignment.role}`);
   return { $schema: "https://json-schema.org/draft/2020-12/schema", oneOf: [success,
     object({ ...envelope, error: text, retryable: { type: "boolean" }, execution: { type: "string", enum: ["completed", "uncertain"] } }, ["error"])] };
@@ -67,6 +69,7 @@ function matches(schema, value) {
 }
 export function assertResult(assignment, result) {
   if (!matches(resultSchema(assignment), result)) throw new Error(`Malformed ${assignment.role} result: does not match the assignment result schema.`);
+  if (result.commitMessage !== undefined) normalizeCommitMessage(result.commitMessage);
   for (const [field, key] of [["acceptance", "criterionId"], ["decisions", "id"], ["validationImpact", "assignmentId"]]) {
     if (result[field] && new Set(result[field].map(item => item[key])).size !== result[field].length) throw new Error(`Malformed ${assignment.role} result: duplicate ${key}.`);
   }
