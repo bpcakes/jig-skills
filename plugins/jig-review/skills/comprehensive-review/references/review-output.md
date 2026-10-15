@@ -15,14 +15,24 @@ For each finding, use:
 
 List only the applicable source names in canonical order: `Claude`, `Codex`, `Cursor`. Use severities: `critical`, `high`, `medium`, `low`.
 
+## Resolve questions before reporting
+
+Investigate material questions from the task brief and reviewer reports before presenting the consolidated result. Use relevant repository contracts, callers, tests, configuration, history, and dependency implementations; consult authoritative external documentation when needed and permitted. Use a focused read-only probe when it can settle behavior with the available tools. Respect review scope, exclusions, and access limits. If a reviewer lacked the tools or evidence to answer a question, the parent investigates within its own authority. Do not pass researchable questions back to the user as unfinished review work.
+
+Apply each answer to the affected finding and its suggested fix: retain, revise, or reject the finding as warranted, update severity and requirement coverage, and ground the recommendation in the established contract. Cite the answer's evidence in the finding or coverage entry. Recommendations must reflect what the research established; do not leave an obsolete conditional fix beside a resolved question. Preserve the original brief and frozen reports, and distinguish parent verification from independent reviewer attribution.
+
+Request user input only for a material decision, missing access, or unavailable evidence that investigation cannot settle. State what was checked, the specific input needed, the affected finding or requirement, and the recommended choice when supported. Keep dependent recommendations conditional and identify what the answer changes; continue independent review and any already-authorized repairs. An unanswered question is not evidence of a defect or permission to guess. Omit the input section when none is needed. A review-only request still ends with findings and suggested fixes; applying them requires repair authorization.
+
+## Report sections
+
 After findings, add:
 
 ```markdown
 Requirement coverage:
 - <requirement ID>: satisfied|unmet|uncertain — evidence or limitation
 
-Open questions:
-- ...
+Input needed (omit when none):
+- <specific decision or unavailable evidence> — checked: ...; affects: ...; recommended choice and reason, if supported: ...
 
 Test gaps:
 - ...

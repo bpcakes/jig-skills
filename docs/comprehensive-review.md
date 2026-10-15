@@ -8,6 +8,8 @@ Invoke this skill explicitly by name. Both hosts disable automatic invocation; a
 
 The default reviewers are Claude Code and Codex. Cursor is optional. Review-only requests stop at the report. Ordinary review-and-fix requests route to [review-fix-loop](review-fix-loop.md) without another authorization question. Explicit “once” or “do not re-review” requests permit one repair phase after all reviewer reports are frozen.
 
+Researching material open questions is part of every review. Reviewers and the parent inspect available evidence, incorporate the answers into findings and suggested fixes, and flag only the decisions or missing evidence that still need user input. The report explains what was checked and which recommendation depends on the answer. Research does not authorize applying fixes.
+
 ## Setup and Invocation
 
 Install `jig-review` using the marketplace instructions for [Codex](../README.md#install-with-codex) or [Claude Code](../README.md#install-with-claude-code). You need Node.js 22 or newer. External adapters support Linux, macOS, and Windows through WSL.
@@ -71,6 +73,8 @@ This skill reviews diffs. For unchanged code, select a focused skill that suppor
 ## Continuing into repairs
 
 After the review, “ok address” or “fix those” continues into the repair loop using the saved review handoff. The controller verifies and repairs the existing findings without repeating discovery; fresh independent reviews follow validation of the repaired files. The report links the handoff stored outside the checkout. Missing or stale evidence is explained rather than silently replaced with another review. See the [handoff format and commands](../plugins/jig-review/skills/comprehensive-review/references/review-handoff.md).
+
+The handoff retains researched answers, evidence, and revised recommendations for the repair contract. A request to research remaining questions and then address findings authorizes that continuation; only repairs dependent on unresolved user input wait for an answer.
 
 ## Reading the Result
 

@@ -1106,7 +1106,7 @@ function buildReviewPrompt(scope, reviewContext, options = {}) {
     "  Impact: ...",
     "  Kind: substantive defect | supporting obligation",
     "  Recommendation: ...",
-    "Then add Requirement coverage (each supplied requirement ID: satisfied, unmet, or uncertain, with evidence), Open questions, and Test gaps. If there are no actionable findings, say so explicitly.",
+    "Then add Requirement coverage (each supplied requirement ID: satisfied, unmet, or uncertain, with evidence), Unresolved questions only when investigation could not settle them (evidence checked, exact missing input, and affected conclusion or recommendation), and Test gaps. Incorporate resolved answers into the findings and recommendations. If there are no actionable findings, say so explicitly.",
     "",
     openingDelimiter,
     escapedContext,

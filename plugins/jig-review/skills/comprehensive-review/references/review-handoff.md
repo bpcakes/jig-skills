@@ -18,6 +18,8 @@ Keep the shared brief, its pinned hash, the final matching complete scope captur
 
 Use actual selected reviewer outcomes and exact independent attribution; the example is not a provider selection rule. Status is `completed`, `failed`, `timed out`, or `not started`. Coverage is `complete`, `limited`, `reviewer-attested`, or `none`; non-completed reviewers use `none`. Keep omissions and uncertainty in `limitations`, and preserve each completed report verbatim in `report`. Import only final actionable findings, with repository-relative file paths, stable keys, and canonical severities. An empty findings list is valid. Do not invent a report, fingerprint, brief, source attribution, or completed review to fill the schema.
 
+Include researched answers, their sources, and the resulting suggested correction in each affected finding's `evidence`. Preserve any remaining decision dependency and its effect on the recommendation. These are parent adjudication notes; do not rewrite the frozen reports or original brief, or add a reviewer to `sources` for parent research. When repairs are authorized, carry the established answers and remaining decision boundaries into the repair contract so triage can use the updated recommendations without repeating settled research.
+
 Create the handoff after the final scope and brief checks:
 
 ```sh
