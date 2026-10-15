@@ -812,7 +812,7 @@ function triageResult(run, result) {
     if (decision.status === "fixed" && (run.candidate || !triagedValidationPasses)) throw new Error("Fixed findings require validation on the current fingerprint and published contents.");
     const adjudication = currentAdjudication(run, finding);
     if (adjudication?.verdict === "rejected" && decision.status !== "rejected"
-        || adjudication?.verdict === "upheld" && ["rejected", "fixed"].includes(decision.status)
+        || adjudication?.verdict === "upheld" && !["actionable", "blocked"].includes(decision.status)
         || adjudication?.verdict === "needs-input" && decision.status !== "blocked") throw new Error("Triage cannot override a current adjudication without changed code or claim evidence.");
     ids.add(decision.id);
   }

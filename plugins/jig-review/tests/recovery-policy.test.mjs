@@ -224,14 +224,15 @@ for (const [name, options] of [["missing diagnosis", { omitDiagnosis: true }], [
   });
 }
 
-function disputedReport(value) {
+function disputedReport(value, omitClaim = false) {
   return { complete: true, findings: [
     ...(value === 4 ? [] : [{ key: "stage-4", path: "value.txt", severity: "medium", title: "Stage incomplete", evidence: "All four stages are required" }]),
-    { key: "noise", path: "value.txt", severity: "low", title: "Disputed claim", evidence: "Claim about a consumer contract" }],
+    ...(omitClaim ? [] : [{ key: "noise", path: "value.txt", severity: "low", title: "Disputed claim", evidence: "Claim about a consumer contract" }])],
   acceptance: [{ criterionId: "stages", status: value === 4 ? "satisfied" : "unsatisfied", evidence: "Inspected stage and receipt", validationIds: ["unit"] }] };
 }
-for (const scenario of ["reopen", "unavailable", "repeat-upheld", "repeat-rejected", "fixed-upheld"]) test(`dispute lifecycle: ${scenario}`, async t => {
+for (const scenario of ["reopen", "unavailable", "repeat-upheld", "repeat-rejected", "fixed-upheld", "provisional-upheld"]) test(`dispute lifecycle: ${scenario}`, async t => {
   const available = scenario !== "unavailable", repeat = scenario.startsWith("repeat-"), fixedUpheld = scenario === "fixed-upheld";
+  const provisionalUpheld = scenario === "provisional-upheld", resolvesUpheld = fixedUpheld || provisionalUpheld;
   const directory = mkdtempSync(path.join(os.tmpdir(), "jig-judge-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const adapter = path.join(directory, "judge.mjs"), log = path.join(directory, "calls.jsonl");
@@ -240,24 +241,32 @@ const chunks = []; for await (const c of process.stdin) chunks.push(c);
 const a = JSON.parse(Buffer.concat(chunks));
 appendFileSync(process.argv[2], JSON.stringify({role:a.role, provider:a.provider, hasReports:!!a.reports})+'\\n');
 const report = ${disputedReport.toString()};
-const value = Number(readFileSync(a.repository+'/value.txt','utf8'));
-const result = a.role === 'adjudicate' ? {verdicts:a.findings.map(f=>({findingId:f.id,verdict:${JSON.stringify(scenario.endsWith("upheld") ? "upheld" : "rejected")},evidence:'Independent consumer probe establishes the claim verdict'}))} : report(value);
+const contents = readFileSync(a.repository+'/value.txt','utf8'), value = Number(contents);
+const result = a.role === 'adjudicate' ? {verdicts:a.findings.map(f=>({findingId:f.id,verdict:${JSON.stringify(scenario.endsWith("upheld") ? "upheld" : "rejected")},evidence:'Independent consumer probe establishes the claim verdict'}))} : report(value, ${provisionalUpheld} && contents.endsWith('\\n'));
 process.stdout.write(JSON.stringify({assignmentId:a.id,fingerprint:a.fingerprint,...result}));`);
   let run = await fixture(t, available ? ["--reviewers", "codex,claude"] : [], available ? {
     reviewers: [{ id: "codex" }, { id: "claude", command: [process.execPath, adapter, log] }],
   } : {});
-  let reopened = false;
+  let reopened = false, drifted = false;
   for (let n = 0; n < 40; n++) {
     run = await runUntilBoundary(run.directory);
+    if (provisionalUpheld && run.adjudications?.length) {
+      const finding = Object.values(run.ledger).find(f => f.key === "noise");
+      assert.equal(currentAdjudication(run, finding)?.verdict, "upheld");
+      assert.notEqual(finding.status, "fixed", "Validation must not resolve the still-applicable upheld claim, even before final triage");
+    }
     if (TERMINAL.has(run.phase)) break;
     const a = run.pending.assignment;
-    const value = Number(readFileSync(path.join(a.repository, "value.txt"), "utf8"));
+    const contents = readFileSync(path.join(a.repository, "value.txt"), "utf8"), value = Number(contents);
     let result;
-    if (a.role === "review") result = disputedReport(value);
+    // A later review's silence cannot resolve the still-bound upheld claim.
+    if (a.role === "review") result = disputedReport(value, provisionalUpheld && contents.endsWith("\n"));
     else if (a.role === "repair") result = { edits: [{ path: "value.txt", content: "4", reason: "Complete required stages", findingIds: a.findings.map(f => f.id) }] };
-    else if (a.adjudications.length && fixedUpheld) {
-      result = { decisions: a.findings.map(f => ({ id: f.id, status: "fixed",
-        evidence: "Required validation already passes; claim fixed without changing source or claim evidence" })) };
+    else if (a.adjudications.length && resolvesUpheld) {
+      if (provisionalUpheld) assert.ok(a.sourceChanges, "Exercise provisional validation after source reconciliation and adjudication");
+      result = { decisions: a.findings.map(f => ({ id: f.id, status: provisionalUpheld ? "needs-validation" : "fixed",
+        evidence: provisionalUpheld ? "Assert a provisional fix on the same source just upheld by the judge; validate it next"
+          : "Required validation already passes; claim fixed without changing source or claim evidence" })) };
     } else if (a.adjudications.length && repeat) {
       result = { decisions: a.findings.map(f => ({ id: f.id,
         status: f.key === "noise" ? scenario === "repeat-upheld" ? "actionable" : "rejected" : "fixed", evidence: "Same source, claim and validated stages" })),
@@ -272,16 +281,22 @@ process.stdout.write(JSON.stringify({assignmentId:a.id,fingerprint:a.fingerprint
       if (a.recoveryContext.signals.some(s => s.kind === "rejection-disputed") && !a.adjudications.length) {
         result.recovery = { diagnosis: "disputed-finding", findingIds: a.findings.filter(f => f.key === "noise").map(f => f.id),
           evidence: "Independent review re-raised the rejected claim; compare its evidence", nextAction: "Adjudicate the contract using an independent provider" };
+        if (provisionalUpheld && !drifted) {
+          // The new source is reconciled before the judge; its verdict must bind before validation too.
+          writeFileSync(path.join(a.repository, "value.txt"), "4\n");
+          drifted = true;
+        }
       }
     }
     await submit(run.directory, a.id, { assignmentId: a.id, fingerprint: a.fingerprint, ...result });
   }
-  assert.equal(run.phase, repeat || fixedUpheld ? "BLOCKED" : available ? "CONVERGED" : "RECOVERY_REQUIRED", JSON.stringify(run.outcome));
+  assert.equal(run.phase, repeat || resolvesUpheld ? "BLOCKED" : available ? "CONVERGED" : "RECOVERY_REQUIRED", JSON.stringify(run.outcome));
   assert.equal(run.round, 1);
-  if (repeat || fixedUpheld) {
-    assert.match(run.outcome.reason, fixedUpheld ? /Triage cannot override a current adjudication/ : /applicable adjudication is binding/);
+  if (provisionalUpheld) assert.ok(drifted);
+  if (repeat || resolvesUpheld) {
+    assert.match(run.outcome.reason, resolvesUpheld ? /Triage cannot override a current adjudication/ : /applicable adjudication is binding/);
     assert.equal(run.adjudications.length, 1);
-    assert.equal(run.adjudications[0].verdict, fixedUpheld ? "upheld" : scenario.slice(7));
+    assert.equal(run.adjudications[0].verdict, resolvesUpheld ? "upheld" : scenario.slice(7));
     assert.equal(currentAdjudication(run, Object.values(run.ledger).find(f => f.key === "noise")).verdict, run.adjudications[0].verdict);
     assert.equal(readFileSync(log, "utf8").trim().split("\n").map(JSON.parse).filter(c => c.role === "adjudicate").length, 1);
     assert.equal(Object.values(run.ledger).flatMap(f => f.history).filter(h => h.event === "adjudication-reopened").length, 0);
