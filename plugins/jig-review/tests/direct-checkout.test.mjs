@@ -48,7 +48,13 @@ async function drive(run, stop = () => false) {
       assert.equal(run.pending.assignment.repository, run.root);
       if (run.pending.role === "review") assert.match(run.pending.assignment.instructions, /Do not seek out, read, or use controller run records/);
       assert.notEqual(run.pending.role, "repair", "repair must be handled explicitly");
-      await send(run, response(run.pending.assignment));
+      const a = run.pending.assignment, result = response(a);
+      if (a.role === "triage" && a.recoveryContext.signals.length && result.decisions.some(d => d.status === "actionable")) {
+        result.recovery = { diagnosis: "local-repair", strategy: "correct-value-after-required-check",
+          evidence: "Required assertion identifies the first repair as incorrect.", nextAction: "Restore the required export using the retained failed check.",
+          findingIds: result.decisions.filter(d => d.status === "actionable").map(d => d.id) };
+      }
+      await send(run, result);
     }
     if (run.validationCycle?.job) await new Promise(resolve => setTimeout(resolve, 20));
   }

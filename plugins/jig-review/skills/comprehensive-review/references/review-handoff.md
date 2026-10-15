@@ -20,6 +20,8 @@ Use actual selected reviewer outcomes and exact independent attribution; the exa
 
 Include researched answers, their sources, and the resulting suggested correction in each affected finding's `evidence`. Preserve any remaining decision dependency and its effect on the recommendation. These are parent adjudication notes; do not rewrite the frozen reports or original brief, or add a reviewer to `sources` for parent research. When repairs are authorized, carry the established answers and remaining decision boundaries into the repair contract so triage can use the updated recommendations without repeating settled research.
 
+For findings with prior repair or adjudication history, retain the evidence references, failed causal approaches, applicable verdict binding and proposed recovery route in `evidence`. The suggested fix must use the researched answers and explain any changed strategy. A prerequisite or parked question remains outstanding against the original acceptance contract; it cannot be reported as a completed fix. This handoff is a recommendation until repairs are requested, and never authorizes tracker mutation by itself.
+
 Create the handoff after the final scope and brief checks:
 
 ```sh

@@ -682,7 +682,7 @@ def main(argv=None):
                 "scheduler_started": False, "notifications": "authorized" if settings.get("notifier_argv") else "local_evidence_only"}
     if args.command == "status":
         state = Engine.read(args.run_dir)
-        return state["tasks"].get(args.task) if args.task else state
+        return state["tasks"].get(args.task) if args.task else {**state, "summary": Engine.summary(state)}
     if args.command == "apply":
         return Engine.apply(args.run_dir, read_json(args.request), caller="coordinator")
     if args.command == "action":

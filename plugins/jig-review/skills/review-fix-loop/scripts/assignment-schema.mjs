@@ -1,4 +1,5 @@
 import { normalizeCommitMessage } from "./commit-messages.mjs";
+import { RECOVERY_ROUTES } from "./recovery-policy.mjs";
 
 export const SEVERITY_RANK = Object.freeze({ critical: 0, high: 1, medium: 2, low: 3 });
 
@@ -20,15 +21,27 @@ export function resultSchema(assignment) {
         validationIds: array(choice(assignment.contract.requiredValidation.filter(c => !c.optional).map(c => c.id)), { minItems: 1, uniqueItems: true }) }),
       { minItems: assignment.contract.acceptanceCriteria.length, maxItems: assignment.contract.acceptanceCriteria.length }) });
   } else if (assignment.role === "triage") {
+    const recovery = object({ diagnosis: choice(Object.keys(RECOVERY_ROUTES)), evidence: text, nextAction: text,
+      findingIds: array(choice(assignment.findings.map(f => f.id)), { uniqueItems: true }), strategy: text },
+    ["diagnosis", "evidence", "nextAction", "findingIds"]);
     success = { oneOf: [object({ ...envelope,
       ...(assignment.validationAssessment ? { validationImpact: array(object({
         assignmentId: choice(assignment.validationAssessment.checks.map(c => c.assignmentId)),
         status: choice(["unaffected", "rerun"]), evidence: text,
       }), { minItems: assignment.validationAssessment.checks.length, maxItems: assignment.validationAssessment.checks.length }) } : {}),
+      recovery,
       decisions: array(object({ id: choice(assignment.findings.map(f => f.id)), status: choice(["actionable", "rejected", "fixed", "blocked", "awaiting-validation", ...(assignment.sourceChanges ? ["needs-validation"] : [])]), evidence: text }),
-        { minItems: assignment.findings.length, maxItems: assignment.findings.length }) }),
-    object({ ...envelope, question: object({ text, recommended: text, evidence: text }) }),
+        { minItems: assignment.findings.length, maxItems: assignment.findings.length }) },
+    [...Object.keys(envelope), "decisions", ...(assignment.validationAssessment ? ["validationImpact"] : [])]),
+    object({ ...envelope, question: object({ text, recommended: text, evidence: text,
+      options: array(text, { minItems: 2, uniqueItems: true }) }, ["text", "recommended", "evidence"]) }),
+    ...(assignment.adjudications?.length ? [object({ ...envelope, reopen: object({
+      findingId: choice(assignment.adjudications.map(item => item.findingId)), evidence: text }) })] : []),
     ...(assignment.validationRetryAvailable ? [object({ ...envelope, validationRetry: object({ evidence: text }) })] : [])] };
+  } else if (assignment.role === "adjudicate") {
+    success = object({ ...envelope, verdicts: array(object({ findingId: choice(assignment.findings.map(f => f.id)),
+      verdict: choice(["upheld", "rejected", "needs-input"]), evidence: text }),
+    { minItems: assignment.findings.length, maxItems: assignment.findings.length }) });
   } else if (assignment.role === "repair") {
     const attribution = { path: text, reason: text, findingIds: array(choice(assignment.findings.map(f => f.id)), { minItems: 1, uniqueItems: true }) };
     const mode = { type: "string", enum: ["0644", "0755"] };
@@ -70,7 +83,7 @@ function matches(schema, value) {
 export function assertResult(assignment, result) {
   if (!matches(resultSchema(assignment), result)) throw new Error(`Malformed ${assignment.role} result: does not match the assignment result schema.`);
   if (result.commitMessage !== undefined) normalizeCommitMessage(result.commitMessage);
-  for (const [field, key] of [["acceptance", "criterionId"], ["decisions", "id"], ["validationImpact", "assignmentId"]]) {
+  for (const [field, key] of [["acceptance", "criterionId"], ["decisions", "id"], ["validationImpact", "assignmentId"], ["verdicts", "findingId"]]) {
     if (result[field] && new Set(result[field].map(item => item[key])).size !== result[field].length) throw new Error(`Malformed ${assignment.role} result: duplicate ${key}.`);
   }
   return result;

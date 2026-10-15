@@ -8,6 +8,23 @@ const base = { id: "assignment-1", fingerprint: "pinned", contract: {
   requiredValidation: [{ id: "unit" }, { id: "optional", optional: true }],
 }, findings: [{ id: "f-1" }] };
 
+test("adjudication is a distinct read-only result and reopening needs a currently applicable verdict", () => {
+  const envelope = { assignmentId: base.id, fingerprint: base.fingerprint };
+  const judge = { ...base, role: "adjudicate" };
+  const verdict = { findingId: "f-1", verdict: "upheld", evidence: "Concrete boundary reproduction" };
+  assert.doesNotThrow(() => assertResult(judge, { ...envelope, verdicts: [verdict] }));
+  for (const verdicts of [[], [verdict, verdict], [{ ...verdict, findingId: "unknown" }], [{ ...verdict, verdict: "fixed" }]]) {
+    assert.throws(() => assertResult(judge, { ...envelope, verdicts }), /Malformed adjudicate/);
+  }
+  const reopen = { ...envelope, reopen: { findingId: "f-1", evidence: "New production consumer contradicts prior evidence" } };
+  assert.throws(() => assertResult({ ...base, role: "triage" }, reopen), /Malformed triage/);
+  assert.doesNotThrow(() => assertResult({ ...base, role: "triage", adjudications: [verdict] }, reopen));
+  assert.throws(() => assertResult({ ...base, role: "triage" }, { ...envelope,
+    decisions: [{ id: "f-1", status: "blocked", evidence: "A decision is needed" }],
+    recovery: { diagnosis: "human-decision", evidence: "Unresolved choice", nextAction: "Ask", findingIds: ["f-1"] } }), /Malformed triage/,
+  "Human decisions use the question envelope, which carries the choices and recommendation");
+});
+
 test("review wire schema carries the exact envelope, severity vocabulary and required evidence IDs", () => {
   for (const id of [undefined, null, true, 123]) assert.throws(() => validateContract({
     goal: "Contract", nonGoals: [], compatibilityConstraints: [], permittedBehaviorChanges: [],

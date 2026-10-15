@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import { defaultLauncherCandidates, parseArgs as reviewArgs, readOptionValue, reviewOptionTakesValue } from "../../comprehensive-review/scripts/review-options.mjs";
 import { DEFAULT_FIX_MODE, repairPolicy } from "./repair-policy.mjs";
 
-export const DEFAULT_MAX_ROUNDS = 3;
-export const MAX_ROUNDS = 10;
+export const DEFAULT_MAX_ROUNDS = null;
+export const MAX_ROUNDS = Number.MAX_SAFE_INTEGER;
+export const MAX_PROVIDER_ATTEMPTS = 10;
 
 export function parseArgs(argv) {
   const options = { scope: "auto", base: null, fixMode: DEFAULT_FIX_MODE, commitMode: "per-round", minSeverity: "low", maxRounds: DEFAULT_MAX_ROUNDS,
@@ -37,8 +38,10 @@ export function parseArgs(argv) {
   options.minSeverity = options.minSeverity.toLowerCase();
   if (!["low", "medium", "high", "critical"].includes(options.minSeverity)) throw new Error("Unsupported --min-severity.");
   for (const key of ["maxRounds", "maxProviderAttempts"]) {
+    if (key === "maxRounds" && options[key] === null) continue;
     options[key] = Number(options[key]);
-    if (!Number.isSafeInteger(options[key]) || options[key] < 1 || options[key] > MAX_ROUNDS) throw new Error(`${key} must be an integer from 1 to ${MAX_ROUNDS}.`);
+    const max = key === "maxRounds" ? MAX_ROUNDS : MAX_PROVIDER_ATTEMPTS;
+    if (!Number.isSafeInteger(options[key]) || options[key] < 1 || options[key] > max) throw new Error(`${key} must be an integer from 1 to ${max}.`);
   }
   if (seen.has("--base") && !options.base) throw new Error("--base must not be blank.");
   if (options.base && options.scope === "working-tree") throw new Error("--base cannot be combined with --scope working-tree.");

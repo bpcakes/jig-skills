@@ -460,12 +460,21 @@ test("new source can address an earlier validation failure without manufacturing
   assert.equal(readFileSync(path.join(f.root, "ready"), "utf8"), "external prerequisite fix");
 });
 
-test("a candidate already tried by isolated validation remains protected against oscillation", async t => {
+test("a candidate already tried by isolated validation routes oscillation without replay", async t => {
   if (process.platform === "linux" && spawnSync("bwrap", ["--unshare-net", "--ro-bind", "/", "/", "--", "true"]).status !== 0) { t.skip("Bubblewrap/user namespaces unavailable"); return; }
   const f = fixture(t);
   f.contract.requiredValidation[0].argv = [process.execPath, "-e", "process.exit(1)"];
-  const run = await drive(await f.start({ config: { validationMode: "isolated" } }));
-  assert.equal(run.phase, "BLOCKED", JSON.stringify(status(run)));
+  const run = await drive(await f.start({ config: { validationMode: "isolated" } }), () => false, (a, current) => {
+    const response = result(a, current);
+    if (a.role === "triage" && a.recoveryContext.signals.length) {
+      const oscillating = a.recoveryContext.signals.some(s => s.kind === "oscillation");
+      response.recovery = { diagnosis: oscillating ? "execution-blocked" : "local-repair", strategy: "verify-pinned-candidate",
+        evidence: "Inspect the failed isolated candidate and its required check.", nextAction: oscillating ? "Oscillating candidate needs a different causal diagnosis." : "Repair using the retained check.",
+        findingIds: response.decisions.filter(d => d.status === "actionable").map(d => d.id) };
+    }
+    return response;
+  });
+  assert.equal(run.phase, "RECOVERY_REQUIRED", JSON.stringify(status(run)));
   assert.match(run.outcome.reason, /Oscillating/);
   assert.equal(run.round, 2); assert.equal(run.validation.length, 1);
   assert.equal(run.validation[0].exitCode, 1);

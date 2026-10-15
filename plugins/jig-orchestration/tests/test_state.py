@@ -1152,5 +1152,233 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(task["merged_prs"]["10"]["merge_commit"], "M3")
 
 
+    def recovery(self, route="park", recovery_id="recovery-1"):
+        return {"id": recovery_id, "runId": "controller-run", "diagnosis": "scope-dependency" if route == "split" else "human-decision",
+                "route": route, "evidence": "Source and contract disagree at the public boundary",
+                "nextAction": "Resolve the prerequisite" if route == "split" else "Choose the documented compatibility policy",
+                "fingerprint": "exact-source", "findingIds": ["finding-1"]}
+
+    def recover(self, decision=None):
+        return self.apply("recover", "A", decision=decision or self.recovery(),
+                          acceptance_ref="original-contract.json", evidence=self.proof(True))
+
+    def recovery_setup(self):
+        self.admit()
+        self.apply("observe", "A", fields={"refs": {"run_id": "controller-run"}}, evidence=self.proof())
+
+    def test_recovery_releases_slot_only_after_settlement_and_does_not_complete_task(self):
+        self.recovery_setup()
+        work = self.reserve(kind="repair")
+        self.assert_error("unsettled", self.recover)
+        self.assertIsNotNone(Engine.read(self.run)["tasks"]["A"]["slot"])
+        self.settle(work["reservation_id"])
+        self.recover()
+        state = Engine.read(self.run)
+        self.assertIsNone(state["tasks"]["A"]["slot"])
+        self.assertEqual(Engine.summary(state)["done"], [])
+        self.assertEqual(Engine.summary(state)["parked"][0]["task_id"], "A")
+        self.assert_error("recovery", self.reserve, kind="repair")
+        self.assert_error("recovery", self.apply, "close", "A", receipt=self.proof())
+        self.admit("B")
+        self.reserve("B")  # A parked decision cannot hold up another ready task.
+        self.apply("resolve_recovery", "A", recovery_id="recovery-1", resolution="Decision: preserve the public API",
+                   evidence=self.proof(True))
+        self.assertFalse(Engine.read(self.run)["tasks"]["A"]["recovery_open"])
+
+    def test_recovery_is_idempotent_immutable_and_bound_to_controller_identity(self):
+        self.recovery_setup()
+        self.assert_error("identity", self.recover, {**self.recovery(), "runId": "other-run"})
+        self.recover()
+        self.assertTrue(self.recover()["replayed"])
+        self.assert_error("identity", self.recover, {**self.recovery(), "nextAction": "Silently discard the question"})
+        self.apply("resolve_recovery", "A", recovery_id="recovery-1", resolution="Recorded decision", evidence=self.proof(True))
+        self.recover()  # Replaying the observation must not reopen a resolved task.
+        self.assertFalse(Engine.read(self.run)["tasks"]["A"]["recovery_open"])
+        self.assert_error("identity", self.apply, "recover", "A", decision=self.recovery(recovery_id="recovery-2"),
+                          acceptance_ref="weakened-contract.json", evidence=self.proof(True))
+
+    def split_dependency(self, existing_task=None):
+        self.recover(self.recovery("split"))
+        reservation = self.reserve(kind="split")
+        target = {"recovery_id": "recovery-1", "authority": "canonical-ref", "parent_task": "A",
+                  "acceptance_ref": "original-contract.json", "children": [
+                      {"key": "boundary-prerequisite", "title": "Repair owner contract", "acceptance": "Original consumer guarantee holds"}]}
+        if existing_task is not None:
+            target["children"][0]["existing_task"] = existing_task
+        intent = self.apply("intent", "A", kind="split", reservation_id=reservation["reservation_id"],
+                            target=target, evidence=self.proof())
+        return reservation, target, intent
+
+    def test_split_reconciles_unknown_creation_and_inherits_cumulative_budget(self):
+        self.reset(limits=[{"id": "repairs", "unit": "source_repair", "scope": "task", "max": 1, "enforced": True}])
+        self.recovery_setup()
+        previous = self.reserve(kind="repair")
+        self.settle(previous["reservation_id"])
+        reservation, target, intent = self.split_dependency()
+        self.assert_error("uncertain", self.apply, "outcome", "A", intent_id=intent["action_id"],
+                          target=target, status="failed", receipt=self.proof())
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="unknown", receipt=self.proof())
+        self.assert_error("unsettled", self.reserve, kind="split")
+        self.assert_error("unsettled", self.apply, "park", "A", evidence=self.proof(True))
+        receipt = {**self.proof(), "authority": "canonical-ref", "parent_task": "A", "unpublished": False,
+                   "children": {"boundary-prerequisite": "B"}, "blocked_by": ["B"]}
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded", receipt=receipt)
+        self.settle(reservation["reservation_id"])
+        self.apply("park", "A", evidence=self.proof(True))
+        self.assert_error("dependency", self.apply, "resolve_recovery", "A", recovery_id="recovery-1",
+                          resolution="Skip prerequisite", evidence=self.proof(True))
+        self.admit("B")
+        self.assert_error("budget", self.reserve, "B", kind="repair")
+        self.reserve("B", kind="validate")  # Verification still fits the original policy.
+        state = Engine.read(self.run)
+        self.assertEqual(state["tasks"]["B"]["budget_root"], "A")
+        self.assertEqual(Engine.summary(state)["created"][0]["task_id"], "B")
+        self.assertEqual(state["counters"]["source_repair"], 1)
+
+    def test_split_cannot_duplicate_causal_tasks_or_accept_missing_dependency_edges(self):
+        self.recovery_setup()
+        reservation, target, intent = self.split_dependency()
+        receipt = {**self.proof(), "authority": "canonical-ref", "parent_task": "A", "unpublished": False,
+                   "children": {"boundary-prerequisite": "B"}, "blocked_by": []}
+        self.assert_error("dependency", self.apply, "outcome", "A", intent_id=intent["action_id"], target=target,
+                          status="succeeded", receipt=receipt)
+        receipt["blocked_by"] = ["B"]
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded", receipt=receipt)
+        self.settle(reservation["reservation_id"])
+        again = self.reserve(kind="split")
+        self.assert_error("duplicate", self.apply, "intent", "A", kind="split", reservation_id=again["reservation_id"],
+                          target=target, evidence=self.proof())
+
+    def test_split_reuses_admitted_prerequisite_without_changing_ownership_or_budget(self):
+        self.reset(limits=[{"id": "repairs", "unit": "source_repair", "scope": "task", "max": 1, "enforced": True}])
+        self.recovery_setup()
+        self.admit("B")
+        work = self.reserve("B", kind="repair")
+        self.settle(work["reservation_id"], "B")
+        self.apply("park", "B", evidence=self.proof(True))
+        before = Engine.read(self.run)["tasks"]["B"]
+        reservation, target, intent = self.split_dependency(existing_task="B")
+        receipt = {**self.proof(), "authority": "canonical-ref", "parent_task": "A", "unpublished": False,
+                   "children": {}, "reused": {"boundary-prerequisite": "B"}, "blocked_by": ["B"]}
+        self.assert_error("identity", self.apply, "outcome", "A", intent_id=intent["action_id"], target=target,
+                          status="succeeded", receipt={**receipt, "reused": {"boundary-prerequisite": "C"}})
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="unknown", receipt=self.proof())
+        self.assert_error("unsettled", self.apply, "park", "A", evidence=self.proof(True))
+        request = self.request("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded", receipt=receipt)
+        outcome = Engine.apply(self.run, request)
+        after = Engine.read(self.run)
+        self.assertEqual(Engine.apply(self.run, request), outcome)
+        self.assertEqual(Engine.read(self.run), after)
+        self.assertEqual(after["tasks"]["B"], before)
+        self.assertEqual(after["tasks"]["A"]["recovery_dependencies"], ["B"])
+        self.assertEqual(Engine.summary(after)["created"], [])
+        self.settle(reservation["reservation_id"])
+        self.apply("park", "A", evidence=self.proof(True))
+        self.assert_error("budget", self.reserve, "B", kind="repair")
+        self.assert_error("dependency", self.apply, "resolve_recovery", "A", recovery_id="recovery-1",
+                          resolution="B is still open", evidence=self.proof(True))
+        def close(child):
+            self.apply("close", child, receipt={**self.proof(), "authority": "canonical-ref", "task_id": child,
+                       "owner": "tracker-actor", "status": "closed", "unpublished": False, "criteria_met": True, "acceptance_ref": "proof"})
+        close("B")
+        self.apply("resolve_recovery", "A", recovery_id="recovery-1", resolution="B completed", evidence=self.proof(True))
+        work = self.reserve(kind="repair")  # B's prior repair must not spend A's separate task budget.
+        self.settle(work["reservation_id"])
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        reopen = self.apply("reopen_intent", "B", target=target, evidence=self.proof())
+        merge = self.reserve(kind="merge")
+        self.assert_error("dependency", self.apply, "intent", "A", kind="merge", target={"pr": 1},
+                          reservation_id=merge["reservation_id"], evidence=self.proof())
+        self.settle(merge["reservation_id"])
+        self.assert_error("dependency", self.apply, "close", "A", receipt=self.proof())
+        self.apply("reopen_outcome", "B", intent_id=reopen["action_id"], target=target, status="succeeded",
+                   receipt={**self.proof(), "task_id": "B", **target, "status": "open", "unpublished": False})
+        self.assert_error("dependency", self.apply, "close", "A", receipt=self.proof())
+        close("B")
+        close("A")
+        self.assertIn("A", Engine.summary(Engine.read(self.run))["done"])
+
+    def test_split_can_share_an_unadmitted_prerequisite_without_reparenting_it(self):
+        self.recovery_setup()
+        reservation, target, intent = self.split_dependency()
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded", receipt={
+            **self.proof(), "authority": "canonical-ref", "parent_task": "A", "unpublished": False,
+            "children": {"boundary-prerequisite": "B"}, "blocked_by": ["B"]})
+        self.settle(reservation["reservation_id"])
+        self.apply("park", "A", evidence=self.proof(True))
+        original_link = Engine.read(self.run)["task_links"]["B"]
+        self.admit("C")
+        self.apply("observe", "C", fields={"refs": {"run_id": "controller-run"}}, evidence=self.proof())
+        self.apply("recover", "C", decision=self.recovery("split"), acceptance_ref="contract-C", evidence=self.proof(True))
+        reservation = self.reserve("C", kind="split")
+        target = {**target, "parent_task": "C", "acceptance_ref": "contract-C",
+                  "children": [{**target["children"][0], "existing_task": "B"}]}
+        intent = self.apply("intent", "C", kind="split", reservation_id=reservation["reservation_id"], target=target, evidence=self.proof())
+        self.apply("outcome", "C", intent_id=intent["action_id"], target=target, status="succeeded", receipt={
+            **self.proof(), "authority": "canonical-ref", "parent_task": "C", "unpublished": False,
+            "children": {}, "reused": {"boundary-prerequisite": "B"}, "blocked_by": ["B"]})
+        self.settle(reservation["reservation_id"], "C")
+        self.apply("park", "C", evidence=self.proof(True))
+        self.assert_error("dependency", self.apply, "resolve_recovery", "C", recovery_id="recovery-1",
+                          resolution="B is not yet admitted", evidence=self.proof(True))
+        self.admit("B")
+        state = Engine.read(self.run)
+        self.assertEqual(state["task_links"]["B"], original_link)
+        self.assertEqual(state["tasks"]["B"]["budget_root"], "A")
+        self.assertEqual(state["tasks"]["C"]["budget_root"], "C")
+        self.assertEqual(state["tasks"]["C"]["recovery_dependencies"], ["B"])
+        self.assertEqual([t["task_id"] for t in Engine.summary(state)["created"]], ["B"])
+
+    def test_reused_prerequisites_require_registered_ids_and_cannot_form_pending_cycles(self):
+        self.recovery_setup()
+        self.admit("B", host="remote")
+        reservation, target, intent = self.split_dependency(existing_task="B")
+        self.apply("observe", "B", fields={"refs": {"run_id": "controller-run"}}, evidence=self.proof())
+        self.apply("recover", "B", decision=self.recovery("split"), acceptance_ref="contract-B", evidence=self.proof(True))
+        reservation = self.reserve("B", kind="split")
+        target = {**target, "parent_task": "B", "acceptance_ref": "contract-B"}
+        for child, code in [("", "identity"), ("unregistered", "identity"), ("B", "dependency"), ("A", "dependency")]:
+            with self.subTest(child=child):
+                candidate = {**target, "children": [{**target["children"][0], "existing_task": child}]}
+                self.assert_error(code, self.apply, "intent", "B", kind="split", reservation_id=reservation["reservation_id"],
+                                  target=candidate, evidence=self.proof())
+        self.assertIsNone(Engine.read(self.run)["tasks"]["B"]["pending_intent"])
+
+    def test_later_splits_preserve_all_prerequisites_and_reopening_blocks_parent_closure(self):
+        self.recovery_setup()
+        first, target, intent = self.split_dependency()
+        def receipt(key, child, edges):
+            return {**self.proof(), "authority": "canonical-ref", "parent_task": "A", "unpublished": False,
+                    "children": {key: child}, "blocked_by": edges}
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded",
+                   receipt=receipt("boundary-prerequisite", "B", ["B"]))
+        self.settle(first["reservation_id"])
+        second = self.reserve(kind="split")
+        target = {**target, "children": [{"key": "consumer-prerequisite", "title": "Repair consumer", "acceptance": "Original guarantee holds"}]}
+        intent = self.apply("intent", "A", kind="split", reservation_id=second["reservation_id"], target=target, evidence=self.proof())
+        self.assert_error("dependency", self.apply, "outcome", "A", intent_id=intent["action_id"], target=target,
+                          status="succeeded", receipt=receipt("consumer-prerequisite", "C", ["C"]))
+        self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded",
+                   receipt=receipt("consumer-prerequisite", "C", ["B", "C"]))
+        self.settle(second["reservation_id"])
+        self.apply("park", "A", evidence=self.proof(True))
+        self.admit("B")
+        self.admit("C")
+        def close(child):
+            self.apply("close", child, receipt={**self.proof(), "authority": "canonical-ref", "task_id": child,
+                       "owner": "tracker-actor", "status": "closed", "unpublished": False, "criteria_met": True, "acceptance_ref": "proof"})
+        close("C")
+        self.assert_error("dependency", self.apply, "resolve_recovery", "A", recovery_id="recovery-1", resolution="C done", evidence=self.proof(True))
+        close("B")
+        self.apply("resolve_recovery", "A", recovery_id="recovery-1", resolution="Both prerequisites accepted", evidence=self.proof(True))
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        reopened = self.apply("reopen_intent", "B", target=target, evidence=self.proof())
+        self.assertNotIn("B", Engine.summary(Engine.read(self.run))["done"], "An unresolved reopen is unfinished work")
+        self.assert_error("dependency", self.apply, "close", "A", receipt=self.proof())
+        self.apply("reopen_outcome", "B", intent_id=reopened["action_id"], target=target, status="succeeded",
+                   receipt={**self.proof(), "task_id": "B", **target, "status": "open", "unpublished": False})
+        self.assert_error("dependency", self.apply, "close", "A", receipt=self.proof())
+
+
 if __name__ == "__main__":
     unittest.main()

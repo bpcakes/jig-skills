@@ -58,7 +58,13 @@ async function released(run) {
 function nativeResult(run) {
   const a = run.pending.assignment;
   if (a.role === "review") return { complete: true, findings: [], acceptance: [{ criterionId: "value", status: "satisfied", evidence: "Inspect the export and execute its assertion", validationIds: ["unit"] }] };
-  if (a.role === "triage") return { decisions: a.findings.map(f => ({ id: f.id, status: run.validation.some(v => v.outcome === "succeeded") ? "fixed" : "actionable", evidence: "Checked the export and the validation record" })) };
+  if (a.role === "triage") {
+    const result = { decisions: a.findings.map(f => ({ id: f.id, status: run.validation.some(v => v.outcome === "succeeded") ? "fixed" : "actionable", evidence: "Checked the export and the validation record" })) };
+    if (run.validationFailure && a.recoveryContext.signals.length && result.decisions.every(d => d.status === "actionable")) result.recovery = {
+      diagnosis: "local-repair", strategy: "use-asserted-export", evidence: "The required assertion identifies the incorrect export.",
+      nextAction: "Use the value required by the public contract.", findingIds: result.decisions.map(d => d.id) };
+    return result;
+  }
   return { edits: [{ path: "value.cjs", content: "module.exports = 2;\n", findingIds: a.findings.map(f => f.id), reason: "Correct the export" }] };
 }
 async function nativeSubmit(run, result = nativeResult(run)) {
@@ -410,9 +416,11 @@ test("resume at every durable phase and pending command neither resets counters 
   assert.equal(again.round, run.round); assert.equal(again.attempts.length, run.attempts.length);
 });
 
-test("oscillation stops deterministically", async t => {
+test("oscillation retains the failed attempt and routes its diagnosis", async t => {
   const f = fixture(t), run = await drive(await f.start("oscillation"));
-  assert.equal(run.phase, "BLOCKED"); assert.match(run.outcome.reason, /Oscillating/);
+  assert.equal(run.phase, "RECOVERY_REQUIRED"); assert.match(run.outcome.reason, /conflicting value contract/);
+  assert.ok(run.recoverySignals.some(s => s.kind === "oscillation"));
+  assert.equal(run.recovery.route, "park");
   assert.equal(run.round, 2);
 });
 
@@ -435,6 +443,10 @@ for (const scenario of ["normal", "interrupted", "concurrent-edit"]) test(`expli
           status: run.validationFailure && !finding.id.startsWith("validation-") ? "rejected" : "actionable",
           evidence: "The required check identifies the first repair as incorrect" })) }
         : { edits: [{ path: "value.cjs", content: `module.exports = ${run.validationFailure ? 1 : 2};\n`, findingIds: a.findings.map(finding => finding.id), reason: "Restore the required behavior after failed validation" }] };
+      if (a.role === "triage" && run.validationFailure && a.recoveryContext.signals.length) result.recovery = {
+        diagnosis: "local-repair", strategy: "restore-required-original", evidence: "The assertion disproves the first repair and verifies the original contract.",
+        nextAction: "Restore the original required export without claiming convergence.",
+        findingIds: result.decisions.filter(d => d.status === "actionable").map(d => d.id) };
       await nativeSubmit(run, result);
     }
     if (run.validationCycle?.job) await sleep(20);
@@ -699,7 +711,7 @@ test("required validation cannot be waived by rejection or severity filtering", 
     f.contract.requiredValidation[0].argv = [process.execPath, "-e", "process.exit(1)"];
     const run = await drive(await f.start(scenario, { options: parseArgs(["--min-severity", "critical"]) }));
     assert.equal(run.validation.length, 1);
-    assert.equal(run.phase, scenario === "reject-validation" ? "VALIDATION_FAILED" : "BLOCKED");
+    assert.equal(run.phase, scenario === "reject-validation" ? "VALIDATION_FAILED" : "RECOVERY_REQUIRED");
     assert.equal(run.round, scenario === "reject-validation" ? 0 : 1);
     assert.ok(run.validationFailure);
   });

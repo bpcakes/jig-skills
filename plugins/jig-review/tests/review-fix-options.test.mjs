@@ -7,13 +7,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_MAX_ROUNDS, MAX_ROUNDS, parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 
-test("defaults resolve auto scope, all severities, three rounds and balanced native reviews", () => {
+test("defaults resolve auto scope, all severities, no implicit repair cap and balanced native reviews", () => {
   const o = parseArgs([]);
-  assert.equal(o.scope, "auto"); assert.equal(o.minSeverity, "low"); assert.equal(o.maxRounds, 3);
+  assert.equal(o.scope, "auto"); assert.equal(o.minSeverity, "low"); assert.equal(o.maxRounds, null);
   assert.equal(o.reviewPolicy, "balanced"); assert.deepEqual(o.review.reviewers, ["codex"]);
   assert.equal(o.fixMode, "balanced");
   assert.equal(o.commitMode, "per-round");
-  assert.equal(DEFAULT_MAX_ROUNDS, 3); assert.equal(MAX_ROUNDS, 10);
+  assert.equal(DEFAULT_MAX_ROUNDS, null); assert.equal(MAX_ROUNDS, Number.MAX_SAFE_INTEGER);
 });
 test("commit mode defaults to per-round and accepts an explicit non-committing mode", () => {
   assert.equal(parseArgs(["--commit-mode", " NONE "]).commitMode, "none");
@@ -35,8 +35,10 @@ test("removed options fail clearly and scope conflicts cannot be ignored", () =>
 });
 test("bounds and missing/duplicate options fail before execution", () => {
   for (const name of ["--max-rounds", "--max-provider-attempts"]) {
-    for (const value of ["0", "11", "1.5", "bad"]) assert.throws(() => parseArgs([name, value]), /integer/);
+    for (const value of ["0", "9007199254740992", "1.5", "bad"]) assert.throws(() => parseArgs([name, value]), /integer/);
   }
+  assert.equal(parseArgs(["--max-rounds", "11"]).maxRounds, 11);
+  assert.throws(() => parseArgs(["--max-provider-attempts", "11"]), /integer/);
   for (const name of ["--scope", "--base", "--fix-mode", "--max-rounds", "--review-policy", "--exclude-path"]) assert.throws(() => parseArgs([name, "--unknown"]), /Missing value/);
   assert.throws(() => parseArgs(["--scope", "auto", "--scope", "branch"]), /Duplicate/);
   assert.throws(() => parseArgs(["--review-policy", "quick"]), /balanced or strict/);
@@ -61,7 +63,7 @@ test("entrypoint works through a symlink", t => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const link = path.join(dir, "loop.mjs");
   symlinkSync(fileURLToPath(new URL("../skills/review-fix-loop/scripts/loop-options.mjs", import.meta.url)), link);
-  assert.equal(JSON.parse(execFileSync(process.execPath, [link], { encoding: "utf8" })).maxRounds, 3);
+  assert.equal(JSON.parse(execFileSync(process.execPath, [link], { encoding: "utf8" })).maxRounds, null);
 });
 
 test("Codex runtime and launcher selections reach the loop's review options", () => {

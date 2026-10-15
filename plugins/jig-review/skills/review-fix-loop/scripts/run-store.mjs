@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { streamFile } from "./file-content.mjs";
 // V14 pins commit mode and journals controller-owned round commits.
 // Older runs retain their original frozen instructions and controller.
-export const RUN_VERSION = 15;
+export const RUN_VERSION = 16;
 
 const canonical = value => value && typeof value === "object" && !Array.isArray(value)
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]))
@@ -153,6 +153,6 @@ function loadVersionedRun(directory, versions) {
 export const loadRun = directory => loadVersionedRun(directory, [RUN_VERSION]);
 // V4 through V13 share the readable journal and manifest schema. This reader is
 // exclusively for releasing a settled reference, never resuming old work.
-export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, RUN_VERSION]);
+export const loadRunForRelease = directory => loadVersionedRun(directory, [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, RUN_VERSION]);
 export function resultFile(run, id) { return path.join(run.directory, "assignments", id, "result.json"); }
 export function hasResult(run, id) { return existsSync(resultFile(run, id)); }

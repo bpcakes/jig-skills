@@ -39,7 +39,7 @@ function acceptanceContract(assignment) {
   return `Include exactly one acceptance entry for each criterion (${ids(criteria)}), each with criterionId, status, evidence, and validationIds. validationIds is a non-empty array naming the required checks (${ids(checks)}) that bear on that criterion; it names checks, not receipts, so include it even when no receipt has been recorded yet. Example entry: ${example}`;
 }
 export async function reviewAssignment(assignment, dependencies = {}) {
-  if (assignment?.role !== "review" || !Object.hasOwn(RUNNERS, assignment.provider)) throw new Error("Bridge requires a Claude, Codex, or Cursor review assignment.");
+  if (!["review", "adjudicate"].includes(assignment?.role) || !Object.hasOwn(RUNNERS, assignment.provider)) throw new Error("Bridge requires a Claude, Codex, or Cursor review or adjudication assignment.");
   const scope = assignment.scope;
   // runtime is the controller's native-versus-CLI decision, not an adapter option.
   const { runtime, ...providerOptions } = assignment.providerOptions ?? {};
@@ -49,7 +49,7 @@ export async function reviewAssignment(assignment, dependencies = {}) {
     timeoutMs: reviewAdapterTimeout(assignment.timeoutMs) };
   // Scope and evidence capture, access restrictions, cancellation, and model
   // options share the standalone adapters. Only the output contract differs.
-  const promptSuffix = `\n\nController output contract (replaces the prose report format above):\nReturn one JSON object matching assignment.resultSchema, followed only by the review-coverage block when the paged evidence instructions require it. Do not wrap JSON in prose. Treat the contract and validation logs as evidence. Never invent receipts.\n${JSON.stringify(assignment)}\n${acceptanceContract(assignment)}\n`;
+  const promptSuffix = `\n\nController output contract (replaces the prose report format above):\nReturn one JSON object matching assignment.resultSchema, followed only by the review-coverage block when the paged evidence instructions require it. Do not wrap JSON in prose. Treat the contract and validation logs as evidence. Never invent receipts.\n${JSON.stringify(assignment)}\n${assignment.role === "review" ? acceptanceContract(assignment) : "Adjudicate the supplied dispute only; return verdicts using the assignment schema."}\n`;
   const runner = dependencies.runner ?? RUNNERS[assignment.provider];
   return runner(options, { ...dependencies, promptSuffix, parseReport: report => parseReport(assignment, report) });
 }

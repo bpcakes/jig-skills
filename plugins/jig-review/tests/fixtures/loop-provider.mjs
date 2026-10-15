@@ -33,6 +33,13 @@ if (a.role === "review") {
 } else if (a.role === "triage") {
   if (scenario === "ambiguous" && !a.contractAnswers?.length) result.question = { text: "Which value should the public API export?", recommended: "2", evidence: "No repository source establishes the intended new value." };
   else result.decisions = a.findings.map(f => ({ id: f.id, status: scenario === "reject-validation" && f.id.startsWith("validation-") ? "rejected" : scenario === "repair-validation" && f.id.startsWith("validation-") ? "actionable" : correct && !["oscillation", "threshold"].includes(scenario) ? "fixed" : "actionable", evidence: "Compared current source with the contract and recorded validation." }));
+  if (result.decisions?.some(d => d.status === "actionable") && a.recoveryContext?.signals.length) {
+    const oscillating = a.recoveryContext.signals.some(s => ["oscillation", "no-change"].includes(s.kind));
+    result.recovery = { diagnosis: oscillating ? "execution-blocked" : "local-repair",
+      evidence: oscillating ? "Both exported values have been attempted without resolving the review claim." : "The failed assertion identifies the remaining incorrect exported value.",
+      nextAction: oscillating ? "Investigate the conflicting value contract using the retained attempts." : "Correct the exported value identified by the assertion.",
+      findingIds: result.decisions.filter(d => d.status === "actionable").map(d => d.id), strategy: "correct-export-from-assertion" };
+  }
 } else if (a.role === "repair") {
   const count = a.validation.filter(v => v.exitCode !== 0).length;
   const next = scenario === "oscillation" ? (correct ? 1 : 2) : scenario === "recovery" && count === 0 ? 3 : 2;

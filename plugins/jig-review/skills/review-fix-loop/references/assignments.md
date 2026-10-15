@@ -38,6 +38,26 @@ Decisions must cover every persisted finding, including earlier findings absent 
 
 When `validationRetryAvailable` is true, inspect the failed check's logs and safe local diagnostics before deciding it is blocked. If evidence supports a transient fixture or service failure and a rerun is safe, return `validationRetry: {"evidence":"Observed failure, diagnostic evidence, and why a full rerun is justified"}` instead of `decisions` or `question`, with the normal assignment envelope. This requests one retry of the full pinned validation plan per run, including at the repair-round limit, without source edits or another commit. A passing isolated test is diagnostic evidence, not a replacement for the full gate. The controller retains all original receipts and only allows this path for completed failures applicable to the current checkout; missing prerequisites, uncertain execution, and an unpublished isolated candidate do not qualify. The retry does not resolve any finding. After it passes, continue normal triage and terminal review; after another failure, diagnose a causal repair or report the remaining blocker. Do not ask the user to say “continue” for this authorized recovery.
 
+## Recovery and adjudication results
+
+Triage includes `recoveryContext` (pending signals, prior diagnoses, progress, mutations and validation) and currently applicable `adjudications`. When a signal remains relevant after disposition and another repair is needed, include `recovery` beside the complete `decisions` array:
+
+```json
+{"diagnosis":"wrong-design","evidence":"The same race returned after two caller guards; the owner probe reproduces it.","nextAction":"Serialize publication at the owning boundary; preserve the consumer contract and prior rejection constraints.","findingIds":["<finding-id>"],"strategy":"serialize-publication-at-owner"}
+```
+
+The controller derives the route from the diagnosis; see [stall recovery](recovery.md#stall-recovery). `strategy` is required for `productive`, `local-repair` and `wrong-design`, and identifies the causal approach across rounds. It is not a per-attempt nonce. Research answers belong in the evidence and resulting next action, not an unrelated list of questions. A recovery handoff preserves the frozen contract, evidence and budgets; it does not itself create tracker tasks or reset source.
+
+An `adjudicate` assignment is a separate read-only role with a selected provider other than the triage host. Run it in a fresh context containing only its assignment and current repository. It receives the disputed claims and their rejection histories. Return one verdict per supplied finding:
+
+```json
+{"assignmentId":"<id>","fingerprint":"<hash>","verdicts":[{"findingId":"<finding-id>","verdict":"rejected","evidence":"The pinned consumer contract and reproduction disprove the claimed behavior."}]}
+```
+
+Verdicts are `upheld`, `rejected`, or `needs-input`. Triage cannot override an applicable verdict. Material new evidence can reopen it with an alternative result `{"assignmentId":"<id>","fingerprint":"<hash>","reopen":{"findingId":"<finding-id>","evidence":"New reproduction and why it changes the prior verdict"}}`. This records the evidence and returns to diagnosis; it does not silently erase the judge's decision. Source changes invalidate the old binding automatically.
+
+For a human choice, include `options` (at least two distinct choices) in the question along with its evidence and recommendation. Distinct later questions may be recorded; identical answered questions cannot be asked again. Answers remain supplements to the original contract, never replacements for required checks.
+
 For `requirement-<criterionId>` findings, address every current report’s acceptance concern for that criterion in the existing decision `evidence`. A `fixed` decision requires applicable successful controller validation and a source/coverage explanation that resolves those concerns. The controller records `acceptanceResolutions` tied to each report, criterion, source fingerprint/content hash, triage assignment, and cited validation executions. Original reports remain immutable. A rejected requirement, passing checks alone, or a resolution for an earlier report/source state cannot satisfy acceptance. This happens in ordinary triage without another review, check execution, repair round, or result field.
 
 When triage includes `validationAssessment`, also return `validationImpact`, with one `{ "assignmentId": "<completed-check-id>", "status": "unaffected" | "rerun", "evidence": "<specific dependency and diff evidence>" }` entry per listed check. Inspect its recorded before/after snapshots and commands. Receipt appends can leave a check applicable; state consumed by code, tests, or configuration can invalidate it. The original execution result keeps its fingerprint. Accepted reuse is recorded separately, and failed checks remain failed. Use `needs-validation` for apparent fixes while reuse is still being assessed; the controller accepts reuse after this submission. This is local triage, without another discovery pass or permission request.

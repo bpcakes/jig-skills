@@ -51,6 +51,10 @@ async function drive(run, { secondRepair = false, failFirst = false, modeRepair 
           status: f.key === "executable" ? modeMissing ? "actionable" : "fixed"
             : f.key === "support" ? existsSync(path.join(run.root, "support.txt")) ? "fixed" : "actionable" : correct ? "fixed" : "actionable",
           evidence: "Checked current source and matching validation" })) };
+        if (failFirst && !correct && a.recoveryContext?.signals.length) result.recovery = {
+          diagnosis: "local-repair", evidence: "The persisted unit assertion rejects export 3 and requires 2.",
+          nextAction: "Use the required value 2.", strategy: "correct-value-after-failed-assertion",
+          findingIds: result.decisions.filter(d => d.status === "actionable").map(d => d.id) };
       } else {
         const name = modeRepair ? "tool.sh" : correct ? "support.txt" : "value.cjs";
         if (modeRepair) {

@@ -27,6 +27,8 @@ Create one private run directory outside source control using the [runtime inter
 
 Before an external side effect, persist its action ID and expected target through the helper. After uncertainty, inspect the actual result before retrying. A recorded request is not evidence that an operation happened. Drivers with a verified, restricted helper return route may execute delegated transitions after checking current authority and live gates. Other hosts leave durable handoffs for the coordinator.
 
+When a review stalls or returns a recovery handoff, follow [diagnosed task recovery](references/recovery.md#diagnosed-task-recovery). Keep the original acceptance contract and cumulative budget across attempts and prerequisite tasks. Settle executions before parking or releasing slots, reconcile tracker creation before retrying it, and continue other eligible work. If all tasks are parked, report their concrete questions or waiting predicates and wait for changed evidence. Parked work is never completed acceptance.
+
 ## Controls and supervision
 
 Read [controls and budgets](references/controls.md) when configuring capacity/limits or changing run controls. These controls are distinct:
@@ -47,3 +49,5 @@ Worker replies include task, host/session, dispatch action ID, and durable evide
 Native tool approval settings remain in force. Report the exact blocked pane, action, and required native response; never answer another worker's approval UI by injected keys or change its permission mode to escape it. Do not repeat already-granted task authorization. Independent work continues.
 
 Report the current batch's real stage, nearest deliverable, active execution or concrete waiting predicate, next action/owner, and host/worktree. Separate implementation, convergence, merge, and acceptance. Mark unavailable observations stale. Link durable evidence and the run directory; do not substitute PR counts, a wider backlog, or speculative ETAs for progress.
+
+Conclude a batch with tasks done, tasks parked with their questions/next actions, and tasks created. The helper's `status.summary` supplies these lists without equating parking or a merged PR with completion.

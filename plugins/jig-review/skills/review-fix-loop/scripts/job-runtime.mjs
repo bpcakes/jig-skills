@@ -112,7 +112,7 @@ const providerEnvironment = { claude: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKE
   codex: ["CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME", "JIG_LAUNCHER_BIN"], cursor: ["CURSOR_API_KEY"] };
 export function commandEnvironment(request, inherited = process.env) {
   const names = new Set([...localEnvironment, ...(request.environmentFrom ?? []),
-    ...(request.role === "review" ? providerEnvironment[request.assignment.provider] ?? [] : [])]);
+    ...(["review", "adjudicate"].includes(request.role) ? providerEnvironment[request.assignment.provider] ?? [] : [])]);
   return gitEnvironment({ ...Object.fromEntries([...names].filter(name => inherited[name] !== undefined).map(name => [name, inherited[name]])),
     ...request.environment, CI: "1" });
 }

@@ -55,7 +55,9 @@ const decisions = (run, status) => ({ decisions: run.pending.assignment.findings
 const review = () => ({ complete: true, findings: [], acceptance: [{ criterionId: "value", status: "satisfied", evidence: "Read export and passed unit assertion", validationIds: ["unit"] }] });
 
 test("handoff resumes at triage, repairs before any review, then requires two fresh reports", async t => {
-  const f = fixture(t), handoff = await f.handoff(), index = readFileSync(path.join(f.root, ".git/index"));
+  const f = fixture(t);
+  f.findings[0].evidence += " Research answer: the pinned consumer assertion requires 2; preserve CommonJS and correct the export at its owner.";
+  const handoff = await f.handoff(), index = readFileSync(path.join(f.root, ".git/index"));
   let run = await f.start(handoff);
   handoff.payload.findings[0].title = "Changed caller-owned data";
   run = await runUntilBoundary(run.directory);
@@ -68,6 +70,9 @@ test("handoff resumes at triage, repairs before any review, then requires two fr
   assert.equal(loadRun(run.directory).pending.id, run.pending.id, "Resume retains the same triage assignment");
   run = await respond(run, decisions(run, "actionable"));
   assert.equal(run.pending.assignment.role, "repair"); assert.equal(run.round, 1); assert.equal(run.attempts.length, 0);
+  assert.equal(run.pending.assignment.findings[0].history.find(h => h.event === "imported-review").evidence, f.findings[0].evidence,
+    "Researched answers and the resulting fix survive a shorter triage disposition");
+  assert.equal(run.pending.assignment.findings[0].reportEvidence, f.findings[0].evidence);
   assert.ok(!run.pending.assignment.instructions.includes(marker));
   writeFileSync(path.join(run.pending.overlay, "value.cjs"), "module.exports = 2;\n");
   run = await respond(run, { workspaceEdits: [{ path: "value.cjs", reason: "Correct export", findingIds: [id] }] });

@@ -55,6 +55,10 @@ async function drive(f, { mixed = false } = {}) {
       if (mixed) appendFileSync(path.join(f.root, "notes.txt"), `unclaimed change ${run.round}\n`);
       result = { workspaceEdits: [{ path: "value.txt", reason: "Increment fixture repair toward target", findingIds: a.findings.map(finding => finding.id) }] };
     }
+    if (a.role === "triage" && value < 4 && a.recoveryContext.signals.length) result.recovery = {
+      diagnosis: "productive", strategy: "increment-fixture-toward-four", evidence: `Stage ${value} is complete and retained; ${4 - value} stages remain.`,
+      nextAction: "Complete the next required fixture stage while preserving prior stages and receipts.",
+      findingIds: result.decisions.filter(d => d.status === "actionable").map(d => d.id) };
     await submit(run.directory, a.id, envelope(a, result));
   }
   assert.fail(`No terminal outcome: ${run.phase}`);

@@ -104,7 +104,13 @@ function sandboxAvailable(t) {
 function repairResponse(a, run, recovery = false) {
   const fixed = readFileSync(path.join(run.root, "value.cjs"), "utf8").includes("= 2;");
   if (a.role === "review") return { ...clean(), findings: fixed ? [] : [{ key: "value", path: "value.cjs", severity: "medium", title: "Wrong export", evidence: "Expected 2" }] };
-  if (a.role === "triage") return { decisions: a.findings.map(f => ({ id: f.id, status: fixed && run.validation.some(v => v.outcome === "succeeded") ? "fixed" : "actionable", evidence: "Checked export and controller validation" })) };
+  if (a.role === "triage") {
+    const result = { decisions: a.findings.map(f => ({ id: f.id, status: fixed && run.validation.some(v => v.outcome === "succeeded") ? "fixed" : "actionable", evidence: "Checked export and controller validation" })) };
+    if (recovery && a.recoveryContext.signals.length && !fixed) result.recovery = {
+      diagnosis: "local-repair", strategy: "correct-export-after-assertion", evidence: "Required assertion shows export 3 is wrong.",
+      nextAction: "Export the required value 2.", findingIds: result.decisions.filter(d => d.status === "actionable").map(d => d.id) };
+    return result;
+  }
   return { edits: [{ path: "value.cjs", content: `module.exports = ${recovery && run.round === 1 ? 3 : 2};\n`, reason: "Correct export", findingIds: a.findings.map(f => f.id) }] };
 }
 
@@ -656,18 +662,18 @@ test("settlement receipts survive archived records and do not release another ac
   assert.equal(readJSON(active).directory, next.directory);
 });
 
-test("runs pin version 15 and cannot resume version-14 records", async t => {
+test("runs pin version 16 and cannot resume version-15 records", async t => {
   const f = fixture(t), run = await f.start(), file = path.join(run.directory, "run.json");
-  assert.equal(run.version, 15, "Concurrent assignments require a controller that preserves all sibling obligations");
-  assert.equal(loadRun(run.directory).version, 15);
-  const record = readJSON(file); record.version = 14;
+  assert.equal(run.version, 16, "Recovery requires a controller that preserves diagnoses and explicit budgets");
+  assert.equal(loadRun(run.directory).version, 16);
+  const record = readJSON(file); record.version = 15;
   writeFileSync(file, JSON.stringify(record));
   const before = readFileSync(file);
   await assert.rejects(advance(run.directory), /older runs require their original controller/);
   assert.deepEqual(readFileSync(file), before, "An incompatible run is not migrated or consumed");
 });
 
-for (const version of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
+for (const version of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) test(`explicit release inspects settled v${version} records without migration or deletion`, async t => {
   const f = fixture(t), run = await drive(await f.start()), file = path.join(run.directory, "run.json"), active = path.join(run.runsRoot, "active.json");
   const record = readJSON(file); record.version = version;
   if (version < 8) { delete record.fixPolicy; delete record.options.fixMode; }

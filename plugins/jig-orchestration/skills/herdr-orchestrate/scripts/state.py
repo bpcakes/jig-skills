@@ -101,9 +101,12 @@ def unadmitted_claims(state):
             if task_id not in state["tasks"] and claim["status"] not in {"failed", "released"}}
 
 
+def task_complete(task):
+    return task.get("phase") == "closed" and (task.get("pending_intent") or {}).get("kind") != "reopen"
+
+
 def unfinished(state, excluding_claim=None):
-    tasks = sum(t["phase"] != "closed" or (t["pending_intent"] or {}).get("kind") == "reopen"
-                for t in state["tasks"].values())
+    tasks = sum(not task_complete(t) for t in state["tasks"].values())
     return tasks + len(unadmitted_claims(state) - {excluding_claim})
 
 
@@ -198,10 +201,10 @@ def locked(run_dir, create=False):
 class Engine:
     """All methods are short locked transactions; no lock crosses external work."""
 
-    ACTIONS = {"implement", "review", "validate", "repair", "push", "pr", "merge", "deploy", "close"}
+    ACTIONS = {"implement", "review", "validate", "repair", "push", "pr", "merge", "deploy", "close", "split"}
     UNITS = {"implement": "implementation", "repair": "source_repair", "review": "review",
              "validate": "validation", "push": "push", "pr": "pr", "merge": "merge",
-             "deploy": "deployment", "close": "closure"}
+             "deploy": "deployment", "close": "closure", "split": "task_split"}
     SCHEDULER_FIELDS = {
         "enabled", "heartbeat_at", "last_attempt_at", "last_delivered_at", "last_completed_at",
         "next_due_at", "pending_action_id", "delivery_status", "failure", "alerted_failure_id",
@@ -377,6 +380,9 @@ class Engine:
     @staticmethod
     def _active(state, task, kind, launching=False, allow_closed=False, reconciling=False):
         require(allow_closed or task["phase"] != "closed", "closed", "task is closed")
+        if launching and task.get("recovery_open"):
+            require(kind == "split" and task["recovery"]["route"] == "split",
+                    "recovery", "resolve or route the parked recovery before launching more work")
         if launching and state["controls"]["admission"] == "finish_current":
             require(task["id"] in state["controls"]["frozen_tasks"],
                     "admission", "new work must belong to the frozen unfinished batch")
@@ -614,6 +620,7 @@ class Engine:
                 "refs": {}, "counters": {}, "reservations": {}, "pending_intent": None,
                 "delegation": None, "findings": [], "blocker": None, "next_action": None,
                 "merged_prs": {},
+                "budget_root": state.get("task_links", {}).get(req["task_id"], {}).get("budget_root", req["task_id"]),
             }
             return {"admitted": req["task_id"]}
         if op == "control":
@@ -809,7 +816,7 @@ class Engine:
                         "identity", "reservation references do not match the registered run")
             for limit in config.get("limits", []):
                 if limit["unit"] == req["unit"]:
-                    counters = task["counters"] if limit["scope"] == "task" else state["counters"]
+                    counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
                     require(counters.get(req["unit"], 0) < limit["max"], "budget", "cumulative attempt limit exhausted")
             Engine._slot(state, task)
             for counters in (task["counters"], state["counters"]):
@@ -834,6 +841,46 @@ class Engine:
             task["parked"] = True
             task["last_settlement"] = req["evidence"]
             return {"parked": True}
+        if op == "recover":
+            require(task["phase"] != "closed", "closed", "a completed task must be reopened before recovery")
+            require(not task["reservations"] and not task["pending_intent"], "unsettled", "settle all executions before routing recovery or releasing its slot")
+            evidence(req.get("evidence"), settled=True)
+            decision = req.get("decision", {})
+            require(isinstance(decision, dict) and all(nonempty(decision.get(k)) for k in
+                    ("id", "runId", "diagnosis", "route", "evidence", "nextAction", "fingerprint")),
+                    "invalid", "recovery needs the controller decision, diagnosis, evidence and next action")
+            require(decision["runId"] == task["refs"].get("run_id"), "identity", "recovery must name the registered controller run")
+            require(decision["route"] in {"park", "split", "adjudicate", "reimplement", "repair", "follow-up", "resolved"},
+                    "invalid", "unsupported recovery route")
+            require(nonempty(req.get("acceptance_ref")), "evidence", "retain the original task acceptance contract")
+            records = task.setdefault("recoveries", {})
+            record = {"decision": decision, "acceptance_ref": req["acceptance_ref"], "evidence": req["evidence"]}
+            if decision["id"] in records:
+                previous = records[decision["id"]]
+                require(previous["decision"] == decision and previous["acceptance_ref"] == req["acceptance_ref"],
+                        "identity", "a recovery decision is immutable")
+                return {"recovery_id": decision["id"], "replayed": True}
+            require(not task.get("recovery_open"), "recovery", "resolve the existing recovery before replacing it")
+            if task.get("recovery_acceptance_ref"):
+                require(task["recovery_acceptance_ref"] == req["acceptance_ref"], "identity", "successors must retain the original acceptance contract")
+            records[decision["id"]] = record
+            task.update(recovery=decision, recovery_acceptance_ref=req["acceptance_ref"],
+                        recovery_open=decision["route"] not in {"resolved", "follow-up"},
+                        next_action=decision["nextAction"], slot=None, parked=True, last_settlement=req["evidence"])
+            if task["recovery_open"]:
+                task["blocker"] = decision
+            return {"recovery_id": decision["id"], "parked": True}
+        if op == "resolve_recovery":
+            require(task.get("recovery_open") and req.get("recovery_id") == task["recovery"]["id"],
+                    "identity", "resolution must name the open recovery")
+            require(not task["reservations"] and not task["pending_intent"], "unsettled", "settle recovery work first")
+            evidence(req.get("evidence"), settled=True)
+            require(nonempty(req.get("resolution")), "evidence", "record the decision or changed evidence enabling continuation")
+            Engine._dependencies_complete(state, task)
+            task["recoveries"][task["recovery"]["id"]]["resolution"] = {
+                "text": req["resolution"], "evidence": req["evidence"]}
+            task.update(recovery_open=False, blocker=None, next_action=req["resolution"])
+            return {"resolved": req["recovery_id"]}
         if op == "observe":
             fields = req.get("fields", {})
             allowed = {"blocker", "next_action", "findings", "refs", "pr", "acceptance", "usage", "identity"}
@@ -872,6 +919,28 @@ class Engine:
             Engine._delegated(state, task, caller, kind)
             require(isinstance(req.get("target"), dict) and req["target"], "identity", "explicit side-effect target is required")
             evidence(req.get("evidence"))
+            if kind == "split":
+                require(caller == "coordinator", "forbidden", "only the coordinator creates dependency tasks")
+                target = req["target"]
+                require(task.get("recovery_open") and task["recovery"]["route"] == "split"
+                        and target.get("recovery_id") == task["recovery"]["id"]
+                        and target.get("authority") == config["tracker"]["authority"]
+                        and target.get("parent_task") == task["id"]
+                        and target.get("acceptance_ref") == task["recovery_acceptance_ref"],
+                        "identity", "split must retain the registered recovery, parent, authority and acceptance")
+                children = target.get("children", [])
+                require(isinstance(children, list) and children and all(isinstance(c, dict) and
+                        all(nonempty(c.get(k)) for k in ("key", "title", "acceptance")) for c in children),
+                        "invalid", "each prerequisite needs a stable causal key, title and acceptance criteria")
+                keys = [c["key"] for c in children]
+                recorded = set(task.get("created_tasks", {})) | set(task.get("reused_tasks", {}))
+                require(len(keys) == len(set(keys)) and not set(keys) & recorded,
+                        "duplicate", "reconcile the recorded dependency for a previously associated causal key")
+                reused = [c["existing_task"] for c in children if "existing_task" in c]
+                require(all(nonempty(child) and child in config["scope"]["task_ids"] for child in reused),
+                        "identity", "existing prerequisites must name registered canonical task IDs")
+                require(len(reused) == len(set(reused)), "duplicate", "associate each existing prerequisite once")
+                Engine._acyclic_dependencies(state, task["id"], reused)
             counted = any(limit["unit"] == Engine.UNITS[kind] for limit in config.get("limits", []))
             reservation = task["reservations"].get(req.get("reservation_id"))
             reserved = any(r["kind"] == kind for r in task["reservations"].values())
@@ -880,7 +949,7 @@ class Engine:
                         "budget", "action requires an unconsumed counted reservation")
                 for limit in config.get("limits", []):
                     if limit["unit"] == reservation["unit"]:
-                        counters = task["counters"] if limit["scope"] == "task" else state["counters"]
+                        counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
                         require(counters.get(reservation["unit"], 0) <= limit["max"],
                                 "budget", "current cumulative limit no longer permits this reserved assignment")
                 reservation["intent_id"] = req["action_id"]
@@ -916,12 +985,46 @@ class Engine:
             status = req.get("status")
             require(status in {"unknown", "succeeded", "failed", "not_started"}, "invalid", "invalid external outcome")
             evidence(req.get("receipt"))
+            if pending["kind"] == "split" and status in {"failed", "not_started"}:
+                require(req["receipt"].get("no_effects") is True, "uncertain",
+                        "failed creation can be retried only after proving no tasks or dependency edges were created; otherwise reconcile as unknown")
             if status == "unknown":
                 pending["status"] = "unknown"
                 pending["receipt"] = req["receipt"]
             else:
                 task["last_outcome"] = {**pending, "status": status, "receipt": req["receipt"]}
                 task["pending_intent"] = None
+                if status == "succeeded" and pending["kind"] == "split":
+                    target, receipt = pending["target"], req["receipt"]
+                    children = receipt.get("children", {})
+                    planned_reuse = {c["key"]: c["existing_task"] for c in target["children"] if "existing_task" in c}
+                    reused = receipt.get("reused", {})
+                    require(isinstance(reused, dict) and reused == planned_reuse,
+                            "identity", "reuse receipt must confirm the exact planned canonical prerequisites")
+                    require(isinstance(children, dict) and set(children) == {c["key"] for c in target["children"] if "existing_task" not in c}
+                            and all(nonempty(child) and child != task["id"] for child in children.values())
+                            and len(set(children.values()) | set(reused.values())) == len(children) + len(reused),
+                            "identity", "split receipt must bind every causal key to a unique tracker task")
+                    dependencies = set(task.get("recovery_dependencies", [])) | set(children.values()) | set(reused.values())
+                    edges = receipt.get("blocked_by")
+                    require(receipt.get("authority") == target["authority"] and receipt.get("parent_task") == task["id"]
+                            and receipt.get("unpublished") is False
+                            and isinstance(edges, list) and all(nonempty(child) for child in edges)
+                            and len(edges) == len(set(edges)) and set(edges) == dependencies,
+                            "dependency", "split needs published canonical tasks and real parent dependency edges")
+                    links = state.setdefault("task_links", {})
+                    existing = set(state["tasks"]) | set(links) | set(state["claims"])
+                    existing.update(child for t in state["tasks"].values() for child in t.get("reused_tasks", {}).values())
+                    require(not set(children.values()) & existing,
+                            "duplicate", "a created task is already admitted or bound to another recovery")
+                    Engine._acyclic_dependencies(state, task["id"], dependencies)
+                    for key, child in children.items():
+                        links[child] = {"parent": task["id"], "budget_root": task.get("budget_root", task["id"]),
+                                        "acceptance_ref": target["acceptance_ref"], "key": key}
+                    task.setdefault("created_tasks", {}).update(children)
+                    task.setdefault("reused_tasks", {}).update(reused)
+                    task["recovery_dependencies"] = sorted(dependencies)
+                    task["next_action"] = "Complete the recorded prerequisites, then resume the original acceptance contract."
                 if status == "succeeded" and pending["kind"] == "merge":
                     require(req["receipt"].get("head") == pending["target"].get("head")
                             and nonempty(req["receipt"].get("merge_commit")), "evidence", "merge receipt needs exact merged head and merge commit")
@@ -936,6 +1039,8 @@ class Engine:
             reconciled_close = (last.get("kind") == "close" and last.get("status") == "succeeded"
                                 and req.get("receipt") == last.get("receipt"))
             Engine._active(state, task, "close", reconciling=reconciled_close)
+            require(not task.get("recovery_open"), "recovery", "parked recovery is incomplete, not completed acceptance")
+            Engine._dependencies_complete(state, task)
             require(not task["reservations"] and not task["pending_intent"] and state["staging"]["owner"] != task["id"],
                     "unsettled", "settle executions and release staging before closure")
             receipt = req.get("receipt", {})
@@ -985,7 +1090,48 @@ class Engine:
         raise StateError("invalid", "unknown operation")
 
     @staticmethod
+    def summary(state):
+        return {
+            "done": [t["id"] for t in state["tasks"].values() if task_complete(t)],
+            "parked": [{"task_id": t["id"], "blocker": t.get("blocker"), "next_action": t.get("next_action")}
+                       for t in state["tasks"].values() if not task_complete(t) and t["parked"]],
+            "created": [{"task_id": child, **link} for child, link in state.get("task_links", {}).items()],
+        }
+
+    @staticmethod
+    def _family_counters(state, task):
+        root = task.get("budget_root", task["id"])
+        counts = {}
+        for member in state["tasks"].values():
+            if member.get("budget_root", member["id"]) == root:
+                for unit, count in member["counters"].items():
+                    counts[unit] = counts.get(unit, 0) + count
+        return counts
+
+    @staticmethod
+    def _acyclic_dependencies(state, parent, children):
+        pending, visited = list(children), set()
+        while pending:
+            child = pending.pop()
+            require(child != parent, "dependency", "a prerequisite cannot create a dependency cycle")
+            if child in visited:
+                continue
+            visited.add(child)
+            task = state["tasks"].get(child, {})
+            pending.extend(task.get("recovery_dependencies", []))
+            intent = task.get("pending_intent") or {}
+            if intent.get("kind") == "split":
+                pending.extend(c["existing_task"] for c in intent["target"]["children"] if "existing_task" in c)
+
+    @staticmethod
+    def _dependencies_complete(state, task):
+        require(all(task_complete(state["tasks"].get(child, {})) for child in task.get("recovery_dependencies", [])),
+                "dependency", "all recorded prerequisites must complete before the parent resumes, merges or closes")
+
+    @staticmethod
     def _close_gate(state, task, req):
+        require(not task.get("recovery_open"), "recovery", "resolve parked recovery before closure")
+        Engine._dependencies_complete(state, task)
         target, proof = req["target"], req["evidence"]
         require(target.get("authority") == state["config"]["tracker"]["authority"]
                 and target.get("task_id") == task["id"] and target.get("owner") == task["claim"]["owner"],
@@ -1000,6 +1146,8 @@ class Engine:
 
     @staticmethod
     def _merge_gate(state, task, req):
+        require(not task.get("recovery_open"), "recovery", "resolve parked recovery before merge")
+        Engine._dependencies_complete(state, task)
         target = req["target"]
         gates = req.get("gates", {})
         require(target.get("repository") == state["config"]["repository"]["path"]
