@@ -383,6 +383,9 @@ class Engine:
         if launching and task.get("recovery_open"):
             require(kind == "split" and task["recovery"]["route"] == "split",
                     "recovery", "resolve or route the parked recovery before launching more work")
+        elif launching and not allow_closed:
+            # Recheck ordinary launches; tracker reopening and ownership reconciliation remain available.
+            Engine._dependencies_complete(state, task)
         if launching and state["controls"]["admission"] == "finish_current":
             require(task["id"] in state["controls"]["frozen_tasks"],
                     "admission", "new work must belong to the frozen unfinished batch")

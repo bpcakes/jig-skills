@@ -1285,8 +1285,8 @@ class EngineTests(unittest.TestCase):
         work = self.reserve(kind="repair")  # B's prior repair must not spend A's separate task budget.
         self.settle(work["reservation_id"])
         target = {"authority": "canonical-ref", "owner": "tracker-actor"}
-        reopen = self.apply("reopen_intent", "B", target=target, evidence=self.proof())
         merge = self.reserve(kind="merge")
+        reopen = self.apply("reopen_intent", "B", target=target, evidence=self.proof())
         self.assert_error("dependency", self.apply, "intent", "A", kind="merge", target={"pr": 1},
                           reservation_id=merge["reservation_id"], evidence=self.proof())
         self.settle(merge["reservation_id"])
@@ -1297,6 +1297,61 @@ class EngineTests(unittest.TestCase):
         close("B")
         close("A")
         self.assertIn("A", Engine.summary(Engine.read(self.run))["done"])
+
+    def test_reopened_prerequisites_block_parent_launches_without_blocking_settlement(self):
+        def close(child):
+            self.apply("close", child, receipt={**self.proof(), "authority": "canonical-ref", "task_id": child,
+                       "owner": "tracker-actor", "status": "closed", "unpublished": False,
+                       "criteria_met": True, "acceptance_ref": "proof"})
+
+        for reused in (False, True):
+            for timing in ("before-reserve", "before-intent", "after-intent"):
+                with self.subTest(reused=reused, timing=timing):
+                    self.reset()
+                    self.recovery_setup()
+                    if reused:
+                        self.admit("B")
+                    reservation, target, intent = self.split_dependency(existing_task="B" if reused else None)
+                    self.apply("outcome", "A", intent_id=intent["action_id"], target=target, status="succeeded", receipt={
+                        **self.proof(), "authority": "canonical-ref", "parent_task": "A", "unpublished": False,
+                        "children": {} if reused else {"boundary-prerequisite": "B"},
+                        "reused": {"boundary-prerequisite": "B"} if reused else {}, "blocked_by": ["B"]})
+                    self.settle(reservation["reservation_id"])
+                    self.apply("park", "A", evidence=self.proof(True))
+                    if not reused:
+                        self.admit("B")
+                    close("B")
+                    self.apply("resolve_recovery", "A", recovery_id="recovery-1", resolution="B completed", evidence=self.proof(True))
+                    work = self.reserve(kind="repair") if timing != "before-reserve" else None
+                    repair_target = {"run_id": "controller-run", "assignment_id": "repair-next"}
+                    if timing == "after-intent":
+                        repair = self.apply("intent", "A", kind="repair", reservation_id=work["reservation_id"],
+                                            target=repair_target, evidence=self.proof())
+                    reopen_target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+                    reopen = self.apply("reopen_intent", "B", target=reopen_target, evidence=self.proof())
+                    before = Engine.read(self.run)
+                    if timing == "before-reserve":
+                        self.assert_error("dependency", self.reserve, kind="repair")
+                    elif timing == "before-intent":
+                        self.assert_error("dependency", self.apply, "intent", "A", kind="repair",
+                                          reservation_id=work["reservation_id"], target=repair_target, evidence=self.proof())
+                    if timing != "after-intent":
+                        self.assertEqual(Engine.read(self.run), before, "Denied launches must not consume counters or reservations")
+                    else:
+                        self.apply("outcome", "A", intent_id=repair["action_id"], target=repair_target,
+                                   status="succeeded", receipt=self.proof())
+                    if work:
+                        self.settle(work["reservation_id"])
+                    self.apply("reopen_outcome", "B", intent_id=reopen["action_id"], target=reopen_target, status="succeeded",
+                               receipt={**self.proof(), "task_id": "B", **reopen_target, "status": "open", "unpublished": False})
+                    self.assert_error("dependency", self.reserve, kind="repair")
+                    close("B")
+                    resumed = self.reserve(kind="repair")
+                    self.settle(resumed["reservation_id"])
+                    close("A")
+                    # Tracker reopening records incompleteness; it must remain available while a prerequisite is open.
+                    self.apply("reopen_intent", "B", target=reopen_target, evidence=self.proof())
+                    self.apply("reopen_intent", "A", target=reopen_target, evidence=self.proof())
 
     def test_split_can_share_an_unadmitted_prerequisite_without_reparenting_it(self):
         self.recovery_setup()
