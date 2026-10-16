@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { checkScope, isolatedGit, prepareReviewHandoff, snapshot } from './run.mjs';
-import { readHandoff, verifyHandoffScope } from '../plugins/jig-review/skills/comprehensive-review/scripts/review-handoff.mjs';
+import { readHandoff, verifyHandoffScope } from '../plugins/jig-review/skills/panel-review/scripts/review-handoff.mjs';
 
 test('follow-up fixture grants only owned scratch/state paths and pins the real checkout', async t => {
   const workspace = mkdtempSync(path.join(tmpdir(), 'jig-eval-handoff-'));

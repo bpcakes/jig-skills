@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createGitlinkCapture } from "../skills/comprehensive-review/scripts/gitlink-capture.mjs";
+import { createGitlinkCapture } from "../skills/panel-review/scripts/gitlink-capture.mjs";
 
 const oid = "a".repeat(40);
 const file = Buffer.from(`100644 ${oid} 0\tordinary.txt\0`);

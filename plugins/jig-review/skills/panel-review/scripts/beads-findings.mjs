@@ -107,6 +107,7 @@ function validateFindings(findings) {
 }
 
 function selectIssue(issues, finding) {
+  // Keep the persisted namespace so the skill rename does not duplicate findings.
   const reference = `comprehensive-review:${sha(finding.causalKey)}`;
   if (finding.reuseIssueId) {
     const issue = issues.find(item => item.id === finding.reuseIssueId);
@@ -147,7 +148,7 @@ function issueMetadata(csv) {
   }
   return rows.map(([id, status, external_ref]) => ({
     // br escapes spreadsheet formulas. Valid IDs can begin with '-', but cannot
-    // contain apostrophes. Our comprehensive-review: references need no decoding.
+    // contain apostrophes. Generated finding references need no decoding.
     id: id.startsWith("'-") ? id.slice(1) : id, status, external_ref,
   }));
 }
@@ -198,7 +199,7 @@ export async function logFindings(receipt, result) {
         writeFileSync(bodyPath, body, { mode: 0o600 });
         const created = invoke(receipt, ['create', `--title=${finding.title}`, '--description-file', bodyPath,
           '--type', finding.kind === 'substantive defect' ? 'bug' : 'task', '--priority', String(priorities[finding.severity]),
-          '--external-ref', reference, '--labels', 'comprehensive-review', '--status', 'open']);
+          '--external-ref', reference, '--labels', 'comprehensive-review,panel-review', '--status', 'open']);
         if (typeof created.id !== 'string') throw new Error('Create returned no confirmed issue ID.');
         outcomes.push({ causalKey: finding.causalKey, id: created.id, action: 'created' });
       } catch (error) {

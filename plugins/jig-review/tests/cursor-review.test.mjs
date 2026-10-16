@@ -1,4 +1,4 @@
-import { readBrief, reviewGuidance } from "../skills/comprehensive-review/scripts/review-brief.mjs";
+import { readBrief, reviewGuidance } from "../skills/panel-review/scripts/review-brief.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -20,11 +20,11 @@ import {
   parseArgs,
   parseCursorResult,
   runCursorReview,
-} from "../skills/comprehensive-review/scripts/cursor-review.mjs";
-import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
+} from "../skills/panel-review/scripts/cursor-review.mjs";
+import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
 const cursorScript = fileURLToPath(new URL(
-  "../skills/comprehensive-review/scripts/cursor-review.mjs",
+  "../skills/panel-review/scripts/cursor-review.mjs",
   import.meta.url,
 ));
 

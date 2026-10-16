@@ -45,14 +45,14 @@ This example uses your Codex session without a second reviewer CLI. The commands
 | Find consumers coupled to hidden implementation details | Abstraction police in [Rust](#jig-rust) or [TypeScript/React](#jig-typescript) | Findings |
 | Decide whether similar implementations should be merged | Dup unifier in [Rust](#jig-rust) or [TypeScript/React](#jig-typescript) | Consolidation recommendations |
 | Check a specific correctness or testing concern | Focused reviews in [Rust](#jig-rust) or [TypeScript/React](#jig-typescript) | Findings |
-| Get independent reviews of the same diff | [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Combined findings and coverage notes |
+| Get independent reviews of the same diff | [panel-review](plugins/jig-review/skills/panel-review/SKILL.md) | Combined findings and coverage notes |
 | Review, fix, test, and re-review working changes | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Reviewed commit series and convergence report |
 
 ## Plugins
 
 The seven plugins contain 28 task skills. Click a skill name for its full workflow and supporting resources. “Findings” and “recommendations” mean analysis by default; “code changes” means the skill implements edits. Plan and audit outputs may be written to files when requested.
 
-Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, query-analysis, and comprehensive-review skills are explicit-only in both hosts (`allow_implicit_invocation: false` in `agents/openai.yaml` for Codex, `disable-model-invocation: true` in `SKILL.md` for Claude Code); invoke the named skill when you want one. General-purpose editing skills and review-fix-loop remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
+Automatic discovery matches skills to your task. It does not authorize extra reviews or edits whenever code changes. Specialist review, architecture, refactoring, abstraction, duplication, query-analysis, and panel-review skills are explicit-only in both hosts (`allow_implicit_invocation: false` in `agents/openai.yaml` for Codex, `disable-model-invocation: true` in `SKILL.md` for Claude Code); invoke the named skill when you want one. General-purpose editing skills and review-fix-loop remain discoverable. Review findings require a concrete consequence and consideration of existing safeguards; syntax and scanner scores are investigation leads. See the [behavioral evaluations](docs/skill-evaluations.md) for how these boundaries are tested through Codex.
 
 For marketplace installs, invoke `$plugin:skill` in Codex or `/plugin:skill` in Claude Code, followed by your request. For example: `$jig-rust:rust-simplify Simplify my current working changes.` or `/jig-rust:rust-simplify Simplify my current working changes.` Direct-copy installs use the [host-specific names](#direct-skill-copy) below.
 
@@ -136,10 +136,10 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 
 | Skill | Use it for | Default result |
 |---|---|---|
-| [comprehensive-review](plugins/jig-review/skills/comprehensive-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
+| [panel-review](plugins/jig-review/skills/panel-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
 | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, one commit per repair round by default, local validation, and independent terminal reviews of the full fixed-base range. | Code changes and run record |
 
-Both skills run in Codex and Claude Code. In Codex, the Codex reviewer defaults to a native subagent; in Claude Code, every reviewer, including Codex, runs as an independent CLI process. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [comprehensive review setup](docs/comprehensive-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
+Both skills run in Codex and Claude Code. In Codex, the Codex reviewer defaults to a native subagent; in Claude Code, every reviewer, including Codex, runs as an independent CLI process. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [panel review setup](docs/panel-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 
 ## Installation
 
@@ -214,7 +214,7 @@ Start a new agent session in the project you want to review after copying. Direc
 
 `herdr-orchestrate` is Codex-only. The installer excludes it when installing all skills for Claude and rejects explicit requests for it there. Selecting either review skill installs both matching skills so review-and-fix routing works; selecting `herdr-orchestrate` includes that pair and the Herdr skill exported by the local `herdr --skill` command. Existing dependencies must match their source: this checkout for bundled skills, or the installed Herdr release for `herdr`. Installing all skills without `--force` skips dependents of an incompatible existing copy, warns, and continues with unrelated skills. An explicit dependent selection fails before any copies change unless replacement of its dependency is also selected with `--force`. Each host can run the other as an external reviewer.
 
-The installer preserves automatic dependencies even with `--force`. To replace a differing dependency, select both explicitly: `scripts/install.sh codex --force comprehensive-review review-fix-loop`. Use `--dest <directory>` before skill names to select a different skills directory; this also supports isolated installation checks without changing your agent configuration.
+The installer preserves automatic dependencies even with `--force`. To replace a differing dependency, select both explicitly: `scripts/install.sh codex --force panel-review review-fix-loop`. Use `--dest <directory>` before skill names to select a different skills directory; this also supports isolated installation checks without changing your agent configuration.
 
 ### Cross-machine Orchestration Setup
 
@@ -240,7 +240,7 @@ Explicitly selecting `herdr` or `herdr-orchestrate` requires a working local `he
 
 An all-skills installation also preserves a differing existing Herdr skill and skips orchestration, including with `--force`; unrelated selected skills still update. Replace Herdr through an explicit selection when ready to update that dependency.
 
-Matching automatic dependencies are preserved, including with `--force herdr-orchestrate`. Differing dependencies require explicit replacement: use `--force herdr herdr-orchestrate` to replace the Herdr skill and orchestration skill, or `--force herdr herdr-orchestrate review-fix-loop comprehensive-review` to replace all four, with the same destination. For a plugin installation, refresh only the exported Herdr skill with `scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" --force herdr` after a Herdr upgrade.
+Matching automatic dependencies are preserved, including with `--force herdr-orchestrate`. Differing dependencies require explicit replacement: use `--force herdr herdr-orchestrate` to replace the Herdr skill and orchestration skill, or `--force herdr herdr-orchestrate review-fix-loop panel-review` to replace all four, with the same destination. For a plugin installation, refresh only the exported Herdr skill with `scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" --force herdr` after a Herdr upgrade.
 
 Before admission, the skill checks the selected skill paths and versions, managed Herdr endpoint, review runtimes and authentication, tracker authority, GitHub access, and required SSH routes. A failed reverse route can require coordinator-mediated transitions; it does not prove the remote worker cannot execute. Setup or upgrades are separate operations, and active runs retain their working versions. These checks establish readiness, not permission for merges or deployment.
 
@@ -256,12 +256,12 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Rust Fowler and duplication scanners | Python ≥ 3.10 |
 | Ruby/Rails scanner | Ruby; Minitest for its smoke tests |
 | TypeScript/React scanners | Node.js; use Node 22 or newer. The duplication scanner also needs an existing `typescript` package in the target repository or a global installation. |
-| Comprehensive review and review-fix loop | Node.js ≥ 22, in Codex or Claude Code. The native Codex reviewer needs Codex subagents. Linux, macOS, or Windows through WSL; native Windows is unsupported by the external adapters. |
+| Panel review and review-fix loop | Node.js ≥ 22, in Codex or Claude Code. The native Codex reviewer needs Codex subagents. Linux, macOS, or Windows through WSL; native Windows is unsupported by the external adapters. |
 | Review-fix controller | Git ≥ 2.42; Linux `flock` or macOS Python 3. Uses the existing project's validation environment; isolated validation is opt-in. |
-| Claude pass in comprehensive review | Installed, authenticated [Claude Code](https://claude.ai/code) CLI |
-| Codex CLI pass in comprehensive review (`--codex-runtime cli`, and every Codex pass in Claude Code) | Installed, authenticated Codex CLI with file-based credentials (`auth.json`) in the selected home |
+| Claude pass in panel review | Installed, authenticated [Claude Code](https://claude.ai/code) CLI |
+| Codex CLI pass in panel review (`--codex-runtime cli`, and every Codex pass in Claude Code) | Installed, authenticated Codex CLI with file-based credentials (`auth.json`) in the selected home |
 | Account selection per launch (`--claude-launcher`, `--codex-launcher`) | [Jig](https://github.com/bpcakes/jig-sh) `jig` CLI from a release that includes `launch --auto` (newer than 0.8.0) |
-| Cursor pass in comprehensive review | Installed, authenticated [Cursor Agent](https://cursor.com/) CLI |
+| Cursor pass in panel review | Installed, authenticated [Cursor Agent](https://cursor.com/) CLI |
 
 Scanners generate investigation leads; the agent validates them against source and consumers. Project builds and tests require that project's own toolchain and dependencies. See individual skill documentation for scanner commands and constraints.
 
@@ -306,7 +306,7 @@ $jig-rust:rust-simplify Simplify my current working changes in crates/api, prese
 Request independent reviews of working changes:
 
 ```text
-$jig-review:comprehensive-review --reviewers claude,codex
+$jig-review:panel-review --reviewers claude,codex
 ```
 
 Review, fix, test, and freshly re-review working changes:
@@ -315,7 +315,7 @@ Review, fix, test, and freshly re-review working changes:
 $jig-review:review-fix-loop --base main
 ```
 
-The review example returns merged findings plus reviewer and coverage notes. The loop example appends a commit per repair round and reviews the full range from the pinned base. Use `--commit-mode none` to leave changes uncommitted. Repair defaults to `--fix-mode balanced`: diagnose the demonstrated cause and repair the responsible boundary, expanding scope when evidence warrants it. Use `--fix-mode comprehensive` for broader investigation of related mechanisms and recurrence risks, or `--fix-mode minimal` for focused investigation with the same causal-repair standard. See [comprehensive-review usage](docs/comprehensive-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.
+The review example returns merged findings plus reviewer and coverage notes. The loop example appends a commit per repair round and reviews the full range from the pinned base. Use `--commit-mode none` to leave changes uncommitted. Repair defaults to `--fix-mode balanced`: diagnose the demonstrated cause and repair the responsible boundary, expanding scope when evidence warrants it. Use `--fix-mode comprehensive` for broader investigation of related mechanisms and recurrence risks, or `--fix-mode minimal` for focused investigation with the same causal-repair standard. See [panel-review usage](docs/panel-review.md) for branch scope, reviewer selection, and failure handling, and [review-fix-loop usage](docs/review-fix-loop.md) for convergence and stopping rules.
 
 Automatic selection follows the requested task. Abstraction, duplication, Fowler refactoring, and component API assessments require a request for that kind of design analysis; routine coding and general review do not start those audits. Natural-language requests work without naming the skill. Correctness reviews, simplification, and review orchestration retain their existing task boundaries.
 
@@ -379,11 +379,11 @@ Use `claude` instead of `codex` for Claude Code. Omit the skill name to replace 
 
 ### An old or duplicate skill still appears
 
-Marketplace installation does not remove earlier direct copies, and direct-copy updates do not remove renamed skills. Check the [direct-copy destinations](#direct-skill-copy) and any personal `~/.agents/skills` directory for old copies. The former `dup-unifier` skill is now `rust-dup-unifier` in `jig-rust`. Keep any local edits before removing an obsolete copy, and use the qualified plugin name when choosing a marketplace skill.
+Marketplace installation does not remove earlier direct copies, and direct-copy updates do not remove renamed skills. Check the [direct-copy destinations](#direct-skill-copy) and any personal `~/.agents/skills` directory for old copies. The former `comprehensive-review` skill is now `panel-review` in `jig-review`; update `panel-review` and `review-fix-loop` together. The former `dup-unifier` skill is now `rust-dup-unifier` in `jig-rust`. Keep any local edits before removing an obsolete copy, and use the qualified plugin name when choosing a marketplace skill.
 
 ### A scanner or external reviewer fails
 
-Check the [feature-specific requirements](#requirements). A missing TypeScript dependency prevents the AST duplication scanner from running; it never installs packages itself. Missing reviewer authentication, a dirty checkout for branch review, and limited evidence coverage are explained in the [review troubleshooting guide](docs/comprehensive-review.md#troubleshooting).
+Check the [feature-specific requirements](#requirements). A missing TypeScript dependency prevents the AST duplication scanner from running; it never installs packages itself. Missing reviewer authentication, a dirty checkout for branch review, and limited evidence coverage are explained in the [review troubleshooting guide](docs/panel-review.md#troubleshooting).
 
 ## Contributing
 

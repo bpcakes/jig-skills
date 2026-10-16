@@ -20,7 +20,7 @@ import {
   formatUntrackedFiles,
   resolveScope,
   runCommand,
-} from "../skills/comprehensive-review/scripts/review-context.mjs";
+} from "../skills/panel-review/scripts/review-context.mjs";
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();

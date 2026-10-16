@@ -1315,14 +1315,14 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(runtime.shutil, "which", return_value=None):
             result = runtime.preflight(self.config, "local")
         self.assertFalse(result["local_inventory_ok"])
-        self.assertEqual(result["missing_role_skills"], ["comprehensive-review", "review-fix-loop"])
+        self.assertEqual(result["missing_role_skills"], ["panel-review", "review-fix-loop"])
         self.assertIn("gh", [item["tool"] for item in result["tools"]])
         self.assertIn("reviewer authentication/model access", result["unchecked"])
 
     def test_profile_only_review_role_checks_runtime_presence_and_versions(self):
         profiles = []
         for name, skills in (("coordinator", ("herdr-orchestrate", "herdr")),
-                             ("review", ("comprehensive-review", "review-fix-loop"))):
+                             ("review", ("panel-review", "review-fix-loop"))):
             home = self.root / name
             profile = {"id": name, "agent_home": str(home), "skill_paths": {}}
             if name == "review":
@@ -1367,15 +1367,15 @@ class RuntimeTests(unittest.TestCase):
                 self.assertTrue(result["local_inventory_ok"])
                 self.assertEqual(result["missing_role_skills"], [])
                 paths = profiles[1]["skill_paths"]
-                missing = paths.pop("comprehensive-review")
+                missing = paths.pop("panel-review")
                 result = runtime.preflight(self.config, "local")
                 self.assertFalse(result["local_inventory_ok"])
-                self.assertEqual(result["missing_role_skills"], ["comprehensive-review"])
-                paths["comprehensive-review"] = missing
+                self.assertEqual(result["missing_role_skills"], ["panel-review"])
+                paths["panel-review"] = missing
 
     def test_review_pair_cannot_be_split_across_profiles(self):
         profiles = []
-        for skill in ("comprehensive-review", "review-fix-loop"):
+        for skill in ("panel-review", "review-fix-loop"):
             directory = self.root / skill
             directory.mkdir()
             (directory / "SKILL.md").write_text("---\nname: " + skill + "\n---\n")

@@ -4,14 +4,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const runtimePath = fileURLToPath(new URL(
-  "../skills/comprehensive-review/references/parallel-review-runtime.md",
+  "../skills/panel-review/references/parallel-review-runtime.md",
   import.meta.url,
 ));
 const skillPath = fileURLToPath(new URL(
-  "../skills/comprehensive-review/SKILL.md",
+  "../skills/panel-review/SKILL.md",
   import.meta.url,
 ));
-const reference = name => readFileSync(new URL(`../skills/comprehensive-review/references/${name}.md`, import.meta.url), "utf8");
+const reference = name => readFileSync(new URL(`../skills/panel-review/references/${name}.md`, import.meta.url), "utf8");
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 test("native reviewer and merge instructions distinguish evidence from authority", () => {

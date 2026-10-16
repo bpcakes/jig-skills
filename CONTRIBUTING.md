@@ -34,7 +34,7 @@ Run commands from the repository root. Select the checks for the helper you chan
 | Planning canonical-schema validator | `python3 -B -m unittest discover -s plugins/jig-planning/skills/planning-workflow/tests -v` |
 | Skill evaluation harness | `node --test evals/*.test.mjs` |
 | Host manifests and skill invocation policies | `node --test evals/host-parity.test.mjs` (also runs `claude plugin validate --strict` when Claude Code is installed) |
-| Comprehensive-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
+| Panel-review adapters | `node --test plugins/jig-review/tests/*.test.mjs` |
 | Herdr orchestration state and supervisor | `python3 -B -m unittest discover -s plugins/jig-orchestration/tests -v` |
 | Orchestration installation and evidence fixtures | `node --test plugins/jig-review/tests/install.test.mjs evals/orchestration-fixtures.test.mjs` |
 | Rust abstraction-police collector | `python3 -m unittest discover -s plugins/jig-rust/skills/rust-abstraction-police/tests -v` |
@@ -60,7 +60,7 @@ The ordinary review suite skips authenticated CLI checks. To verify real Claude 
 JIG_REVIEW_LIVE=claude,cursor,codex node --test plugins/jig-review/tests/review-evidence-live.test.mjs
 ```
 
-These checks require authenticated CLIs and consume provider usage. Select only the providers you intend to test. See the [runtime reference](plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) for what they verify.
+These checks require authenticated CLIs and consume provider usage. Select only the providers you intend to test. See the [runtime reference](plugins/jig-review/skills/panel-review/references/parallel-review-runtime.md) for what they verify.
 
 Before submitting a change, run:
 

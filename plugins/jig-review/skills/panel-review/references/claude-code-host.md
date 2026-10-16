@@ -6,7 +6,7 @@ Read this when the parent agent is Claude Code. It replaces only the Codex-speci
 
 Pass `--host claude` to `review-options.mjs`, to `loop-options.mjs`, and to the review-fix controller's `init`. Claude Code has no native Codex subagent, so Codex always reviews through the `codex-review.mjs` CLI adapter: `codex.runtime` is `cli`, and `--codex-runtime native` is rejected. That reviewer uses the model and reasoning effort from the selected Codex home's `config.toml` unless `--codex-model` or `--codex-effort` is given. Defaults on this host:
 
-- comprehensive review: Claude plus Codex;
+- panel review: Claude plus Codex;
 - review-fix loop, balanced policy: two independent Claude reviews;
 - review-fix loop, strict policy: Claude plus Codex.
 
@@ -14,7 +14,7 @@ Every reviewer is an independent CLI process started by a bundled adapter; none 
 
 The adapters need network access, their provider's home, and the temporary directory. If Claude Code's command sandbox blocks an adapter, request the host's approval to run that command outside the sandbox; do not substitute another provider.
 
-## Comprehensive review
+## Panel review
 
 Prepare the brief, scope capture, and each selected adapter command exactly as [parallel-review-runtime.md](parallel-review-runtime.md) and [external-reviewers.md](external-reviewers.md) describe, then start the adapters yourself instead of spawning forwarder children:
 

@@ -4,10 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { contentHash, copyBlob, hash, json, readBlob, readJSON, storeBlob, storeFile } from "./run-store.mjs";
 import { sameFile, streamFile, withRegularFile } from "./file-content.mjs";
-import { captureFingerprint } from "../../comprehensive-review/scripts/scope-fingerprint.mjs";
-import { isExcludedPath } from "../../comprehensive-review/scripts/review-exclusions.mjs";
-import { gitEnvironment } from "../../comprehensive-review/scripts/git-environment.mjs";
-import { assertCompleteFingerprint } from "../../comprehensive-review/scripts/adapter-runtime.mjs";
+import { captureFingerprint } from "../../panel-review/scripts/scope-fingerprint.mjs";
+import { isExcludedPath } from "../../panel-review/scripts/review-exclusions.mjs";
+import { gitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
+import { assertCompleteFingerprint } from "../../panel-review/scripts/adapter-runtime.mjs";
 import { assertStorage, DEFAULT_STORAGE, storageLimit } from "./storage-budget.mjs";
 
 export function git(cwd, ...args) {

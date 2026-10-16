@@ -586,7 +586,7 @@ def preflight(config, host_id):
         if "coordinator" in profile_roles:
             wanted.update({"herdr-orchestrate", "herdr"})
         if "review" in profile_roles:
-            wanted.update({"review-fix-loop", "comprehensive-review"})
+            wanted.update({"review-fix-loop", "panel-review"})
         for skill in sorted(wanted):
             path = paths.get(skill)
             exists = isinstance(path, str) and Path(path).is_absolute() and (Path(path) / "SKILL.md").is_file()
@@ -603,7 +603,7 @@ def preflight(config, host_id):
     if "coordinator" in runtime_roles:
         required_skills.update({"herdr-orchestrate", "herdr"})
     if "review" in runtime_roles:
-        required_skills.update({"review-fix-loop", "comprehensive-review"})
+        required_skills.update({"review-fix-loop", "panel-review"})
     observed_skills = {item["skill"] for item in installations if item["ok"]}
     missing_skills = sorted(required_skills - observed_skills)
     return {"host": host_id, "observed_at": timestamp(), "tools": tools, "installations": installations,

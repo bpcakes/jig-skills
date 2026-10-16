@@ -45,8 +45,8 @@ find_skill_source() {
 required_dependencies() {
     case "$1" in
         herdr-orchestrate) printf '%s\n' 'review-fix-loop herdr' ;;
-        review-fix-loop) printf '%s\n' comprehensive-review ;;
-        comprehensive-review) printf '%s\n' review-fix-loop ;;
+        review-fix-loop) printf '%s\n' panel-review ;;
+        panel-review) printf '%s\n' review-fix-loop ;;
     esac
 }
 
@@ -194,7 +194,7 @@ case " $* " in
         ;;
 esac
 
-for dependency in review-fix-loop comprehensive-review herdr; do
+for dependency in review-fix-loop panel-review herdr; do
     case " $skipped_dependents " in *" $dependency "*) continue ;; esac
     dependents=
     selected_dependency=0

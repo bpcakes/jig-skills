@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import {
   CURSOR_MODELS,
   parseArgs as parseReviewArgs,
-} from "../skills/comprehensive-review/scripts/review-options.mjs";
+} from "../skills/panel-review/scripts/review-options.mjs";
 
 // These baseline cases exercise hosts without Jig; launcher-defaults covers
 // capability detection using isolated executables, independent of the test host.
@@ -227,7 +227,7 @@ test("CLI entrypoint works when the skill directory is reached through a symlink
   const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-review-options-link-"));
   t.after(() => rmSync(temporaryDirectory, { recursive: true, force: true }));
   const source = fileURLToPath(new URL(
-    "../skills/comprehensive-review/scripts/review-options.mjs",
+    "../skills/panel-review/scripts/review-options.mjs",
     import.meta.url,
   ));
   const linkedScript = path.join(temporaryDirectory, "review-options.mjs");

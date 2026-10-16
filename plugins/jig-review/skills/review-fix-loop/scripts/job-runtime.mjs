@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { json, readJSON } from "./run-store.mjs";
 import { identity, ownedAlive, killOwned } from "./process-ownership.mjs";
-import { gitEnvironment } from "../../comprehensive-review/scripts/git-environment.mjs";
+import { gitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
 
 // The same cwd/PATH rules are used for capability checks and actual spawn.
 export function executableCommand(request, inherited = process.env) {

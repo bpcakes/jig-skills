@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { gitEnvironment } from "../../comprehensive-review/scripts/git-environment.mjs";
-import { isExcludedPath } from "../../comprehensive-review/scripts/review-exclusions.mjs";
+import { gitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
+import { isExcludedPath } from "../../panel-review/scripts/review-exclusions.mjs";
 import { git, snapshot, sameContent, unsupported } from "./repository.mjs";
 import { hash, readBlob, save, storeBlob } from "./run-store.mjs";
 

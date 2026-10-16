@@ -65,16 +65,16 @@ test('bounded loop cases permit local helpers but reject reviewer launches in ex
   assert.ok(cases.length > 0);
   for (const c of cases) {
     for (const command of [
-      'node .agents/skills/comprehensive-review/scripts/scope-fingerprint.mjs --scope working-tree',
+      'node .agents/skills/panel-review/scripts/scope-fingerprint.mjs --scope working-tree',
       'node .agents/skills/review-fix-loop/scripts/loop-options.mjs',
-      'bash -lc "node .agents/skills/comprehensive-review/scripts/review-options.mjs"',
-      'cat .agents/skills/comprehensive-review/scripts/claude-review.mjs',
+      'bash -lc "node .agents/skills/panel-review/scripts/review-options.mjs"',
+      'cat .agents/skills/panel-review/scripts/claude-review.mjs',
       'rg -n "claude|cursor-agent|codex exec" .agents/skills',
       'command -v claude cursor-agent', 'claude --version',
     ]) assert.equal(checkCommands(c, [command]), true, `${c.id}: ${command}`);
     for (const command of [
-      'node .agents/skills/comprehensive-review/scripts/claude-review.mjs --scope working-tree',
-      'node --no-warnings .agents/skills/comprehensive-review/scripts/cursor-review.mjs',
+      'node .agents/skills/panel-review/scripts/claude-review.mjs --scope working-tree',
+      'node --no-warnings .agents/skills/panel-review/scripts/cursor-review.mjs',
       'node scripts/scope-fingerprint.mjs && claude -p review',
       'bash -lc "node scripts/scope-fingerprint.mjs; node scripts/cursor-review.mjs"',
       'env PROFILE=review command cursor-agent --print review',
@@ -164,12 +164,12 @@ test('native judgment cases reject delegation traces while allowing their shared
     assert.ok(c, id);
     for (const command of [
       'claude -p "Review this diff"', 'codex exec review', 'cursor-agent --mode ask review',
-      'node .agents/skills/comprehensive-review/scripts/claude-review.mjs --scope working-tree',
-      'node .agents/skills/comprehensive-review/scripts/cursor-review.mjs --scope working-tree',
+      'node .agents/skills/panel-review/scripts/claude-review.mjs --scope working-tree',
+      'node .agents/skills/panel-review/scripts/cursor-review.mjs --scope working-tree',
       'bash -lc "git diff; claude -p review"',
     ]) assert.equal(checkCommands(c, [command]), false, `${id}: ${command}`);
     assert.equal(checkCommands(c, [
-      'node .agents/skills/comprehensive-review/scripts/review-brief.mjs task-brief.json',
+      'node .agents/skills/panel-review/scripts/review-brief.mjs task-brief.json',
       'git diff --no-ext-diff HEAD', 'node limits.test.mjs',
     ]), true, id);
   }

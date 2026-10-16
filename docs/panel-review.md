@@ -1,8 +1,8 @@
-# Comprehensive Review
+# Panel Review
 
 [Back to the skill catalog](../README.md#jig-review)
 
-`jig-review:comprehensive-review` runs independent reviews of the same Git changes and merges their findings. It runs inside Codex or Claude Code. In Codex, a native subagent performs the Codex review and forwarders run the selected external CLIs. In Claude Code, every reviewer, including Codex, runs as an independent CLI process.
+`jig-review:panel-review` runs independent reviews of the same Git changes and merges their findings. It runs inside Codex or Claude Code. In Codex, a native subagent performs the Codex review and forwarders run the selected external CLIs. In Claude Code, every reviewer, including Codex, runs as an independent CLI process.
 
 Invoke this skill explicitly by name. Both hosts disable automatic invocation; a request for an adversarial review, first-principles analysis, or ablation tests does not select this workflow.
 
@@ -16,36 +16,36 @@ Install `jig-review` using the marketplace instructions for [Codex](../README.md
 
 Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries the selected account's `auth.json` and the model settings in its `config.toml`, with its instructions, skills, and MCP servers left out. These passes consume provider usage. A native Codex-only review in Codex does not need any external CLI; in Claude Code, every Codex pass needs the `codex` CLI. When compatible Jig is available, omitted Claude and Codex launchers default to `auto` (Codex uses the CLI runtime). Explicit `none` disables detection; a Claude config directory or explicit native Codex runtime preserves that choice. Native-only Codex effort also preserves native execution. With automatic launchers, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
 
-Enter these prompts in Codex from the repository being reviewed. In Claude Code, use `/jig-review:comprehensive-review` with the same options:
+Enter these prompts in Codex from the repository being reviewed. In Claude Code, use `/jig-review:panel-review` with the same options:
 
 | Task | Prompt |
 |---|---|
-| Review working changes with the defaults | `$jig-review:comprehensive-review` |
-| Review with all three providers | `$jig-review:comprehensive-review --all-reviewers` |
-| Store final findings in Beads | `$jig-review:comprehensive-review --log-to-beads` |
-| Use only native Codex | `$jig-review:comprehensive-review --reviewers codex --codex-runtime native` |
-| Add Cursor | `$jig-review:comprehensive-review --reviewers claude,codex,cursor` |
-| Use Codex and Cursor | `$jig-review:comprehensive-review --reviewers codex,cursor` |
-| Review a branch against a named base | `$jig-review:comprehensive-review --base main` |
-| Review a branch together with local changes | `$jig-review:comprehensive-review --base main --include-working-tree` |
-| Choose Cursor effort | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh` |
-| Enable Cursor fast mode | `$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
-| Set native Codex effort | `$jig-review:comprehensive-review --reviewers codex --codex-runtime native --codex-effort high` |
-| Select Astra explicitly | `$jig-review:comprehensive-review --reviewers codex --codex-model gpt-6-astra --codex-effort high` |
-| Use a separate Claude profile | `$jig-review:comprehensive-review --claude-config-dir ~/.claude-appleid` |
-| Spread reviewer usage across accounts | `$jig-review:comprehensive-review --claude-launcher auto --codex-launcher auto` |
-| Run Codex as an independent CLI process | `$jig-review:comprehensive-review --reviewers claude,codex --codex-runtime cli` |
-| Exclude one path for this run | `$jig-review:comprehensive-review --scope branch --exclude-path .agent/` |
-| Exclude several paths | `$jig-review:comprehensive-review --exclude-path .agent/ --exclude-path generated/reports/` |
+| Review working changes with the defaults | `$jig-review:panel-review` |
+| Review with all three providers | `$jig-review:panel-review --all-reviewers` |
+| Store final findings in Beads | `$jig-review:panel-review --log-to-beads` |
+| Use only native Codex | `$jig-review:panel-review --reviewers codex --codex-runtime native` |
+| Add Cursor | `$jig-review:panel-review --reviewers claude,codex,cursor` |
+| Use Codex and Cursor | `$jig-review:panel-review --reviewers codex,cursor` |
+| Review a branch against a named base | `$jig-review:panel-review --base main` |
+| Review a branch together with local changes | `$jig-review:panel-review --base main --include-working-tree` |
+| Choose Cursor effort | `$jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh` |
+| Enable Cursor fast mode | `$jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
+| Set native Codex effort | `$jig-review:panel-review --reviewers codex --codex-runtime native --codex-effort high` |
+| Select Astra explicitly | `$jig-review:panel-review --reviewers codex --codex-model gpt-6-astra --codex-effort high` |
+| Use a separate Claude profile | `$jig-review:panel-review --claude-config-dir ~/.claude-appleid` |
+| Spread reviewer usage across accounts | `$jig-review:panel-review --claude-launcher auto --codex-launcher auto` |
+| Run Codex as an independent CLI process | `$jig-review:panel-review --reviewers claude,codex --codex-runtime cli` |
+| Exclude one path for this run | `$jig-review:panel-review --scope branch --exclude-path .agent/` |
+| Exclude several paths | `$jig-review:panel-review --exclude-path .agent/ --exclude-path generated/reports/` |
 
-For a direct-copy install, replace `$jig-review:comprehensive-review` with `$comprehensive-review` in Codex or `/comprehensive-review` in Claude Code. In Claude Code, the skill runs Codex only through its CLI adapter: `--codex-runtime native` is rejected, and `--codex-effort` uses the CLI range `minimal|low|medium|high|xhigh`.
+For a direct-copy install, replace `$jig-review:panel-review` with `$panel-review` in Codex or `/panel-review` in Claude Code. In Claude Code, the skill runs Codex only through its CLI adapter: `--codex-runtime native` is rejected, and `--codex-effort` uses the CLI range `minimal|low|medium|high|xhigh`.
 
 Native Codex model and effort inherit the host when omitted. Explicit overrides require host/account support; the parser accepting a value does not prove provider availability. Preserve Claude and Cursor selections independently. See the [evaluation guide](skill-evaluations.md) for controlled Astra trials and the distinction between requested and reported configuration.
 
 `--all-reviewers` is shorthand for `--reviewers claude,codex,cursor`. Do not combine the two selection forms. Reviewer-specific controls still apply, for example:
 
 ```text
-$jig-review:comprehensive-review --all-reviewers --cursor-effort xhigh --cursor-speed fast
+$jig-review:panel-review --all-reviewers --cursor-effort xhigh --cursor-speed fast
 ```
 
 ## Scope
@@ -72,7 +72,7 @@ This skill reviews diffs. For unchanged code, select a focused skill that suppor
 
 ## Continuing into repairs
 
-After the review, “ok address” or “fix those” continues into the repair loop using the saved review handoff. The controller verifies and repairs the existing findings without repeating discovery; fresh independent reviews follow validation of the repaired files. The report links the handoff stored outside the checkout. Missing or stale evidence is explained rather than silently replaced with another review. See the [handoff format and commands](../plugins/jig-review/skills/comprehensive-review/references/review-handoff.md).
+After the review, “ok address” or “fix those” continues into the repair loop using the saved review handoff. The controller verifies and repairs the existing findings without repeating discovery; fresh independent reviews follow validation of the repaired files. The report links the handoff stored outside the checkout. Missing or stale evidence is explained rather than silently replaced with another review. See the [handoff format and commands](../plugins/jig-review/skills/panel-review/references/review-handoff.md).
 
 The handoff retains researched answers, evidence, and revised recommendations for the repair contract. A request to research remaining questions and then address findings authorizes that continuation; only repairs dependent on unresolved user input wait for an answer.
 
@@ -87,7 +87,7 @@ For large external reviews, the adapters supply numbered pages of patch evidence
 
 Fingerprint verification establishes scope stability. It does not prove complete coverage or a bug-free change. If the scope changes during the review, the results cannot be presented as reviews of the same changes.
 
-The runtime switches to pages when a diff exceeds 384 KiB or combined inline context exceeds 768 KiB. Capture is bounded to 16 MiB of source text and 2,048 pages. Each included file patch is limited to 2 MiB. A patch that exceeds that limit or the remaining total budget is omitted in full, with its header and reason recorded; capture continues to later files. No path category is excluded automatically. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [external-reviewer reference](../plugins/jig-review/skills/comprehensive-review/references/external-reviewers.md) for capture details, deadlines, and cleanup.
+The runtime switches to pages when a diff exceeds 384 KiB or combined inline context exceeds 768 KiB. Capture is bounded to 16 MiB of source text and 2,048 pages. Each included file patch is limited to 2 MiB. A patch that exceeds that limit or the remaining total budget is omitted in full, with its header and reason recorded; capture continues to later files. No path category is excluded automatically. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [external-reviewer reference](../plugins/jig-review/skills/panel-review/references/external-reviewers.md) for capture details, deadlines, and cleanup.
 
 ## File Access and Project Hooks
 
@@ -96,7 +96,7 @@ Claude defaults to `--claude-file-access restricted`: its read-only file tools a
 Use `--claude-config-dir <absolute-path|~/path>` to select a Claude Code profile for one review:
 
 ```text
-$jig-review:comprehensive-review --reviewers claude,codex --claude-config-dir ~/.claude-appleid
+$jig-review:panel-review --reviewers claude,codex --claude-config-dir ~/.claude-appleid
 ```
 
 The adapter expands `~/`, then sets `CLAUDE_CONFIG_DIR` only for the spawned Claude process. Relative paths and `~other-user` forms are rejected. This option requires Claude in `--reviewers`; it does not affect Codex or Cursor. Claude Code uses that directory for its settings, session history, and plugins, as documented in the [Claude Code settings guide](https://code.claude.com/docs/en/settings).
@@ -104,7 +104,7 @@ The adapter expands `~/`, then sets `CLAUDE_CONFIG_DIR` only for the spawned Cla
 When the review intentionally requires access elsewhere on the machine, request:
 
 ```text
-$jig-review:comprehensive-review --claude-file-access host
+$jig-review:panel-review --claude-file-access host
 ```
 
 `host` removes the directory restriction while retaining read-only tools. The review notes disclose this expanded boundary. Large diffs do not require host access.
@@ -114,7 +114,7 @@ Cursor runs with `--mode ask --sandbox enabled --trust --workspace <repository>`
 Cursor uses standard Grok 4.6 models by default. Pass `--cursor-speed fast` to select the `-fast` variant for the chosen `--cursor-effort`:
 
 ```text
-$jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast
+$jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast
 ```
 
 ## Troubleshooting
@@ -132,10 +132,10 @@ $jig-review:comprehensive-review --reviewers codex,cursor --cursor-effort xhigh 
 | A model, effort, or speed is rejected | Choose a supported value explicitly. The skill does not silently substitute models, effort levels, or Cursor speed. |
 | Cursor still requests interactive workspace trust | Check that the installed `jig-review` includes the `--trust` adapter change; follow the [plugin update steps](../README.md#update-marketplace-plugins). |
 
-The [skill entrypoint](../plugins/jig-review/skills/comprehensive-review/SKILL.md) defines routing and the overall workflow. The [reviewer controls](../plugins/jig-review/skills/comprehensive-review/references/reviewer-options.md) and [report contract](../plugins/jig-review/skills/comprehensive-review/references/review-output.md) have dedicated references. The [runtime reference](../plugins/jig-review/skills/comprehensive-review/references/parallel-review-runtime.md) documents orchestration and evidence handling for maintainers.
+The [skill entrypoint](../plugins/jig-review/skills/panel-review/SKILL.md) defines routing and the overall workflow. The [reviewer controls](../plugins/jig-review/skills/panel-review/references/reviewer-options.md) and [report contract](../plugins/jig-review/skills/panel-review/references/review-output.md) have dedicated references. The [runtime reference](../plugins/jig-review/skills/panel-review/references/parallel-review-runtime.md) documents orchestration and evidence handling for maintainers.
 
 ## Task intent and causal findings
 
 All reviewers receive the same pinned task brief: intended behavior, sourced requirements, constraints, non-goals, and unknowns. Reports cover omitted requirements as well as regressions in changed lines. Recommendations identify the responsible boundary and check relevant callers and counterevidence; a shared-layer change is warranted only when that layer owns the broken behavior.
 
-With `--log-to-beads`, verified findings that remain actionable at the end of the turn are stored in the existing local Beads database. The flag is optional; ordinary reviews do not access Beads. Repeat findings reuse active issues, and the final response includes issue IDs and any logging failure. This also applies after authorized repairs: fixed findings are not filed. No tracker is initialized and no second task scheduler is introduced. See the [logging contract](../plugins/jig-review/skills/comprehensive-review/references/beads-logging.md) for supported stores, deduplication, and synchronization behavior.
+With `--log-to-beads`, verified findings that remain actionable at the end of the turn are stored in the existing local Beads database. The flag is optional; ordinary reviews do not access Beads. Repeat findings reuse active issues, and the final response includes issue IDs and any logging failure. This also applies after authorized repairs: fixed findings are not filed. No tracker is initialized and no second task scheduler is introduced. See the [logging contract](../plugins/jig-review/skills/panel-review/references/beads-logging.md) for supported stores, deduplication, and synchronization behavior.

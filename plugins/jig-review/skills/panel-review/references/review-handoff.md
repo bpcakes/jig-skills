@@ -25,7 +25,7 @@ For findings with prior repair or adjudication history, retain the evidence refe
 Create the handoff after the final scope and brief checks:
 
 ```sh
-node <comprehensive-review>/scripts/review-handoff.mjs --capture /tmp/review/capture.json --brief /tmp/review/brief.json --brief-hash <pinned-hash> --review /tmp/review/review.json --output /tmp/review/handoff.json
+node <panel-review>/scripts/review-handoff.mjs --capture /tmp/review/capture.json --brief /tmp/review/brief.json --brief-hash <pinned-hash> --review /tmp/review/review.json --output /tmp/review/handoff.json
 ```
 
 The helper validates the evidence envelope, rechecks the reviewed scope, and creates a new file outside the checkout without overwriting an existing artifact. It requires at least one completed reviewer, rejects attributed findings from failed reviewers or excluded paths, and bounds the artifact to 4 MiB. Hashes detect accidental changes; they do not authenticate a model's claims or establish review quality. Artifact failure must be reported as unavailable handoff evidence; it does not authorize restarting reviewers or fabricating success.

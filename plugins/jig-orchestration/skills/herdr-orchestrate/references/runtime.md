@@ -32,11 +32,11 @@ A minimal configuration shape is:
       "profiles": [{
         "id": "selected-codex-profile",
         "agent_home": "/home/user/.codex-selected",
-        "required_skills": ["herdr-orchestrate", "herdr", "comprehensive-review", "review-fix-loop"],
+        "required_skills": ["herdr-orchestrate", "herdr", "panel-review", "review-fix-loop"],
         "skill_paths": {
           "herdr-orchestrate": "/home/user/.codex-selected/skills/herdr-orchestrate",
           "herdr": "/home/user/.codex-selected/skills/herdr",
-          "comprehensive-review": "/home/user/.codex-selected/skills/comprehensive-review",
+          "panel-review": "/home/user/.codex-selected/skills/panel-review",
           "review-fix-loop": "/home/user/.codex-selected/skills/review-fix-loop"
         }
       }]

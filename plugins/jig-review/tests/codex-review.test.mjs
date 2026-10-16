@@ -1,4 +1,4 @@
-import { readBrief, reviewGuidance } from "../skills/comprehensive-review/scripts/review-brief.mjs";
+import { readBrief, reviewGuidance } from "../skills/panel-review/scripts/review-brief.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -25,10 +25,10 @@ import {
   renderPrompt,
   runCodexReview,
   writeShim,
-} from "../skills/comprehensive-review/scripts/codex-review.mjs";
-import { mcpOverrides, mcpServers, pinnedOverrides, prepareHome, reviewerConfig } from "../skills/comprehensive-review/scripts/codex-session.mjs";
+} from "../skills/panel-review/scripts/codex-review.mjs";
+import { mcpOverrides, mcpServers, pinnedOverrides, prepareHome, reviewerConfig } from "../skills/panel-review/scripts/codex-session.mjs";
 import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
-import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
+import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -377,7 +377,7 @@ test("CLI and bridge retain bounded untrusted diagnostics after Codex starts", a
   assert.equal(bridge.retryable, undefined, "diagnostic words must not disable the provider");
 
   const cli = spawnSync(process.execPath, [
-    fileURLToPath(new URL("../skills/comprehensive-review/scripts/codex-review.mjs", import.meta.url)),
+    fileURLToPath(new URL("../skills/panel-review/scripts/codex-review.mjs", import.meta.url)),
     "--cwd", f.repo, "--scope", "working-tree", "--expected-fingerprint", f.parse().expectedFingerprint,
     "--timeout-ms", "10000",
   ], { env: { ...process.env, JIG_CODEX_BIN: codex }, encoding: "utf8", timeout: 15000 });

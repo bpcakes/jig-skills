@@ -338,7 +338,7 @@ test("a known permanent provider failure is retained and never repeatedly dispat
 
 test("Codex incorrect API key errors stop controller retries after one attempt", async t => {
   const f = fixture(t), file = path.join(f.root, ".git", "invalid-key-provider.mjs");
-  writeFileSync(file, `import { classifyFailure } from ${JSON.stringify(import.meta.resolve("../skills/comprehensive-review/scripts/codex-review.mjs"))};
+  writeFileSync(file, `import { classifyFailure } from ${JSON.stringify(import.meta.resolve("../skills/panel-review/scripts/codex-review.mjs"))};
 import { failureResult } from ${JSON.stringify(import.meta.resolve("../skills/review-fix-loop/scripts/provider-bridge.mjs"))};
 for await (const chunk of process.stdin) {}
 const event = { type: "turn.failed", error: { message: "unexpected status 401 Unauthorized: Incorrect API key provided: [redacted]" } };

@@ -1,4 +1,4 @@
-import { readBrief, reviewGuidance } from "../skills/comprehensive-review/scripts/review-brief.mjs";
+import { readBrief, reviewGuidance } from "../skills/panel-review/scripts/review-brief.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -21,8 +21,8 @@ import {
   parseClaudeResult,
   resolveScope,
   runClaudeReview,
-} from "../skills/comprehensive-review/scripts/claude-review.mjs";
-import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
+} from "../skills/panel-review/scripts/claude-review.mjs";
+import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();

@@ -8,12 +8,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ReviewEvidence } from "../skills/comprehensive-review/scripts/review-evidence.mjs";
-import { buildClaudeArgs, parseClaudeResult } from "../skills/comprehensive-review/scripts/claude-review.mjs";
-import { buildCodexArgs, parseCodexResult, shimVariables, writeShim } from "../skills/comprehensive-review/scripts/codex-review.mjs";
-import { buildCursorArgs, parseCursorResult } from "../skills/comprehensive-review/scripts/cursor-review.mjs";
-import { childEnvironment } from "../skills/comprehensive-review/scripts/provider-launch.mjs";
-import { buildReviewPrompt, runCommand } from "../skills/comprehensive-review/scripts/review-context.mjs";
+import { ReviewEvidence } from "../skills/panel-review/scripts/review-evidence.mjs";
+import { buildClaudeArgs, parseClaudeResult } from "../skills/panel-review/scripts/claude-review.mjs";
+import { buildCodexArgs, parseCodexResult, shimVariables, writeShim } from "../skills/panel-review/scripts/codex-review.mjs";
+import { buildCursorArgs, parseCursorResult } from "../skills/panel-review/scripts/cursor-review.mjs";
+import { childEnvironment } from "../skills/panel-review/scripts/provider-launch.mjs";
+import { buildReviewPrompt, runCommand } from "../skills/panel-review/scripts/review-context.mjs";
 
 const selected = new Set((process.env.JIG_REVIEW_LIVE ?? "").split(","));
 

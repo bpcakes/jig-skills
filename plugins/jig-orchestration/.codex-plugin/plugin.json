@@ -1,6 +1,6 @@
 {
   "name": "jig-orchestration",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Coordinate scoped Herdr tasks across machines through tracker claims, review, GitHub PRs, and acceptance.",
   "author": { "name": "Jig" },
   "homepage": "https://github.com/bpcakes/jig-skills",

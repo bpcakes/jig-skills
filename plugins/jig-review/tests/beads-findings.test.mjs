@@ -5,9 +5,9 @@ import { chmodSync, mkdtempSync, writeFileSync, readFileSync, readdirSync, statS
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { preflight, logFindings } from '../skills/comprehensive-review/scripts/beads-findings.mjs';
-import { captureFingerprint } from '../skills/comprehensive-review/scripts/scope-fingerprint.mjs';
-import { gitEnvironment } from '../skills/comprehensive-review/scripts/git-environment.mjs';
+import { preflight, logFindings } from '../skills/panel-review/scripts/beads-findings.mjs';
+import { captureFingerprint } from '../skills/panel-review/scripts/scope-fingerprint.mjs';
+import { gitEnvironment } from '../skills/panel-review/scripts/git-environment.mjs';
 
 const available = spawnSync('br', ['--version'], { timeout: 10_000 }).status === 0;
 if (process.env.JIG_REVIEW_REQUIRE_BEADS === '1' && !available) {
@@ -29,7 +29,7 @@ function fixture(t, prefix = 'test') {
   const receipt = preflight(cwd);
   const scope = { scope: 'working-tree', excludePaths: receipt.excludePaths };
   const payload = async (findings = [finding]) => ({ scope, fingerprint: (await captureFingerprint({ cwd, ...scope })).fingerprint, findings });
-  const issues = () => JSON.parse(br('--no-auto-import', '--no-auto-flush', 'list', '--status', 'all', '--limit', '0', '--json')).issues;
+  const issues = (...filters) => JSON.parse(br('--no-auto-import', '--no-auto-flush', 'list', '--status', 'all', '--limit', '0', ...filters, '--json')).issues;
   return { cwd, git, br, receipt, payload, issues };
 }
 
@@ -93,6 +93,9 @@ test('real Beads create, reuse, recurrence, and empty results preserve source an
   assert.equal(first.outcomes[0].action, 'created');
   assert.equal(f.issues().length, 1);
   assert.match(f.issues()[0].description, /scheduler.cancel/);
+  for (const label of ['comprehensive-review', 'panel-review']) {
+    assert.deepEqual(f.issues('--label', label).map(issue => issue.id), [id], label);
+  }
   assert.equal((await logFindings(f.receipt, result)).outcomes[0].id, id);
   assert.equal(f.issues().length, 1);
   f.br('close', id);
@@ -101,6 +104,9 @@ test('real Beads create, reuse, recurrence, and empty results preserve source an
   assert.notEqual(recurrence.outcomes[0].id, id);
   assert.equal(f.issues().length, 2);
   assert.match(f.issues().find(item => item.id !== id).description, new RegExp(`Recurrence of: ${id}`));
+  for (const label of ['comprehensive-review', 'panel-review']) {
+    assert.deepEqual(f.issues('--label', label).map(issue => issue.id).sort(), [id, recurrence.outcomes[0].id].sort(), label);
+  }
   assert.equal((await logFindings(f.receipt, result)).outcomes[0].id, recurrence.outcomes[0].id);
   assert.deepEqual(await logFindings(f.receipt, await f.payload([])), { complete: true, outcomes: [] });
   assert.deepEqual(readFileSync(path.join(f.cwd, '.git/index')), index);

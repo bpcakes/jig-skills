@@ -4,8 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { collectReviewContext, resolveScope } from "../skills/comprehensive-review/scripts/review-context.mjs";
-import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
+import { collectReviewContext, resolveScope } from "../skills/panel-review/scripts/review-context.mjs";
+import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, maxBuffer: 4 * 1024 * 1024 });

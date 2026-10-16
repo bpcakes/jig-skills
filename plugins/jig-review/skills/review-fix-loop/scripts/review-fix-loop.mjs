@@ -11,17 +11,17 @@ import { DEFAULT_FIX_MODE, repairPolicy } from "./repair-policy.mjs";
 import { contentHash, dictionary, hash, hasResult, json, loadRun, loadRunForRelease, locked, readJSON, resultFile, RUN_VERSION, save, storeBlob } from "./run-store.mjs";
 import { allocateWorkspace, alternateObjectDirectories, applyFile, applyTemporary, assertBackupFilesystem, backupEntry, changes, reconcileApplication, reconcileBackups, discardOverlay, entry, git, makeOverlay, overlayPath, pathsDifferFromIndex, repositoryRoot, reservedOverlays, resolveScope, safePath, sameContent, snapshot, unsupported } from "./repository.mjs";
 import { command, discoverValidation, nonempty, timeout, validateContract } from "./task-contract.mjs";
-import { captureFingerprint } from "../../comprehensive-review/scripts/scope-fingerprint.mjs";
-import { assertCompleteFingerprint } from "../../comprehensive-review/scripts/adapter-runtime.mjs";
-import { isExcludedPath } from "../../comprehensive-review/scripts/review-exclusions.mjs";
+import { captureFingerprint } from "../../panel-review/scripts/scope-fingerprint.mjs";
+import { assertCompleteFingerprint } from "../../panel-review/scripts/adapter-runtime.mjs";
+import { isExcludedPath } from "../../panel-review/scripts/review-exclusions.mjs";
 import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
-import { preflightExecutables, supportsAutoLauncher } from "../../comprehensive-review/scripts/provider-launch.mjs";
-import { assertHostRuntime, codexEfforts, withDefaultLaunchers } from "../../comprehensive-review/scripts/review-options.mjs";
+import { preflightExecutables, supportsAutoLauncher } from "../../panel-review/scripts/provider-launch.mjs";
+import { assertHostRuntime, codexEfforts, withDefaultLaunchers } from "../../panel-review/scripts/review-options.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
-import { readHandoff, validateHandoff, verifyHandoffScope } from "../../comprehensive-review/scripts/review-handoff.mjs";
+import { readHandoff, validateHandoff, verifyHandoffScope } from "../../panel-review/scripts/review-handoff.mjs";
 import { assertCommitScope, assertNoGitOperation, checkoutDirty, prepareRoundCommit, publishRoundCommit } from "./round-commits.mjs";
 import { normalizeCommitMessage, roundCommitMessage } from "./commit-messages.mjs";
 import { atRoundLimit, currentAdjudication, findingAnchor, parkedRecovery, recordRecovery, recoveryContext, recoveryDecision, signalRecovery } from "./recovery-policy.mjs";
@@ -621,7 +621,7 @@ function completeIssue(run) {
     assignment.commitRange = { base, tip: run.fingerprint.headOid, range: `${base}..${run.fingerprint.headOid}` };
     if (role === "review") assignment.instructions += " Review the entire commitRange.range, including earlier round commits, against the pinned base. Both terminal reviews must cover this same exact range. Inspect the accumulated behavior for actionable defects; do not limit review to the last commit. Assess the final tip: a defect corrected by a later commit in this range is not a residual finding.";
   }
-  if (!argv) assignment.instructions += `\n\n${readFileSync(new URL("../../comprehensive-review/references/native-tool-output.md", import.meta.url), "utf8").trim()}`;
+  if (!argv) assignment.instructions += `\n\n${readFileSync(new URL("../../panel-review/references/native-tool-output.md", import.meta.url), "utf8").trim()}`;
   assignment.instructions += role === "repair"
     ? `\n\nApply these repair requirements (${run.options.fixMode}): ${run.fixPolicy}`
     : `\n\nAssess against these repair criteria (${run.options.fixMode}); they do not authorize edits: ${run.fixPolicy}`;

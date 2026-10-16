@@ -9,7 +9,7 @@ import { applyFile, entry, git, makeOverlay, pathsDifferFromIndex, readRegularFi
 import { storeBlob } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { advance } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
 import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
-import { gitEnvironment } from "../skills/comprehensive-review/scripts/git-environment.mjs";
+import { gitEnvironment } from "../skills/panel-review/scripts/git-environment.mjs";
 import { assertCommitScope } from "../skills/review-fix-loop/scripts/round-commits.mjs";
 
 function fixture(t) {
@@ -346,7 +346,7 @@ test("repository redirection inherited from hooks cannot redirect scope capture 
   const index = readFileSync(path.join(other.root, ".git/index")), config = readFileSync(path.join(other.root, ".git/config"));
   writeFileSync(path.join(run.root, "value"), "changed\n");
   const repository = new URL("../skills/review-fix-loop/scripts/repository.mjs", import.meta.url).href;
-  const fingerprint = new URL("../skills/comprehensive-review/scripts/scope-fingerprint.mjs", import.meta.url).href;
+  const fingerprint = new URL("../skills/panel-review/scripts/scope-fingerprint.mjs", import.meta.url).href;
   const code = `import assert from 'node:assert/strict';import {snapshot,makeOverlay} from ${JSON.stringify(repository)};import {captureFingerprint} from ${JSON.stringify(fingerprint)};const run=${JSON.stringify(run)};run.expected=snapshot(run.root,run.directory);makeOverlay(run,run.expected,'review');const fp=await captureFingerprint({cwd:run.root,scope:'working-tree'});assert.equal(fp.repoRoot,run.root);assert.equal(fp.hasChanges,true);assert.equal(fp.complete,true);`;
   execFileSync(process.execPath, ["--input-type=module", "-e", code], { env: { ...process.env,
     GIT_DIR: path.join(other.root, ".git"), GIT_WORK_TREE: other.root, GIT_INDEX_FILE: path.join(other.root, ".git/index"),

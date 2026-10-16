@@ -1,6 +1,6 @@
 # Delivery and PR gates
 
-Read before review, delegated merge, or acceptance. Each checkout has one source writer. Settle the prior writer and descendants at implementation/review/acceptance handoffs. Required review uses the installed matching `review-fix-loop` and `comprehensive-review` pair; read that skill and its controller reference. Do not reimplement convergence in orchestration state.
+Read before review, delegated merge, or acceptance. Each checkout has one source writer. Settle the prior writer and descendants at implementation/review/acceptance handoffs. Required review uses the installed matching `review-fix-loop` and `panel-review` pair; read that skill and its controller reference. Do not reimplement convergence in orchestration state.
 
 ## Final review
 

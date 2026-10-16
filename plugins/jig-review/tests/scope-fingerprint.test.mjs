@@ -15,10 +15,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { runGit as runFingerprintGit } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
+import { runGit as runFingerprintGit } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
 const fingerprintScript = fileURLToPath(new URL(
-  "../skills/comprehensive-review/scripts/scope-fingerprint.mjs",
+  "../skills/panel-review/scripts/scope-fingerprint.mjs",
   import.meta.url,
 ));
 

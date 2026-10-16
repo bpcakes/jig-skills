@@ -12,7 +12,7 @@ Install dependencies in the agent home/profile actually selected for each role. 
 | --- | --- |
 | Coordinator | `herdr-orchestrate`, its complete scripts/references, Python runtime, installed Herdr skill/CLI, GitHub CLI/authentication, and the selected tracker access route. |
 | Implementation worker | Its native agent CLI/profile, repository toolchain, Git/authentication, and task-specific skills. |
-| Review/repair driver | Codex plus the matching `comprehensive-review` and `review-fix-loop` skill pair, their scripts, supported Node/Git/platform runtime, and selected external reviewer CLIs/authentication. |
+| Review/repair driver | Codex plus the matching `panel-review` and `review-fix-loop` skill pair, their scripts, supported Node/Git/platform runtime, and selected external reviewer CLIs/authentication. |
 
 Both machines need the review pair if both drive review. Installing only `SKILL.md` or only one review skill is insufficient. The orchestration state and scheduler remain on one coordinator. Read the installed review controller's requirements: current repository versions require Node 22+, Git 2.42+, Linux `flock`/`/proc` or the documented macOS Python/process support. Do not infer supported versions from a similarly named executable.
 

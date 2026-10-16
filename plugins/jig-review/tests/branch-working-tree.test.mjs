@@ -5,10 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { captureFingerprint, parseArgs as parseFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
-import { buildReviewPrompt, collectReviewContext, resolveScope } from "../skills/comprehensive-review/scripts/review-context.mjs";
-import { parseArgs as parseClaude, runClaudeReview } from "../skills/comprehensive-review/scripts/claude-review.mjs";
-import { parseArgs as parseCursor, runCursorReview } from "../skills/comprehensive-review/scripts/cursor-review.mjs";
+import { captureFingerprint, parseArgs as parseFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
+import { buildReviewPrompt, collectReviewContext, resolveScope } from "../skills/panel-review/scripts/review-context.mjs";
+import { parseArgs as parseClaude, runClaudeReview } from "../skills/panel-review/scripts/claude-review.mjs";
+import { parseArgs as parseCursor, runCursorReview } from "../skills/panel-review/scripts/cursor-review.mjs";
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();

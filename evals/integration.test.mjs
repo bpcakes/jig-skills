@@ -216,7 +216,7 @@ test('negative discovery cannot pass an ambiguous successful skill read', t => {
 
 for (const command of ['rg -n claude .agents/skills/review-fix-loop/SKILL.md',
   'grep -n "codex exec" .agents/skills/review-fix-loop/SKILL.md',
-  'sed -n 1,20p .agents/skills/comprehensive-review/scripts/claude-review.mjs',
+  'sed -n 1,20p .agents/skills/panel-review/scripts/claude-review.mjs',
   '/usr/bin/bash -lc \'rg -n "node.*claude-review" .agents/skills/review-fix-loop/SKILL.md\'']) {
   test(`instruction search is not a workflow launch: ${command}`, t => {
     const { child, result } = exercise(t, 'forbidden-command', () => ({ EVAL_STUB_COMMAND: command }), 'loop-loaded-one-pass-fix');

@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { captureFingerprint } from "../skills/comprehensive-review/scripts/scope-fingerprint.mjs";
-import { assertScopeMatchesFingerprint } from "../skills/comprehensive-review/scripts/adapter-runtime.mjs";
+import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
+import { assertScopeMatchesFingerprint } from "../skills/panel-review/scripts/adapter-runtime.mjs";
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe" }).trim();
 function repository(directory, name) {
@@ -39,7 +39,7 @@ console.log(${JSON.stringify(provider)}==='claude'?JSON.stringify({result:'No fi
 })();
 `);
     chmodSync(fake, 0o755);
-    const cli = fileURLToPath(new URL(`../skills/comprehensive-review/scripts/${provider}-review.mjs`, import.meta.url));
+    const cli = fileURLToPath(new URL(`../skills/panel-review/scripts/${provider}-review.mjs`, import.meta.url));
     const result = spawnSync(process.execPath, [cli, "--cwd", requested, "--scope", "working-tree", "--expected-fingerprint", fingerprint.fingerprint, "--timeout-ms", "15000", ...excludePaths.flatMap(p => ["--exclude-path", p])], {
       env: { ...process.env, [`JIG_${provider.toUpperCase()}_BIN`]: fake, JIG_TEST_CAPTURE: capture, ANTHROPIC_API_KEY: "synthetic-test-credential",
         ...(redirect === "pathspecs" ? { GIT_LITERAL_PATHSPECS: "1", GIT_GLOB_PATHSPECS: "1", GIT_NOGLOB_PATHSPECS: "1", GIT_ICASE_PATHSPECS: "1" } : { GIT_INDEX_FILE: redirect === "index" ? alternate : path.join(other, ".git/index") }),
@@ -84,7 +84,7 @@ for (const provider of ["claude", "cursor"]) test(`${provider} rejects an unavai
   assert.equal(fingerprint.complete, false); assert.ok(fingerprint.issues.length);
   const fake = path.join(directory, "provider"), marker = path.join(directory, "executed");
   writeFileSync(fake, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'unexpected');\n`); chmodSync(fake, 0o755);
-  const cli = fileURLToPath(new URL(`../skills/comprehensive-review/scripts/${provider}-review.mjs`, import.meta.url));
+  const cli = fileURLToPath(new URL(`../skills/panel-review/scripts/${provider}-review.mjs`, import.meta.url));
   const result = spawnSync(process.execPath, [cli, "--cwd", root, "--scope", "working-tree", "--expected-fingerprint", fingerprint.fingerprint], {
     env: { ...process.env, [`JIG_${provider.toUpperCase()}_BIN`]: fake }, encoding: "utf8", timeout: 15000,
   });

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { runClaudeReview } from "../../comprehensive-review/scripts/claude-review.mjs";
-import { runCodexReview } from "../../comprehensive-review/scripts/codex-review.mjs";
-import { runCursorReview } from "../../comprehensive-review/scripts/cursor-review.mjs";
-import { installAdapterCancellation } from "../../comprehensive-review/scripts/adapter-runtime.mjs";
+import { runClaudeReview } from "../../panel-review/scripts/claude-review.mjs";
+import { runCodexReview } from "../../panel-review/scripts/codex-review.mjs";
+import { runCursorReview } from "../../panel-review/scripts/cursor-review.mjs";
+import { installAdapterCancellation } from "../../panel-review/scripts/adapter-runtime.mjs";
 import { assertResult } from "./assignment-schema.mjs";
 import { reviewAdapterTimeout } from "./review-timeouts.mjs";
 

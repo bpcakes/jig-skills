@@ -11,7 +11,7 @@ const installer = path.join(repo, "scripts/install.sh");
 const herdrSkill = '---\nname: herdr\ndescription: Control the installed Herdr release.\n---\n\n# Herdr\nRequire a genuine managed pane before control.\n';
 function legacyReviewOnly(destination) {
   mkdirSync(destination, { recursive: true });
-  cpSync(path.join(repo, "plugins/jig-review/skills/comprehensive-review"), path.join(destination, "comprehensive-review"), { recursive: true });
+  cpSync(path.join(repo, "plugins/jig-review/skills/panel-review"), path.join(destination, "panel-review"), { recursive: true });
 }
 
 function fixture(t) {
@@ -50,13 +50,13 @@ test("fresh direct installation includes a usable review dependency", (t) => {
   const { destination, install } = fixture(t);
   const result = install("review-fix-loop");
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Required dependency: comprehensive-review/);
+  assert.match(result.stdout, /Required dependency: panel-review/);
   assertInstalledParser(destination);
 });
 
-test("standalone comprehensive review installs both usable workflow entrypoints", t => {
+test("standalone panel review installs both usable workflow entrypoints", t => {
   const { destination, install } = fixture(t);
-  const result = install("comprehensive-review");
+  const result = install("panel-review");
   assert.equal(result.status, 0, result.stderr); assertInstalledParser(destination);
   const project = path.join(path.dirname(destination), "project"); mkdirSync(project);
   execFileSync("git", ["init", "-q", project]);
@@ -64,8 +64,8 @@ test("standalone comprehensive review installs both usable workflow entrypoints"
   assert.equal(plan.status, 0, plan.stderr); assert.ok(JSON.parse(plan.stdout));
 });
 
-for (const selected of ["review-fix-loop", "comprehensive-review"]) {
-  for (const existing of ["review-fix-loop", "comprehensive-review"]) {
+for (const selected of ["review-fix-loop", "panel-review"]) {
+  for (const existing of ["review-fix-loop", "panel-review"]) {
     for (const differing of [false, true]) test(`partial pair: select ${selected}, existing ${existing}, differing=${differing}`, t => {
       const { destination, install } = fixture(t);
       mkdirSync(destination, { recursive: true });
@@ -81,22 +81,22 @@ for (const selected of ["review-fix-loop", "comprehensive-review"]) {
         const forced = install("--force", selected);
         assert.equal(forced.status, selected === existing ? 0 : 1, forced.stderr);
         if (forced.status !== 0) assert.deepEqual(readdirSync(destination), [existing]);
-        assert.equal(install("--force", "review-fix-loop", "comprehensive-review").status, 0);
+        assert.equal(install("--force", "review-fix-loop", "panel-review").status, 0);
       }
       assertInstalledParser(destination);
     });
   }
 }
 
-test("automatic loop dependencies are never overwritten by force on comprehensive review", t => {
+test("automatic loop dependencies are never overwritten by force on panel review", t => {
   const { destination, install } = fixture(t);
-  assert.equal(install("comprehensive-review").status, 0);
+  assert.equal(install("panel-review").status, 0);
   const marker = path.join(destination, "review-fix-loop/custom.txt"); writeFileSync(marker, "keep\n");
-  for (const args of [["comprehensive-review"], ["--force", "comprehensive-review"]]) {
+  for (const args of [["panel-review"], ["--force", "panel-review"]]) {
     const result = install(...args); assert.equal(result.status, 1); assert.match(result.stderr, /No skills were changed/);
     assert.equal(readFileSync(marker, "utf8"), "keep\n");
   }
-  assert.equal(install("--force", "comprehensive-review", "review-fix-loop").status, 0);
+  assert.equal(install("--force", "panel-review", "review-fix-loop").status, 0);
   assert.equal(existsSync(marker), false);
 });
 
@@ -104,11 +104,11 @@ test("differing dependencies fail before modifying either skill", async (t) => {
   for (const args of [
     ["review-fix-loop"],
     ["--force", "review-fix-loop"],
-    ["comprehensive-review", "review-fix-loop"],
+    ["panel-review", "review-fix-loop"],
   ]) {
     await t.test(args.join(" "), (t) => {
       const { destination, install } = fixture(t);
-      const dependency = path.join(destination, "comprehensive-review");
+      const dependency = path.join(destination, "panel-review");
       const loop = path.join(destination, "review-fix-loop");
       mkdirSync(dependency, { recursive: true });
       mkdirSync(loop);
@@ -128,7 +128,7 @@ test("differing dependencies fail before modifying either skill", async (t) => {
 test("a matching automatic dependency survives --force on the selected loop", (t) => {
   const { destination, install } = fixture(t);
   assert.equal(install("review-fix-loop").status, 0);
-  const dependency = path.join(destination, "comprehensive-review");
+  const dependency = path.join(destination, "panel-review");
   const identity = statSync(dependency);
   writeFileSync(path.join(destination, "review-fix-loop/local.md"), "replace selected loop\n");
   const result = install("--force", "review-fix-loop");
@@ -143,9 +143,9 @@ test("a matching automatic dependency survives --force on the selected loop", (t
 test("explicit --force replacement updates both selected skills", (t) => {
   const { destination, install } = fixture(t);
   assert.equal(install("review-fix-loop").status, 0);
-  const customized = path.join(destination, "comprehensive-review/local.md");
+  const customized = path.join(destination, "panel-review/local.md");
   writeFileSync(customized, "custom copy\n");
-  const result = install("--force", "review-fix-loop", "comprehensive-review");
+  const result = install("--force", "review-fix-loop", "panel-review");
   assert.equal(result.status, 0, result.stderr);
   assert.equal(existsSync(customized), false);
   assertInstalledParser(destination);
@@ -154,7 +154,7 @@ test("explicit --force replacement updates both selected skills", (t) => {
 test("a differing dependency cannot leave a newly installed loop behind", (t) => {
   const { destination, install } = fixture(t);
   legacyReviewOnly(destination);
-  writeFileSync(path.join(destination, "comprehensive-review/scripts/review-options.mjs"), "throw new Error('old parser');\n");
+  writeFileSync(path.join(destination, "panel-review/scripts/review-options.mjs"), "throw new Error('old parser');\n");
   const result = install("review-fix-loop");
   assert.equal(result.status, 1);
   assert.equal(existsSync(path.join(destination, "review-fix-loop")), false);
@@ -169,7 +169,7 @@ test("all-skills installs include the review pair for both hosts and filter Clau
   const claude = spawnSync("sh", [installer, "claude", "--dest", claudeDestination], { encoding: "utf8" });
   assert.equal(claude.status, 0, claude.stderr);
   assertInstalledParser(claudeDestination);
-  assert.equal(existsSync(path.join(claudeDestination, "comprehensive-review/references/claude-code-host.md")), true);
+  assert.equal(existsSync(path.join(claudeDestination, "panel-review/references/claude-code-host.md")), true);
   assert.equal(existsSync(path.join(claudeDestination, "herdr-orchestrate")), false);
   assert.equal(existsSync(path.join(claudeDestination, "rust-error-handling-review/SKILL.md")), true);
   // Selecting either review entrypoint for Claude installs the pair.
@@ -196,7 +196,7 @@ test("orchestration installation includes both usable review entrypoints and its
   assert.equal(help.status, 0, help.stderr);
 });
 
-for (const dependency of ["review-fix-loop", "comprehensive-review"]) {
+for (const dependency of ["review-fix-loop", "panel-review"]) {
   test(`orchestration refuses incompatible ${dependency} before copying, including --force`, t => {
     const { destination, install } = fixture(t);
     mkdirSync(destination, { recursive: true });
@@ -210,7 +210,7 @@ for (const dependency of ["review-fix-loop", "comprehensive-review"]) {
       assert.deepEqual(readdirSync(destination), [dependency]);
       assert.equal(readFileSync(marker, "utf8"), "keep custom dependency\n");
     }
-    const replaced = install("--force", "herdr-orchestrate", "review-fix-loop", "comprehensive-review");
+    const replaced = install("--force", "herdr-orchestrate", "review-fix-loop", "panel-review");
     assert.equal(replaced.status, 0, replaced.stderr);
     assert.equal(existsSync(marker), false);
     assertInstalledParser(destination);
@@ -232,7 +232,7 @@ for (const dependency of ["review-fix-loop", "comprehensive-review"]) {
 test("force replacing orchestration preserves matching automatic review copies", t => {
   const { destination, install } = fixture(t);
   assert.equal(install("herdr-orchestrate").status, 0);
-  const identities = Object.fromEntries(["review-fix-loop", "comprehensive-review"].map(name => [name, statSync(path.join(destination, name))]));
+  const identities = Object.fromEntries(["review-fix-loop", "panel-review"].map(name => [name, statSync(path.join(destination, name))]));
   writeFileSync(path.join(destination, "herdr-orchestrate/custom.txt"), "replace this\n");
   const result = install("--force", "herdr-orchestrate");
   assert.equal(result.status, 0, result.stderr);
@@ -391,7 +391,7 @@ test("all-skills installs skip an incompatible loop and preserve existing copies
       const { destination, install } = fixture(t);
       legacyReviewOnly(destination);
       const oldParser = "export function parseArgs() { return { reviewers: ['claude', 'codex'] }; }\n";
-      const dependencyParser = path.join(destination, "comprehensive-review/scripts/review-options.mjs");
+      const dependencyParser = path.join(destination, "panel-review/scripts/review-options.mjs");
       writeFileSync(dependencyParser, oldParser);
       const loop = path.join(destination, "review-fix-loop");
       if (existingLoop) {
@@ -405,7 +405,7 @@ test("all-skills installs skip an incompatible loop and preserve existing copies
       const result = install();
 
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stderr, /Skipping review-fix-loop:.*comprehensive-review/);
+      assert.match(result.stderr, /Skipping review-fix-loop:.*panel-review/);
       assert.equal(readFileSync(dependencyParser, "utf8"), oldParser);
       assert.equal(readFileSync(path.join(existingSkill, "SKILL.md"), "utf8"), "existing customized skill\n");
       if (existingLoop) {
@@ -424,8 +424,8 @@ test("all-skills installs skip an incompatible loop and preserve existing copies
 
 test("all-skills --force replaces a differing dependency and installs a usable loop", (t) => {
   const { destination, install } = fixture(t);
-  assert.equal(install("comprehensive-review").status, 0);
-  const customized = path.join(destination, "comprehensive-review/local.md");
+  assert.equal(install("panel-review").status, 0);
+  const customized = path.join(destination, "panel-review/local.md");
   writeFileSync(customized, "custom copy\n");
   const result = install("--force");
   assert.equal(result.status, 0, result.stderr);

@@ -3,12 +3,12 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { readBrief, reviewGuidance } from '../skills/comprehensive-review/scripts/review-brief.mjs';
-import { buildReviewPrompt } from '../skills/comprehensive-review/scripts/review-context.mjs';
-import { parseArgs } from '../skills/comprehensive-review/scripts/review-options.mjs';
+import { readBrief, reviewGuidance } from '../skills/panel-review/scripts/review-brief.mjs';
+import { buildReviewPrompt } from '../skills/panel-review/scripts/review-context.mjs';
+import { parseArgs } from '../skills/panel-review/scripts/review-options.mjs';
 import { parseArgs as loopArgs } from '../skills/review-fix-loop/scripts/loop-options.mjs';
-import { runClaudeReview } from '../skills/comprehensive-review/scripts/claude-review.mjs';
-import { runCursorReview } from '../skills/comprehensive-review/scripts/cursor-review.mjs';
+import { runClaudeReview } from '../skills/panel-review/scripts/claude-review.mjs';
+import { runCursorReview } from '../skills/panel-review/scripts/cursor-review.mjs';
 
 const brief = { goal: 'Expose cancellation', requirements: [{ id: 'R1', text: 'Queued jobs can be cancelled.', source: 'User request' }], constraints: ['Retain running-job behavior'], nonGoals: [], unknowns: ['Persistence requirements unavailable'] };
 test('native and external reviewers receive exactly the same pinned task context', t => {
@@ -31,7 +31,7 @@ test('Beads flag is opt-in, duplicate-safe, and cannot be silently lost by the c
   assert.equal(parseArgs([]).logToBeads, undefined);
   assert.equal(parseArgs(['--log-to-beads']).logToBeads, true);
   assert.throws(() => parseArgs(['--log-to-beads', '--log-to-beads']), /Duplicate/);
-  assert.throws(() => loopArgs(['--log-to-beads']), /comprehensive-review parent/);
+  assert.throws(() => loopArgs(['--log-to-beads']), /panel-review parent/);
 });
 
 for (const run of [runClaudeReview, runCursorReview]) {

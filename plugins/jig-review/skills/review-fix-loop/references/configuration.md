@@ -1,6 +1,6 @@
 # Provider and validation configuration
 
-Read when selecting external providers, configuring role environment variables, or opting into isolated validation. The default reviewer with checkout validation needs no configuration file. At initialization, compatible Jig automatically selects the CLI bridge and automatic account selection for omitted launchers. A configured native runtime or custom command takes precedence; explicit launcher choices retain their existing validation. Detection and fallback rules are documented in the sibling comprehensive-review reviewer controls.
+Read when selecting external providers, configuring role environment variables, or opting into isolated validation. The default reviewer with checkout validation needs no configuration file. At initialization, compatible Jig automatically selects the CLI bridge and automatic account selection for omitted launchers. A configured native runtime or custom command takes precedence; explicit launcher choices retain their existing validation. Detection and fallback rules are documented in the sibling panel-review reviewer controls.
 
 `init` also accepts the loop options and `--config /absolute/config.json`. Configuration is explicit JSON:
 

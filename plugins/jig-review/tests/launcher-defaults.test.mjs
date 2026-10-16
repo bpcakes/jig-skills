@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { supportsAutoLauncher } from "../skills/comprehensive-review/scripts/provider-launch.mjs";
-import { parseArgs, withDefaultLaunchers } from "../skills/comprehensive-review/scripts/review-options.mjs";
+import { supportsAutoLauncher } from "../skills/panel-review/scripts/provider-launch.mjs";
+import { parseArgs, withDefaultLaunchers } from "../skills/panel-review/scripts/review-options.mjs";
 import { parseArgs as loopArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { createRun } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
 
@@ -35,7 +35,7 @@ else {
 
 test("default option CLI detects compatible Jig with help-only probes for both providers", t => {
   const f = fixture(t);
-  const cli = fileURLToPath(new URL("../skills/comprehensive-review/scripts/review-options.mjs", import.meta.url));
+  const cli = fileURLToPath(new URL("../skills/panel-review/scripts/review-options.mjs", import.meta.url));
   const result = JSON.parse(execFileSync(process.execPath, [cli], { env: f.inherited, encoding: "utf8" }));
   assert.equal(result.claude.launcher, "auto");
   assert.equal(result.codex.launcher, "auto");

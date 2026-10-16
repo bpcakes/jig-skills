@@ -8,7 +8,7 @@ import {
   normalizeLauncher,
   preflightExecutables,
   resolveProviderLaunch,
-} from "../skills/comprehensive-review/scripts/provider-launch.mjs";
+} from "../skills/panel-review/scripts/provider-launch.mjs";
 
 test("launcher values normalize to none, auto, or a Jig home", () => {
   assert.equal(normalizeLauncher(null), "none");

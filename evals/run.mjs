@@ -7,9 +7,9 @@ import { tmpdir, homedir, devNull } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setImmediate as yieldToEvents } from 'node:timers/promises';
-import { createHandoff } from '../plugins/jig-review/skills/comprehensive-review/scripts/review-handoff.mjs';
-import { captureFingerprint } from '../plugins/jig-review/skills/comprehensive-review/scripts/scope-fingerprint.mjs';
-import { readBrief } from '../plugins/jig-review/skills/comprehensive-review/scripts/review-brief.mjs';
+import { createHandoff } from '../plugins/jig-review/skills/panel-review/scripts/review-handoff.mjs';
+import { captureFingerprint } from '../plugins/jig-review/skills/panel-review/scripts/scope-fingerprint.mjs';
+import { readBrief } from '../plugins/jig-review/skills/panel-review/scripts/review-brief.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sha = value => createHash('sha256').update(value).digest('hex');
