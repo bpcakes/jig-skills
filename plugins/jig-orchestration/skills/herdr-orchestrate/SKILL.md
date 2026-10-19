@@ -7,7 +7,7 @@ description: Coordinate a scoped Beads or Beadroll task batch across Herdr machi
 
 Deliver the named tasks in one repository using one coordinator and independent task drivers. Support Beads Rust (`br`) and the compatible Beadroll (`bead`) CLI, including its working Python implementation. GitHub is the PR authority; the installed `review-fix-loop` controller owns review convergence. A task driver can advance authorized work between supervision ticks.
 
-This is a Codex coordinator skill. Claude can implement tasks or serve as an external reviewer; Codex drives the installed review skills. Do not install tools, migrate trackers, change models, expand scope, or alter repository protections merely to make a run start.
+Run the coordinator and review drivers in Codex or Claude Code; implementation workers use their own native agents. Read [Claude Code host](references/claude-code-host.md) when the coordinator or any driver runs in Claude Code. Do not install tools, migrate trackers, change models, expand scope, or alter repository protections merely to make a run start.
 
 ## Start or adopt
 

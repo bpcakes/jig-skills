@@ -6,26 +6,28 @@ Read at startup, adoption, or a host/profile change. Save capability receipts in
 
 Resolve the actual target branch, explicit task IDs or epic descendants, tracker store, worker/reviewer models, existing authority, acceptance owner, registered worktree roots, and any exclusions. An unrelated PR, pane, or checkout stays outside the run. A newly discovered prerequisite may be handled within the existing task only when it is necessary to its authorized outcome; it does not reopen general admission.
 
-Install dependencies in the agent home/profile actually selected for each role. An installation under `~/.codex` does not provision another `CODEX_HOME`, plugin cache, or remote machine.
+Install dependencies in the agent home/profile actually selected for each role. An installation under `~/.codex` or `~/.claude` does not provision another `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, plugin cache, or remote machine.
 
 | Assigned role | Required on that host/profile |
 | --- | --- |
 | Coordinator | `herdr-orchestrate`, its complete scripts/references, Python runtime, installed Herdr skill/CLI, GitHub CLI/authentication, and the selected tracker access route. |
 | Implementation worker | Its native agent CLI/profile, repository toolchain, Git/authentication, and task-specific skills. |
-| Review/repair driver | Codex plus the matching `panel-review` and `review-fix-loop` skill pair, their scripts, supported Node/Git/platform runtime, and selected external reviewer CLIs/authentication. |
+| Review/repair driver | Codex or Claude Code plus the matching `panel-review` and `review-fix-loop` skill pair, their scripts, supported Node/Git/platform runtime, and selected external reviewer CLIs/authentication. |
 
 Both machines need the review pair if both drive review. Installing only `SKILL.md` or only one review skill is insufficient. The orchestration state and scheduler remain on one coordinator. Read the installed review controller's requirements: current repository versions require Node 22+, Git 2.42+, Linux `flock`/`/proc` or the documented macOS Python/process support. Do not infer supported versions from a similarly named executable.
 
-The coordinator and any other agent that controls Herdr need its skill in the selected profile. A coding-only worker does not. Install the Herdr binary separately using Herdr's own setup. From a `jig-skills` checkout, direct installation exports that binary's matching skill using `herdr --skill` and installs it alongside the orchestration skill and review pair:
+The coordinator and any other agent that controls Herdr need its skill in the selected profile. A coding-only worker does not. Install the Herdr binary separately using Herdr's own setup. From a `jig-skills` checkout, direct installation exports that binary's matching skill using `herdr --skill` and installs it alongside the orchestration skill and review pair. Name the profile's host, as in these Codex and Claude Code examples:
 
 ```sh
 scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" herdr-orchestrate
+scripts/install.sh claude --dest "$HOME/.claude-featherenvy/skills" herdr-orchestrate
 ```
 
-Use the actual profile's skills directory; without `--dest`, the Codex destination is `${CODEX_HOME:-$HOME/.codex}/skills`. Marketplace installation of `jig-orchestration` does not run this installer or install its dependencies. Install `jig-review` where required and export the Herdr skill separately into the controlling profile:
+Use the actual profile's skills directory; without `--dest`, the destination is `${CODEX_HOME:-$HOME/.codex}/skills` for Codex and `${CLAUDE_CONFIG_DIR:-${CLAUDE_HOME:-$HOME/.claude}}/skills` for Claude Code. Marketplace installation of `jig-orchestration` does not run this installer or install its dependencies. Install `jig-review` where required and export the Herdr skill separately into the controlling profile:
 
 ```sh
 scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" herdr
+scripts/install.sh claude --dest "$HOME/.claude-featherenvy/skills" herdr
 ```
 
 The export uses the local binary without network access or binary installation. Explicitly selecting `herdr` or `herdr-orchestrate` fails before copying skills if `herdr --skill` is unavailable or unusable; an all-skills installation warns, skips orchestration and continues with unrelated skills. Matching automatic dependencies are preserved. A differing Herdr skill needs explicit replacement with `--force herdr herdr-orchestrate` for a direct orchestration install, or `--force herdr` for a plugin-based install. `--force herdr-orchestrate` alone cannot replace it. Explicitly select differing review dependencies too if those need replacement. Perform these updates during setup, preserving versions needed by active runs.
@@ -53,6 +55,8 @@ Bind each endpoint using the installed CLI:
 - If machine forwarding is unavailable: a verified SSH-wrapped remote CLI invocation with its explicit session, issued from the managed coordinator. Do not inject managed-context variables.
 
 Prove get/prompt/read/wait behavior only against owned test agents within authorized setup scope. Register endpoint, agent name/kind, pane, native identity, session, selected agent home/profile, and checkout. Parse IDs from responses. Names can be reused after replacement; a name alone is not identity. Never use local `--current` remotely. An endpoint/profile change requires rebinding; a host with no verified connection is not dispatchable.
+
+Herdr reports an agent's native session identity (`agent_session`) only when its integration for that agent is installed in the selected profile. Check `herdr integration status` with that profile selected: `CODEX_HOME` for Codex, `CLAUDE_CONFIG_DIR` for Claude Code. Without it, the endpoint has no native identity to record, and the scheduler cannot accept that coordinator. Installing the integration changes the profile's hooks; perform it only as a separate setup operation.
 
 Preflight also records the supported pause boundary and cancellation controls for workers, controllers, reviewer children, and background validation. An implementation assignment or review round may be the smallest available stopping unit.
 

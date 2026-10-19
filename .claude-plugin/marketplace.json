@@ -37,6 +37,12 @@
       "category": "Coding"
     },
     {
+      "name": "jig-orchestration",
+      "source": "./plugins/jig-orchestration",
+      "description": "Coordinate scoped Herdr tasks across machines through tracker claims, review, GitHub PRs, and acceptance.",
+      "category": "Coding"
+    },
+    {
       "name": "jig-planning",
       "source": "./plugins/jig-planning",
       "description": "Evidence-backed implementation planning and scope reduction for existing epics and plans.",

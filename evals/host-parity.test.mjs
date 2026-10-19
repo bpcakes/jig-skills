@@ -9,19 +9,14 @@ const repo = fileURLToPath(new URL('..', import.meta.url));
 const read = file => readFileSync(path.join(repo, file), 'utf8');
 const json = file => JSON.parse(read(file));
 
-// jig-orchestration currently requires a Codex coordinator, so it has no Claude
-// manifest or marketplace entry. Keep this exclusion aligned with scripts/install.sh.
-const codexOnlyPlugins = ['jig-orchestration'];
-
 const plugins = readdirSync(path.join(repo, 'plugins')).sort();
 const codexMarketplace = json('.agents/plugins/marketplace.json');
 const claudeMarketplace = json('.claude-plugin/marketplace.json');
 const codexManifest = plugin => json(`plugins/${plugin}/.codex-plugin/plugin.json`);
 
-test('both marketplaces list every plugin directory except the Codex-only exclusions', () => {
+test('both marketplaces list every plugin directory', () => {
   assert.deepEqual(codexMarketplace.plugins.map(plugin => plugin.name).sort(), plugins);
-  assert.deepEqual(claudeMarketplace.plugins.map(plugin => plugin.name).sort(),
-    plugins.filter(plugin => !codexOnlyPlugins.includes(plugin)));
+  assert.deepEqual(claudeMarketplace.plugins.map(plugin => plugin.name).sort(), plugins);
   assert.equal(claudeMarketplace.name, codexMarketplace.name);
   for (const entry of claudeMarketplace.plugins) {
     assert.equal(entry.source, `./plugins/${entry.name}`);
@@ -33,12 +28,7 @@ test('both marketplaces list every plugin directory except the Codex-only exclus
 
 test('Claude plugin manifests carry the Codex metadata', () => {
   for (const plugin of plugins) {
-    const file = `plugins/${plugin}/.claude-plugin/plugin.json`;
-    if (codexOnlyPlugins.includes(plugin)) {
-      assert.equal(existsSync(path.join(repo, file)), false, `${plugin} is Codex-only`);
-      continue;
-    }
-    const codex = codexManifest(plugin), claude = json(file);
+    const codex = codexManifest(plugin), claude = json(`plugins/${plugin}/.claude-plugin/plugin.json`);
     assert.equal(claude.name, plugin);
     for (const field of ['name', 'version', 'description', 'author', 'homepage', 'repository', 'license']) {
       assert.deepEqual(claude[field], codex[field], `${plugin} ${field}`);

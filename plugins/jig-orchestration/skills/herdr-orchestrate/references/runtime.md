@@ -31,6 +31,7 @@ A minimal configuration shape is:
       "reviewers": ["codex", "claude"],
       "profiles": [{
         "id": "selected-codex-profile",
+        "agent": "codex",
         "agent_home": "/home/user/.codex-selected",
         "required_skills": ["herdr-orchestrate", "herdr", "panel-review", "review-fix-loop"],
         "skill_paths": {
@@ -52,7 +53,7 @@ A minimal configuration shape is:
 
 Replace example paths/authority/scope with established facts; a syntactically valid config is not a verified setup. Expand an epic into its authorized task IDs at initialization. Add registered remote hosts with their exact endpoint/profile contract. `preflight` inventories the selected host entry **on the current machine**; run it in each actual host/profile environment. It checks versions and installed skill paths/digests. Authentication, matching review-pair compatibility, remote routes, and control behavior require separate receipts. Optional profile `expected_skill_hashes` maps skill names to pinned full-directory digests.
 
-Profiles inherit host `roles` unless they provide their own `roles` list. A review profile must contain both review skills itself; splitting the pair between homes does not satisfy its inventory. A coordinator profile requires `herdr-orchestrate` and `herdr`. Other `required_skills` add the task-specific inventory.
+Profiles inherit host `roles` unless they provide their own `roles` list. A review profile must contain both review skills itself; splitting the pair between homes does not satisfy its inventory. A coordinator profile requires `herdr-orchestrate` and `herdr`. Other `required_skills` add the task-specific inventory. A profile's `agent` is `codex` (the default) or `claude`, and preflight requires that agent's CLI for each review profile. A Claude Code profile's `agent_home` is its `CLAUDE_CONFIG_DIR`; see [Claude Code host](claude-code-host.md).
 
 An independently acting driver has an `actors` entry such as `{"worker-a":{"role":"driver","task_ids":["example-A"],"host":"local","helper_route":true}}`. Set `helper_route` true only after the restricted reverse route is verified; otherwise the coordinator mediates consequential transitions. Models, tool versions, acceptance contracts, review policy/fanout, and capability receipts remain configuration context for the driver; the helper does not invent executable adapters from those fields.
 
@@ -62,7 +63,7 @@ Hard counted limits have `id`, `unit`, `scope` (`task` or `run`), integer `max`,
 
 `jig-orchestration` 0.2.1 renamed the required `comprehensive-review` skill to `panel-review`. For configurations using the old name, perform an explicit [setup upgrade](setup.md#scope-and-installation), preserving the runtime versions needed by active runs. Update each selected review profile:
 
-- Install the matching `panel-review` and `review-fix-loop` pair through its existing installation route. For direct copies, select both explicitly: `scripts/install.sh codex --dest "<profile-skills-dir>" --force panel-review review-fix-loop`, using the actual profile's skills directory.
+- Install the matching `panel-review` and `review-fix-loop` pair through its existing installation route. For direct copies, select both explicitly: `scripts/install.sh codex --dest "<profile-skills-dir>" --force panel-review review-fix-loop`, using `claude` for a Claude Code profile and the actual profile's skills directory.
 - Replace the old entry in `required_skills`, rename its `skill_paths` key to `panel-review`, and set that path to the installed `panel-review` directory.
 - If `expected_skill_hashes` pins the old name, rename that key too. Recompute pins for the verified contents of every updated skill directory, including `review-fix-loop` when pinned; retaining an old digest after renaming its key still causes `installed_skill_changed`.
 - Rerun `preflight` in each affected host/profile environment and refresh the separate capability receipts required above. Installing the pair alone does not update configuration keys or pins.
@@ -168,7 +169,7 @@ Enable scheduling only with a registered **local named coordinator session**. Re
 }
 ```
 
-Copy real identity fields from Herdr; do not substitute these example strings. The control and coordinator panes must differ. `herdr_binary` optionally selects the verified executable. With explicit notification authority, `notifier_argv` is an argument array beginning with an absolute executable path and `notification_authorized:true`; preserve the agreed destination.
+Copy real identity fields from Herdr; do not substitute these example strings. A Claude Code coordinator reports `"agent": "claude"` in both places, and has an `agent_session` only when Herdr's Claude integration is installed in its profile. The control and coordinator panes must differ. `herdr_binary` optionally selects the verified executable. With explicit notification authority, `notifier_argv` is an argument array beginning with an absolute executable path and `notification_authorized:true`; preserve the agreed destination.
 
 Optional `busy_timeout_seconds` is positive finite seconds; its default is three times the larger of `cadence_seconds` and `minimum_cadence_seconds`. Health reports prolonged busy status after that interval from the first skipped delivery. Repeated ticks preserve the interval and alert identity. Successful wake dispatch or a completed full manual reconciliation resets it. Choose a longer value for expected long coordinator turns. This health signal only requests inspection: it never interrupts the coordinator, frees capacity, or replays a wake. Scheduler stop suppresses health alerts; work pause does not.
 

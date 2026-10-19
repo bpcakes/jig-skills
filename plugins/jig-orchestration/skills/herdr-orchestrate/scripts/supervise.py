@@ -29,6 +29,8 @@ MAX_INPUT = 1024 * 1024
 MAX_JSON_DEPTH = 64
 HEALTH_ALERT_MAX_ATTEMPTS = 3
 HEALTH_ALERT_RETRY_SECONDS = 60
+# Agent CLIs a profile can name; a profile without one is a Codex home.
+PROFILE_AGENTS = ("codex", "claude")
 
 
 class RuntimeErrorDetail(Exception):
@@ -545,17 +547,25 @@ def preflight(config, host_id):
     roles = host_roles(host)
     profiles = host.get("profiles", [])
     runtime_roles = set(roles)
+    review_agents = set()
     for profile in profiles:
         if not isinstance(profile, dict) or not isinstance(profile.get("agent_home"), str) or not Path(profile["agent_home"]).is_absolute():
             raise RuntimeErrorDetail("invalid_config", "Each profile needs its actual absolute agent_home")
-        runtime_roles.update(profile.get("roles", roles))
+        agent = profile.get("agent", "codex")
+        if agent not in PROFILE_AGENTS:
+            raise RuntimeErrorDetail("invalid_config", "A profile agent must be codex or claude")
+        profile_roles = profile.get("roles", roles)
+        runtime_roles.update(profile_roles)
+        if "review" in profile_roles:
+            review_agents.add(agent)
     required = {"git": (2, 42) if "review" in runtime_roles else None, "herdr": None}
     if "coordinator" in runtime_roles or "review" in runtime_roles:
         required["gh"] = None
     if "coordinator" in runtime_roles:
         required["python3"] = (3, 10)
     if "review" in runtime_roles:
-        required.update({"node": (22,), "codex": None})
+        # Each review profile's agent runs the review pair; a host review role with no review profile keeps the Codex default.
+        required.update({"node": (22,), **dict.fromkeys(review_agents or {"codex"})})
     tracker = config.get("tracker", {}).get("kind")
     if "tracker" in runtime_roles and tracker in {"br", "bead"}:
         required[tracker] = None

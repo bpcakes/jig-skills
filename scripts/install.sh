@@ -16,17 +16,6 @@ The Herdr binary must already be installed. Select `herdr` to install only that 
 EOF
 }
 
-is_codex_only_skill() {
-    case "$1" in
-        herdr-orchestrate)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
 find_skill_source() {
     if [ "$1" = "herdr" ]; then
         printf '%s\n' "$herdr_stage/herdr"
@@ -64,7 +53,8 @@ case "$target_agent" in
         restart_message="Restart Codex to pick up new skills."
         ;;
     claude)
-        dest="${CLAUDE_HOME:-$HOME/.claude}/skills"
+        # Claude Code selects its profile with CLAUDE_CONFIG_DIR; CLAUDE_HOME is a legacy override.
+        dest="${CLAUDE_CONFIG_DIR:-${CLAUDE_HOME:-$HOME/.claude}}/skills"
         restart_message="Restart Claude to pick up new skills."
         ;;
     -h|--help)
@@ -115,17 +105,6 @@ if [ "$#" -eq 0 ]; then
     install_all=1
     set -- $(find "$plugins_dir" -path '*/skills/*/SKILL.md' -type f \
         -exec sh -c 'for file do basename "$(dirname "$file")"; done' sh {} + | sort)
-    if [ "$target_agent" = "claude" ]; then
-        filtered=
-        for skill in "$@"; do
-            if is_codex_only_skill "$skill"; then
-                continue
-            fi
-            filtered="$filtered $skill"
-        done
-        # shellcheck disable=SC2086
-        set -- $filtered
-    fi
 fi
 
 # Validate all requested targets before copying or replacing anything.
@@ -137,10 +116,6 @@ for skill in "$@"; do
             ;;
     esac
     if [ "$skill" != "herdr" ]; then find_skill_source "$skill" >/dev/null; fi
-    if [ "$target_agent" = "claude" ] && is_codex_only_skill "$skill"; then
-        printf 'Unsupported for Claude direct install: %s\n' "$skill" >&2
-        exit 1
-    fi
 done
 
 automatic_dependencies=

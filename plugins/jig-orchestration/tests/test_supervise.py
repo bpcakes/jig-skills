@@ -106,6 +106,31 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result["status"], "delivery_unconfirmed")
         self.assertEqual(Engine.read(self.run)["scheduler"]["pending_action_id"], result["wake_id"])
 
+    def test_claude_coordinator_wakes_only_through_its_native_session(self):
+        claude = {"name": "coordinator", "agent": "claude", "pane_id": "w1:p1", "terminal_id": "terminal-1",
+                  "agent_session": {"agent": "claude", "kind": "id", "value": "claude-session-1"}}
+        # Herdr omits agent_session when the coordinator's profile lacks its Claude integration.
+        unregistered = {key: value for key, value in claude.items() if key != "agent_session"}
+        config = json.loads(json.dumps(self.config))
+        config["scheduler"]["agent"] = unregistered
+        with self.assertRaisesRegex(StateError, "agent_session"):
+            Engine.initialize(self.root / "unregistered-run", config)
+        config = json.loads(json.dumps(self.config))
+        config["scheduler"]["agent"] = claude
+        run = self.root / "claude-run"
+        Engine.initialize(run, config)
+        with patch.object(runtime, "herdr_call", return_value=self.response(identity=claude)) as call:
+            result = runtime.tick(run, self.now)
+        self.assertEqual(result["status"], "delivered")
+        self.assertEqual(call.call_args.args[1][:3], ["agent", "prompt", "w1:p1"])
+        self.assertIn("claude-session-1", call.call_args.args[1][3])
+        runtime.complete(run, result["wake_id"], self.now)
+        with patch.object(runtime, "herdr_call", return_value=self.response(identity=unregistered)) as call:
+            result = runtime.tick(run, self.now + timedelta(seconds=120))
+        self.assertEqual(result["status"], "endpoint_unavailable")
+        self.assertEqual(call.call_count, 1)
+        self.assertIsNone(Engine.read(run)["scheduler"].get("pending_action_id"))
+
     def malformed_responses(self):
         for value in (None, [], "unexpected", 1, True):
             yield "response", value, value
@@ -1372,6 +1397,59 @@ class RuntimeTests(unittest.TestCase):
                 self.assertFalse(result["local_inventory_ok"])
                 self.assertEqual(result["missing_role_skills"], ["panel-review"])
                 paths["panel-review"] = missing
+
+    def test_review_profiles_require_their_own_agent_cli(self):
+        def review_profile(name, agent=None):
+            home = self.root / name
+            profile = {"id": name, "agent_home": str(home), "roles": ["review"], "skill_paths": {}}
+            if agent is not None:
+                profile["agent"] = agent
+            for skill in ("panel-review", "review-fix-loop"):
+                directory = home / "skills" / skill
+                directory.mkdir(parents=True)
+                (directory / "SKILL.md").write_text("---\nname: " + skill + "\n---\n")
+                profile["skill_paths"][skill] = str(directory)
+            return profile
+        claude, codex = review_profile("claude-review", "claude"), review_profile("codex-review")
+        # The documented layout puts roles on the host and lets the profile inherit them.
+        inherited_claude = {key: value for key, value in claude.items() if key != "roles"}
+        host = self.config["hosts"]["local"]
+        versions = {"git": "2.42.0", "herdr": "1.0.0", "gh": "2.0.0", "node": "22.0.0",
+                    "claude": "2.1.0", "codex": "1.0.0"}
+        for name, host_roles, profiles, absent, failures in (
+                ("claude-without-codex", [], [claude], {"codex"}, set()),
+                ("claude-missing", [], [claude], {"claude"}, {"claude"}),
+                ("each-review-agent", [], [claude, codex], {"codex"}, {"codex"}),
+                ("inherited-claude-role", ["review"], [inherited_claude], {"codex"}, set())):
+            with self.subTest(name=name):
+                binary_dir = self.root / name
+                binary_dir.mkdir()
+                for tool, version in versions.items():
+                    if tool not in absent:
+                        executable = binary_dir / tool
+                        executable.write_text(f"#!/bin/sh\necho '{tool} {version}'\n")
+                        executable.chmod(0o700)
+                host.update(roles=host_roles, profiles=profiles)
+                with patch.dict(os.environ, {"PATH": str(binary_dir)}):
+                    result = runtime.preflight(self.config, "local")
+                checked = {item["tool"] for item in result["tools"]}
+                self.assertEqual({item["tool"] for item in result["tools"] if not item["ok"]}, failures)
+                self.assertEqual(result["local_inventory_ok"], not failures)
+                self.assertIn("claude", checked)
+                self.assertEqual("codex" in checked, codex in profiles)
+        # A host review role with no review profile keeps the previous Codex requirement.
+        host.update(roles=["review"], profiles=[])
+        with patch.dict(os.environ, {"PATH": str(self.root / "claude-without-codex")}):
+            result = runtime.preflight(self.config, "local")
+        checked = {item["tool"] for item in result["tools"]}
+        self.assertIn("codex", checked)
+        self.assertNotIn("claude", checked)
+        self.assertFalse(result["local_inventory_ok"])
+        for agent in ("cursor", ["claude"], None):
+            with self.subTest(agent=agent):
+                host["profiles"] = [{**claude, "agent": agent}]
+                with self.assertRaisesRegex(runtime.RuntimeErrorDetail, "codex or claude"):
+                    runtime.preflight(self.config, "local")
 
     def test_review_pair_cannot_be_split_across_profiles(self):
         profiles = []
