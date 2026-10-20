@@ -160,26 +160,26 @@ test("a differing dependency cannot leave a newly installed loop behind", (t) =>
   assert.equal(existsSync(path.join(destination, "review-fix-loop")), false);
 });
 
-test("all-skills installs include the review pair for both hosts and filter Claude orchestration skills", (t) => {
-  const { destination, install } = fixture(t);
+test("all-skills installs include the review pair and orchestration for both hosts", (t) => {
+  const { destination, install, env } = fixture(t);
   const codex = install();
   assert.equal(codex.status, 0, codex.stderr);
   assertInstalledParser(destination);
+  assert.equal(existsSync(path.join(destination, "herdr-orchestrate/SKILL.md")), true);
   const claudeDestination = path.join(destination, "claude-skills");
-  const claude = spawnSync("sh", [installer, "claude", "--dest", claudeDestination], { encoding: "utf8" });
+  const claude = spawnSync("sh", [installer, "claude", "--dest", claudeDestination], { encoding: "utf8", env });
   assert.equal(claude.status, 0, claude.stderr);
   assertInstalledParser(claudeDestination);
-  assert.equal(existsSync(path.join(claudeDestination, "panel-review/references/claude-code-host.md")), true);
-  assert.equal(existsSync(path.join(claudeDestination, "herdr-orchestrate")), false);
-  assert.equal(existsSync(path.join(claudeDestination, "rust-error-handling-review/SKILL.md")), true);
+  for (const relative of ["panel-review/references/claude-code-host.md", "herdr-orchestrate/references/claude-code-host.md",
+    "rust-error-handling-review/SKILL.md"]) {
+    assert.equal(existsSync(path.join(claudeDestination, relative)), true, relative);
+  }
+  assert.equal(readFileSync(path.join(claudeDestination, "herdr/SKILL.md"), "utf8"), herdrSkill);
   // Selecting either review entrypoint for Claude installs the pair.
   const loopDestination = path.join(destination, "claude-loop");
-  const loop = spawnSync("sh", [installer, "claude", "--dest", loopDestination, "review-fix-loop"], { encoding: "utf8" });
+  const loop = spawnSync("sh", [installer, "claude", "--dest", loopDestination, "review-fix-loop"], { encoding: "utf8", env });
   assert.equal(loop.status, 0, loop.stderr);
   assertInstalledParser(loopDestination);
-  const rejected = spawnSync("sh", [installer, "claude", "--dest", claudeDestination, "herdr-orchestrate"], { encoding: "utf8" });
-  assert.equal(rejected.status, 1);
-  assert.match(rejected.stderr, /Unsupported for Claude direct install: herdr-orchestrate/);
 });
 
 test("orchestration installation includes both usable review entrypoints and its complete helper directory", t => {
@@ -243,12 +243,18 @@ test("force replacing orchestration preserves matching automatic review copies",
   }
 });
 
-test("orchestration is rejected for Claude before unrelated requested skills change", t => {
-  const { destination } = fixture(t);
-  const result = spawnSync("sh", [installer, "claude", "--dest", destination, "rust-error-handling-review", "herdr-orchestrate"], { encoding: "utf8" });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /Unsupported for Claude direct install: herdr-orchestrate/);
-  assert.equal(existsSync(destination), false);
+test("Claude orchestration installation includes the review pair, Herdr skill, and host references", t => {
+  const { destination, herdrLog, env } = fixture(t);
+  const result = spawnSync("sh", [installer, "claude", "--dest", destination, "rust-error-handling-review", "herdr-orchestrate"], { encoding: "utf8", env });
+  assert.equal(result.status, 0, result.stderr);
+  assertInstalledParser(destination);
+  assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), herdrSkill);
+  assert.equal(readFileSync(herdrLog, "utf8"), "--skill\n");
+  for (const relative of ["herdr-orchestrate/SKILL.md", "herdr-orchestrate/scripts/supervise.py",
+    "herdr-orchestrate/references/claude-code-host.md", "panel-review/references/claude-code-host.md",
+    "rust-error-handling-review/SKILL.md"]) {
+    assert.equal(existsSync(path.join(destination, relative)), true, relative);
+  }
 });
 
 test("explicit destination provisions only the selected orchestration profile", t => {
@@ -275,6 +281,26 @@ test("orchestration default destination follows the selected CODEX_HOME", t => {
   assert.equal(existsSync(path.join(profileHome, "skills/herdr-orchestrate/SKILL.md")), true);
   assert.equal(readFileSync(path.join(profileHome, "skills/herdr/SKILL.md"), "utf8"), herdrSkill);
   assertInstalledParser(path.join(profileHome, "skills"));
+});
+
+test("Claude default destination follows CLAUDE_CONFIG_DIR, then the legacy CLAUDE_HOME", t => {
+  const { destination, env } = fixture(t);
+  const profile = path.join(path.dirname(destination), "selected claude profile");
+  const legacy = path.join(path.dirname(destination), "legacy claude home");
+  const selected = spawnSync("sh", [installer, "claude", "herdr-orchestrate"], {
+    encoding: "utf8", env: { ...env, CLAUDE_CONFIG_DIR: profile, CLAUDE_HOME: legacy },
+  });
+  assert.equal(selected.status, 0, selected.stderr);
+  assert.equal(existsSync(legacy), false);
+  assert.equal(existsSync(path.join(profile, "skills/herdr-orchestrate/SKILL.md")), true);
+  assert.equal(readFileSync(path.join(profile, "skills/herdr/SKILL.md"), "utf8"), herdrSkill);
+  assertInstalledParser(path.join(profile, "skills"));
+  // Never fall through to the developer's real profile.
+  const legacyEnv = { ...env, CLAUDE_HOME: legacy };
+  delete legacyEnv.CLAUDE_CONFIG_DIR;
+  const fallback = spawnSync("sh", [installer, "claude", "rust-simplify"], { encoding: "utf8", env: legacyEnv });
+  assert.equal(fallback.status, 0, fallback.stderr);
+  assert.equal(existsSync(path.join(legacy, "skills/rust-simplify/SKILL.md")), true);
 });
 
 test("Herdr alone supports plugin setup without copying the orchestration or review skills", t => {
@@ -377,12 +403,15 @@ test("a missing Herdr binary fails explicit installation but only skips orchestr
   assertInstalledParser(destination);
 });
 
-test("unrelated selections and Claude bulk installation never invoke Herdr", t => {
+test("unrelated selections never invoke Herdr, and Claude bulk installation only exports its skill", t => {
   const { destination, install, herdrLog, env } = fixture(t);
   assert.equal(install("review-fix-loop").status, 0);
-  const result = spawnSync("sh", [installer, "claude", "--dest", path.join(destination, "claude")], { encoding: "utf8", env });
-  assert.equal(result.status, 0, result.stderr);
+  const unrelated = spawnSync("sh", [installer, "claude", "--dest", path.join(destination, "claude"), "rust-simplify"], { encoding: "utf8", env });
+  assert.equal(unrelated.status, 0, unrelated.stderr);
   assert.equal(existsSync(herdrLog), false);
+  const result = spawnSync("sh", [installer, "claude", "--dest", path.join(destination, "claude-all")], { encoding: "utf8", env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(herdrLog, "utf8"), "--skill\n");
 });
 
 test("all-skills installs skip an incompatible loop and preserve existing copies", async (t) => {
