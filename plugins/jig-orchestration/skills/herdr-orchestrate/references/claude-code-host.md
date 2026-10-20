@@ -4,7 +4,7 @@ Read this when the coordinator or a task driver runs in Claude Code. It covers o
 
 ## Profiles and installation
 
-A Claude Code profile is the `CLAUDE_CONFIG_DIR` in effect when Claude starts, or `~/.claude` when it is unset. Record that directory as the profile's `agent_home` and set the profile's `agent` to `claude`; [preflight](runtime.md#initialize-and-inspect) then requires the `claude` CLI instead of Codex for a review role. `herdr agent start --kind claude` starts Claude from the pane's shell, so that shell's environment selects the profile.
+A Claude Code profile is the `CLAUDE_CONFIG_DIR` in effect when Claude starts, or `~/.claude` when it is unset. Record that directory as the profile's `agent_home` and set the profile's `agent` to `claude`; for a review role, [preflight](runtime.md#initialize-and-inspect) then requires the `claude` CLI rather than `codex` as the agent that drives review. Preflight checks external reviewer CLIs separately, from the host's `reviewers`. Under the review pair's Claude Code defaults, panel review and the review-fix loop's strict policy still run Codex, so a driver using either needs the Codex CLI and its authentication, with `codex` in `reviewers`; the balanced policy's two Claude reviews need no Codex. `herdr agent start --kind claude` starts Claude from the pane's shell, so that shell's environment selects the profile.
 
 Direct installation into a profile is `scripts/install.sh claude --dest "<profile>/skills" herdr-orchestrate`. Marketplace skills are under the profile's versioned plugin cache, `<profile>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`. Record those directories in `skill_paths`, and refresh them and any pinned hashes after a plugin update.
 
