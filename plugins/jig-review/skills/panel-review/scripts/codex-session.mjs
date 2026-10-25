@@ -106,14 +106,22 @@ function mcpOverrides(names) {
 // "- `rN` = `absolute root`" lines. Anything else is unrecognized: an entry
 // that cannot be resolved cannot be disabled, so it must fail isolation rather
 // than pass as "no ambient skills".
-const SKILL_ROOTS_HEADING = "### Skill roots";
-const SKILL_LIST_HEADING = "### Available skills";
 function listedSkills(text) {
+  // General instructions also mention the skill headings and file syntax.
+  // Only the bounded skills block describes what Codex actually loaded.
+  const blocks = [...text.matchAll(/^<skills_instructions>\r?\n([\s\S]*?)^<\/skills_instructions>\r?$/gm)];
+  if (blocks.length !== 1) return { files: [], unrecognized: ["expected one skills instructions section"] };
+  const section = blocks[0][1];
+  const heading = /^### Available skills\r?$/m.exec(section);
+  if (!heading) return { files: [], unrecognized: ["no available skills list"] };
+  const rootsSection = section.slice(0, heading.index);
+  if (!/^### Skill roots\r?$/m.test(rootsSection)) return { files: [], unrecognized: ["no skill roots table"] };
+  const list = section.slice(heading.index + heading[0].length);
   const roots = new Map();
-  for (const match of text.matchAll(/^- `(r\d+)` = `(.+)`$/gm)) roots.set(match[1], match[2]);
+  for (const match of rootsSection.matchAll(/^- `(r\d+)` = `(.+)`\r?$/gm)) roots.set(match[1], match[2]);
   const files = [];
   const unrecognized = [];
-  for (const match of text.matchAll(/\(file: ([^)]+)\)/g)) {
+  for (const match of list.matchAll(/\(file: ([^)]+)\)/g)) {
     const reference = match[1];
     const rooted = /^(r\d+)\/(.+)$/.exec(reference);
     if (rooted && roots.has(rooted[1])) files.push(path.join(roots.get(rooted[1]), rooted[2]));
@@ -121,15 +129,9 @@ function listedSkills(text) {
     else unrecognized.push(reference);
   }
   // Every entry under the skill list must carry a file reference.
-  const listStart = text.indexOf(SKILL_LIST_HEADING);
-  if (listStart >= 0) {
-    const listEnd = text.indexOf("</skills_instructions>", listStart);
-    const section = text.slice(listStart + SKILL_LIST_HEADING.length, listEnd >= 0 ? listEnd : undefined);
-    for (const line of section.split("\n")) {
-      if (line.startsWith("- ") && !/\(file: [^)]+\)/.test(line)) unrecognized.push(line.trim());
-    }
+  for (const line of list.split("\n")) {
+    if (line.startsWith("- ") && !/\(file: [^)]+\)/.test(line)) unrecognized.push(line.trim());
   }
-  if (!text.includes(SKILL_ROOTS_HEADING)) unrecognized.push("no skill roots table");
   return { files, unrecognized };
 }
 

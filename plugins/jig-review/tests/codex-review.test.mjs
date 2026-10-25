@@ -441,11 +441,48 @@ test("rendered prompts are parsed into absolute skill paths, ambient skills, and
     "- orphan: O (file: r9/orphan/SKILL.md)", "- relative: R (file: skills/relative/SKILL.md)", "- bare: B has no file reference", "</skills_instructions>",
   ].join("\n");
   assert.deepEqual(listedSkills(odd).unrecognized, ["r9/orphan/SKILL.md", "skills/relative/SKILL.md", "- bare: B has no file reference"]);
-  assert.deepEqual(listedSkills("no skills section at all").unrecognized, ["no skill roots table"]);
+  assert.deepEqual(listedSkills("no skills section at all").unrecognized, ["expected one skills instructions section"]);
   assert.equal(instructionsLoaded("# AGENTS.md instructions for /srv/repo\n<INSTRUCTIONS>x</INSTRUCTIONS>"), true);
   assert.equal(instructionsLoaded("no instructions here"), false);
   assert.deepEqual(isolationOverrides([]), ["-c", "project_doc_max_bytes=0", "-c", "skills.config=[]"], "the list always replaces a configured one");
   assert.deepEqual(isolationOverrides(["/b/SKILL.md", "/a/SKILL.md", "/a/SKILL.md"]), ["-c", "project_doc_max_bytes=0", "-c", 'skills.config=[{path="/a/SKILL.md",enabled=false},{path="/b/SKILL.md",enabled=false}]']);
+});
+
+test("skill parsing ignores headings and file examples outside the skills instruction block", () => {
+  const text = [
+    'Available skills will be listed in the "## Skills" section under "### Available skills".',
+    "- Plugin guidance is not a skill entry.",
+    "### Skill roots", "- `r0` = `/example/before`", "### Available skills",
+    "- example: example reference (file: r9/example/SKILL.md)",
+    "<skills_instructions>",
+    'The list below is headed "### Available skills".',
+    "### Skill roots", "- `r0` = `/home/u/.agents/skills`", "- `r1` = `/tmp/private/skills/.system`",
+    "### Available skills", "- user: U (file: r0/user/SKILL.md)", "- sys: S (file: r1/sys/SKILL.md)",
+    "</skills_instructions>",
+    "### Skill roots", "- `r0` = `/example/after`", "### Available skills",
+    "- another example (file: /example/after/SKILL.md)",
+  ].join("\n");
+  for (const prompt of [text, text.replaceAll("\n", "\r\n")]) {
+    assert.deepEqual(listedSkills(prompt), {
+      files: ["/home/u/.agents/skills/user/SKILL.md", "/tmp/private/skills/.system/sys/SKILL.md"],
+      unrecognized: [],
+    });
+    assert.deepEqual(ambientSkills(prompt, "/tmp/private"), ["/home/u/.agents/skills/user/SKILL.md"]);
+  }
+});
+
+test("skill parsing rejects incomplete or ambiguous catalog boundaries", () => {
+  const block = [
+    "<skills_instructions>", "### Skill roots", "- `r0` = `/home/u/.agents/skills`",
+    "### Available skills", "- user: U (file: r0/user/SKILL.md)", "</skills_instructions>",
+  ].join("\n");
+  for (const prompt of [
+    block.replace("<skills_instructions>\n", ""),
+    block.replace("\n</skills_instructions>", ""),
+    `${block}\n${block}`,
+  ]) assert.deepEqual(listedSkills(prompt).unrecognized, ["expected one skills instructions section"]);
+  assert.deepEqual(listedSkills(block.replace("### Available skills", 'A reference to "### Available skills".')).unrecognized, ["no available skills list"]);
+  assert.deepEqual(listedSkills(block.replace("### Skill roots", 'A reference to "### Skill roots".')).unrecognized, ["no skill roots table"]);
 });
 
 test("the reviewer's configuration keeps model settings and drops project trust and instruction files", () => {
@@ -576,7 +613,9 @@ test("the installed Codex CLI loads the selected configuration without ambient i
   const repo = realpathSync(f.repo);
   writeFileSync(path.join(repo, ".codex", "config.toml"), '[mcp_servers.repo_probe]\ncommand = "repo-probe-server"\n');
   writeFileSync(path.join(f.sourceHome, "config.toml"), [
-    'model = "probe-model"', 'developer_instructions = "PROBE_CONFIG_INSTRUCTIONS"', "[mcp_servers.probe_mail]", 'command = "probe-mail-server"',
+    // Use Codex's default model: an unknown dummy model omits its general
+    // instructions, which can mention skill headings before the real list.
+    'developer_instructions = "PROBE_CONFIG_INSTRUCTIONS"', "[mcp_servers.probe_mail]", 'command = "probe-mail-server"',
     `[projects.${JSON.stringify(repo)}]`, 'trust_level = "trusted"', "",
   ].join("\n"));
   const privateHome = path.join(f.scratch, "private-home"); mkdirSync(privateHome, { mode: 0o700 });
