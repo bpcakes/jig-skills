@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Local orchestration state commands and a guarded Herdr wake-up process.
 
-No command installs software, launches task workers, or executes a merge. The
-state helper records authority and evidence; the skill's driver performs gates.
+The execute command runs explicitly configured task adapters. The state helper
+records authority and evidence; adapters and drivers perform external gates.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import sys
 import time
 import uuid
 
-from state import Engine, StateError, host_roles, scheduler_deadline, scheduler_identity, scheduler_seconds
+from state import Engine, StateError, canonical, host_roles, scheduler_deadline, scheduler_identity, scheduler_seconds, task_complete
 
 MAX_INPUT = 1024 * 1024
 MAX_JSON_DEPTH = 64
@@ -625,6 +625,49 @@ def preflight(config, host_id):
             "note": "Inventory only on the current machine; this does not admit a host or prove authentication"}
 
 
+def task_view(run_dir, task_id, caller="coordinator"):
+    state = Engine.read(run_dir)
+    task = state["tasks"].get(task_id)
+    if caller != "coordinator":
+        actor = state["config"].get("actors", {}).get(caller, {})
+        if actor.get("helper_route") is not True or task_id not in actor.get("task_ids", []):
+            raise RuntimeErrorDetail("wrong_task", "Caller is not assigned this task")
+        if task is not None and (task["driver"] != caller or task["host"] != actor["host"]):
+            raise RuntimeErrorDetail("wrong_task", "Caller does not drive this task on its registered host")
+    view = {"controls": state["controls"], "task": task, "staging": state["staging"]}
+    if task:
+        host = task["host"]
+        limits = state["config"].get("limits", [])
+        family = Engine._family_counters(state, task)
+        view["conditions"] = {
+            "authority": state["config"]["authority"], "limits": limits,
+            "launch_cutoff": state["config"].get("launch_cutoff"),
+            "family_counters": {limit["unit"]: family.get(limit["unit"], 0) for limit in limits if limit["scope"] == "task"},
+            "run_counters": {limit["unit"]: state["counters"].get(limit["unit"], 0) for limit in limits if limit["scope"] == "run"},
+            "adapters": {name: hashlib.sha256(canonical(adapter).encode()).hexdigest()
+                         for name, adapter in state["config"].get("adapters", {}).items() if adapter["host"] == host},
+            "host_slots": state["config"]["hosts"][host]["slots"],
+            "occupied_slots": sum(t["host"] == host and t["slot"] is not None for t in state["tasks"].values()),
+            "prerequisites": {key: task_complete(state["tasks"].get(key, {})) for key in task.get("recovery_dependencies", [])},
+        }
+    # Scheduler ticks/config revisions alone do not wake a waiting driver.
+    token = hashlib.sha256(canonical(view).encode()).hexdigest()
+    return {**view, "policy_version": state["policy_version"], "change_token": token}
+
+
+def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator"):
+    if not isinstance(after, str) or type(timeout_seconds) not in {int, float} or not 0 <= timeout_seconds <= 30:
+        raise RuntimeErrorDetail("invalid_input", "watch requires a change token and a timeout between zero and 30 seconds")
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        view = task_view(run_dir, task_id, caller)
+        changed = view["change_token"] != after
+        remaining = deadline - time.monotonic()
+        if changed or remaining <= 0:
+            return {**view, "changed": changed}
+        time.sleep(min(0.25, remaining))
+
+
 def serve(run_dir, caller, request):
     # Pin caller and run-dir in an authorized_keys forced command, with restrict.
     if os.environ.get("SSH_ORIGINAL_COMMAND", ""):
@@ -636,14 +679,9 @@ def serve(run_dir, caller, request):
     if caller == "coordinator" or not actor or actor.get("helper_route") is not True:
         raise RuntimeErrorDetail("unknown_caller", "Only a registered restricted worker route may serve requests")
     if request.get("op") == "query":
-        task_id = request.get("task_id")
-        if task_id not in actor.get("task_ids", []):
-            raise RuntimeErrorDetail("wrong_task", "Caller is not assigned this task")
-        task = state["tasks"].get(task_id)
-        if task is not None and (task["driver"] != caller or task["host"] != actor["host"]):
-            raise RuntimeErrorDetail("wrong_task", "Caller does not drive this task on its registered host")
-        return {"policy_version": state["policy_version"], "controls": state["controls"],
-                "task": task, "staging": state["staging"]}
+        return task_view(run_dir, request.get("task_id"), caller)
+    if request.get("op") == "watch":
+        return watch_task(run_dir, request.get("task_id"), request.get("after"), request.get("timeout_seconds", 30), caller)
     if request.get("op") == "action":
         record = Engine.action(run_dir, request["action_id"])
         if record is None:
@@ -652,20 +690,27 @@ def serve(run_dir, caller, request):
         if record.get("caller") != caller:
             raise RuntimeErrorDetail("wrong_caller", "Action belongs to another caller")
         return record
+    if request.get("op") == "execute":
+        from execute import execute
+        return execute(run_dir, request, caller)
     return Engine.apply(run_dir, request, caller=caller)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "status", "apply", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
+    for name in ("init", "status", "watch", "apply", "execute", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
         child = sub.add_parser(name)
         child.add_argument("--run-dir", required=True)
         if name == "init":
             child.add_argument("--config", required=True)
         elif name == "status":
             child.add_argument("--task")
-        elif name == "apply":
+        elif name == "watch":
+            child.add_argument("--task", required=True)
+            child.add_argument("--after", required=True)
+            child.add_argument("--timeout-seconds", type=float, default=30)
+        elif name in {"apply", "execute"}:
             child.add_argument("--request", default="-")
         elif name == "action":
             child.add_argument("--id", required=True)
@@ -693,8 +738,13 @@ def main(argv=None):
     if args.command == "status":
         state = Engine.read(args.run_dir)
         return state["tasks"].get(args.task) if args.task else {**state, "summary": Engine.summary(state)}
+    if args.command == "watch":
+        return watch_task(args.run_dir, args.task, args.after, args.timeout_seconds)
     if args.command == "apply":
         return Engine.apply(args.run_dir, read_json(args.request), caller="coordinator")
+    if args.command == "execute":
+        from execute import execute
+        return execute(args.run_dir, read_json(args.request))
     if args.command == "action":
         return Engine.action(args.run_dir, args.id)
     if args.command == "serve":

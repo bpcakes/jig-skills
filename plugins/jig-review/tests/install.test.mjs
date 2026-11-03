@@ -189,11 +189,14 @@ test("orchestration installation includes both usable review entrypoints and its
   assertInstalledParser(destination);
   assert.equal(readFileSync(path.join(destination, "herdr/SKILL.md"), "utf8"), herdrSkill);
   assert.equal(readFileSync(herdrLog, "utf8"), "--skill\n");
-  for (const relative of ["SKILL.md", "scripts/supervise.py", "scripts/state.py", "references/recovery.md", "references/trackers.md"]) {
+  for (const relative of ["SKILL.md", "scripts/supervise.py", "scripts/state.py", "scripts/execute.py", "references/execution.md", "references/recovery.md", "references/trackers.md"]) {
     assert.equal(existsSync(path.join(destination, "herdr-orchestrate", relative)), true, relative);
   }
   const help = spawnSync("python3", ["-B", path.join(destination, "herdr-orchestrate/scripts/supervise.py"), "--help"], { encoding: "utf8" });
   assert.equal(help.status, 0, help.stderr);
+  const runner = spawnSync("python3", ["-B", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import execute",
+    path.join(destination, "herdr-orchestrate/scripts")], { encoding: "utf8" });
+  assert.equal(runner.status, 0, runner.stderr);
 });
 
 for (const dependency of ["review-fix-loop", "panel-review"]) {

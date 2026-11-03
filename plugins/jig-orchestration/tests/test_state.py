@@ -597,7 +597,7 @@ class EngineTests(unittest.TestCase):
         self.admit()
         req = self.request("reserve", "A", kind="implement", unit="implementation", refs={})
         self.apply("control", control="pause")
-        self.assert_error("stale_policy", Engine.apply, self.run, req)
+        self.assert_error("paused", Engine.apply, self.run, req)
         self.apply("control", control="resume")
         req = self.request("reserve", "A", kind="implement", unit="implementation", refs={})
         self.apply("observe", "A", fields={"next_action": "inspect"}, evidence=self.proof())
@@ -630,8 +630,8 @@ class EngineTests(unittest.TestCase):
         self.apply("delegate", "A", executor="worker-a", actions=["repair"])
         self.apply("control", control="pause")
         self.apply("control", control="resume")
-        rejected()  # Stale policy.
-        self.apply("delegate", "A", executor="worker-a", actions=["repair"])
+        reservation = self.reserve(kind="repair", caller="worker-a")
+        self.settle(reservation["reservation_id"])  # Standing grant survived pause/resume.
         self.apply("recover_session", "A", previous_identity={"native_id": "old"}, identity={"native_id": "new"},
                    evidence={**self.proof(), "previous_session_stopped": True, "replacement_verified": True,
                              "host": "local", "worktree": "/worktrees/A"})
@@ -644,7 +644,7 @@ class EngineTests(unittest.TestCase):
         self.apply("control", control="resume")
         self.reserve(kind="repair")  # Coordinator does not need delegation.
         task = Engine.read(self.run)["tasks"]["A"]
-        self.assertEqual(task["counters"]["source_repair"], 2)
+        self.assertEqual(task["counters"]["source_repair"], 3)
 
     def test_unknown_dispatch_keeps_slot_and_count_until_reconciled(self):
         self.admit()
@@ -663,13 +663,13 @@ class EngineTests(unittest.TestCase):
         self.apply("park", "A", evidence=self.proof(True))
         self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"]["implementation"], 1)
 
-    def test_current_delegation_required_after_policy_change(self):
+    def test_standing_delegation_survives_finish_current(self):
         self.admit()
         reservation = self.reserve()
         self.apply("delegate", "A", executor="worker-a", actions=["implement"])
         self.apply("control", control="finish_current")
-        self.assert_error("authority", self.apply, "intent", "A", caller="worker-a", kind="implement",
-                          reservation_id=reservation["reservation_id"], target={"agent_id": "registered"}, evidence=self.proof())
+        self.apply("intent", "A", caller="worker-a", kind="implement",
+                   reservation_id=reservation["reservation_id"], target={"agent_id": "registered"}, evidence=self.proof())
 
     def test_attempt_limits_survive_successor_and_do_not_block_verification(self):
         self.reset(limits=[{"id": "repairs", "unit": "source_repair", "scope": "task", "max": 1, "enforced": True}])
@@ -920,7 +920,7 @@ class EngineTests(unittest.TestCase):
         self.reserve("A", kind="repair")
 
     def test_delegated_closure_intent_binds_target_and_completion_before_authorization(self):
-        self.admit()
+        self.admit(acceptance_ref="/proof")
         reservation = self.reserve(kind="close")
         self.apply("delegate", "A", executor="worker-a", actions=["close"])
         target = {"authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor"}

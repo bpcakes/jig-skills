@@ -1,6 +1,8 @@
 # Controls and budgets
 
-Keep admission policy, execution pause, and scheduler state separate. Apply control changes through the helper, recording scope/source and a new policy revision. Stale delegations, previous slot reservations, and worker messages cannot authorize a new launch after a control change.
+Keep admission policy, execution pause, and scheduler state separate. Apply control changes through the helper, recording scope/source and a new policy revision. Task operations re-evaluate live restrictions; a stale configuration revision alone does not revoke a standing grant. Previous reservations and worker messages cannot override a current pause, hold, revocation or budget.
+
+Standing grants bind task, driver, host/profile, native identity, checkout, tracker owner and pinned acceptance reference. Driver closure cannot be granted until that reference is nonempty; legacy tasks use coordinator-owned `pin_acceptance` at a settled boundary before renewal. Scheduler changes, slot increases, admission freezes and unrelated task holds preserve them. Pause/resume suspends and restores otherwise-permitted work. Removing an action from run authority removes it from existing standing grants; restoring run authority does not restore that action without a new grant. A coordinator may narrow a grant during a pending action, but cannot expand or replace its executor until reconciliation. A helper route can be revoked while work runs; only the coordinator can then reconcile its issued operations. Other actor/host rebinding still requires settlement. Legacy grants without a binding retain the old policy-version fence until renewed.
 
 ## Work controls
 

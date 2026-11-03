@@ -32,7 +32,7 @@ Use the coordinator-only `recover_session` transition for a verified replacement
 
 Follow registered run IDs and explicit successor relationships. Do not use latest filename or modification time. A missing record makes an observation unknown; it cannot be replaced by nearby successful evidence. Network silence is not termination or a takeover grant. V1 offers no automatic cross-host coordinator failover: a replacement must establish that its predecessor stopped and reconcile unfinished effects.
 
-Persist intent before prompts, claims, merges, deployment, or other external effects. After timeout, query the external result and durable action by ID before retrying. Distinguish command failure, inability to durably record a result, and unknown execution. If durable intent cannot be saved, stop the side effect. Optional diagnostic-log failure should not kill supervision.
+Persist intent before prompts, claims, merges, deployment, or other external effects. After timeout, query the external result and durable action by ID before retrying. For runner-owned actions, resume `execute` with the original action ID: it inspects issued work through the pinned adapter. A coordinator can inspect and settle a worker's issued operation after its route is revoked, but cannot implicitly dispatch that worker's unissued preparation. The adapter inherits the operation lock, so runner loss cannot permit inspection while the original local adapter is still running. Remote/background descendants still require explicit settlement evidence. Distinguish command failure, inability to durably record a result, and unknown execution. If durable intent cannot be saved, stop the side effect. Optional diagnostic-log failure should not kill supervision.
 
 ## Scheduled supervision
 

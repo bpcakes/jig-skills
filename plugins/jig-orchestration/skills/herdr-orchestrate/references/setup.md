@@ -62,7 +62,7 @@ Preflight also records the supported pause boundary and cancellation controls fo
 
 ## Return route and helper authority
 
-Coordinator-to-worker SSH does not prove worker-to-coordinator access. Verify the reverse route separately against isolated state before delegating consequential transitions. Bind caller identity outside the request payload and allow only its assigned task operations. The bundled `serve` command supports a restricted SSH forced-command entry point; [runtime](runtime.md) describes the protocol. Do not give workers the coordinator's unrestricted local `apply` command or arbitrary shell access as a substitute for this boundary.
+Coordinator-to-worker SSH does not prove worker-to-coordinator access. Verify the reverse route separately against isolated state before delegating consequential transitions. Bind caller identity outside the request payload and allow only its assigned task operations. Establish the driver's standing grant at admission so routine stages, including final helper closure, do not wait for the coordinator. The bundled `serve` command supports a restricted SSH forced-command entry point; [runtime](runtime.md) describes the protocol. Do not give workers the coordinator's unrestricted local `apply` command or arbitrary shell access as a substitute for this boundary.
 
 Without a verified return route, record coordinator-mediated transitions: workers can implement/review and leave durable evidence, while the coordinator checks current gates and performs authorized merges/resource transfers. Do not invent a new transport or claim direct progress on that host.
 
@@ -73,3 +73,5 @@ The user can configure conversationally; translate the agreed values into the he
 Record authority for implementation, review, validation, pushes, PR creation, merging, deployment, closure, scheduling, and notifications as applicable. A merge grant does not imply deployment or unrelated cleanup. Preserve exclusions and native approval modes. An authorized alert destination is run-specific; none is inherited from another user's historical workflow.
 
 Retain compact current configuration and task state with external artifact references. Keep full review reports in the controller's own artifacts. The helper is the sole orchestration-state writer; no task or driver edits its JSON files directly. V1 has no automatic cross-host coordinator failover.
+
+For automated transitions, register only adapters whose dispatch and read-only inspection behavior have been verified against disposable targets. Their commands execute on the coordinator host, optionally using an explicit SSH route to the assigned host. Do not expose request-supplied shell commands or unrestricted remote execution. Verify Herdr context/identity and native approval behavior where the adapter controls Herdr. See [execution](execution.md) for the concrete protocol. Active installations are not upgraded by this skill; old grants remain conservative until renewed.

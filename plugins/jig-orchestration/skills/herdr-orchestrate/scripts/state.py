@@ -173,6 +173,39 @@ def read_json(path):
         return json.load(stream)
 
 
+class ExecutionGuard:
+    """Process-local authority held by the runner, never decoded from JSON."""
+
+    def __init__(self, run_dir, operation_id, directory, fd):
+        self.run_dir, self.operation_id = run_dir, operation_id
+        self.directory, self.fd, self.active = directory, fd, True
+
+
+@contextmanager
+def execution_guard(run_dir, operation_id):
+    require(nonempty(operation_id), "identity", "execution requires an operation ID")
+    path = Path(run_dir).absolute()
+    private(path, directory=True)
+    directory = path / ("execution-" + hashlib.sha256(operation_id.encode()).hexdigest())
+    directory.mkdir(mode=0o700, exist_ok=True)
+    private(directory, directory=True)
+    fd = os.open(directory / "lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    guard = None
+    try:
+        private(directory / "lock")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield None
+            return
+        guard = ExecutionGuard(path, operation_id, directory, fd)
+        yield guard
+    finally:
+        if guard:
+            guard.active = False
+        os.close(fd)
+
+
 @contextmanager
 def locked(run_dir, create=False):
     path = Path(run_dir).absolute()
@@ -180,8 +213,9 @@ def locked(run_dir, create=False):
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
     require(path.is_dir(), "missing", "run directory does not exist")
     private(path, directory=True)
-    if (path / "actions").exists():
-        private(path / "actions", directory=True)
+    for name in ("actions", "execution-actions"):
+        if (path / name).exists():
+            private(path / name, directory=True)
     lock = path / "lock"
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
@@ -190,7 +224,9 @@ def locked(run_dir, create=False):
         if (path / "transaction.json").exists():
             transaction = read_json(path / "transaction.json")
             write_atomic(path / "state.json", transaction["state"])
-            write_atomic(path / "actions" / transaction["filename"], transaction["record"])
+            record_directory = transaction.get("record_directory", "actions")
+            require(record_directory in {"actions", "execution-actions"}, "invalid", "invalid journal record directory")
+            write_atomic(path / record_directory / transaction["filename"], transaction["record"])
             (path / "transaction.json").unlink()
             sync_directory(path)
         yield path
@@ -205,6 +241,10 @@ class Engine:
     UNITS = {"implement": "implementation", "repair": "source_repair", "review": "review",
              "validate": "validation", "push": "push", "pr": "pr", "merge": "merge",
              "deploy": "deployment", "close": "closure", "split": "task_split"}
+    # These operations inspect current restrictions inside the transaction. A
+    # changed run configuration is not itself a reason to reject task progress.
+    TASK_OPERATIONS = {"reserve", "settle", "park", "observe", "intent", "outcome", "staging", "close",
+                       "prepare", "dispatch", "finish"}
     SCHEDULER_FIELDS = {
         "enabled", "heartbeat_at", "last_attempt_at", "last_delivered_at", "last_completed_at",
         "next_due_at", "pending_action_id", "delivery_status", "failure", "alerted_failure_id",
@@ -272,6 +312,18 @@ class Engine:
         authority = config.get("authority", [])
         require(isinstance(authority, list) and set(authority) <= Engine.ACTIONS,
                 "invalid", "unsupported authority")
+        adapters = config.get("adapters", {})
+        require(isinstance(adapters, dict), "invalid", "adapters must be an object")
+        for name, adapter in adapters.items():
+            require(nonempty(name) and isinstance(adapter, dict) and adapter.get("kind") in Engine.ACTIONS
+                    and adapter.get("host") in hosts, "invalid", "adapter requires an action kind and registered host")
+            for key in ("argv", "inspect_argv"):
+                argv = adapter.get(key)
+                require(isinstance(argv, list) and argv and all(nonempty(arg) and "\0" not in arg for arg in argv)
+                        and Path(argv[0]).is_absolute(), "invalid", "adapter commands require absolute executable argv arrays")
+            seconds = adapter.get("timeout_seconds", 60)
+            require(type(seconds) in {int, float} and 0 < seconds <= 86400,
+                    "invalid", "adapter timeout must be positive and at most one day")
         for actor, binding in config.get("actors", {}).items():
             require(actor != "coordinator" and nonempty(actor) and binding.get("role") == "driver"
                     and binding.get("host") in hosts and isinstance(binding.get("task_ids"), list)
@@ -321,31 +373,52 @@ class Engine:
             write_atomic(path / "heartbeat.json", {"heartbeat_at": at})
 
     @staticmethod
-    def action(run_dir, action_id):
+    def action(run_dir, action_id, *, runner=False):
         require(nonempty(action_id), "invalid", "action_id must be a nonempty string")
         with locked(run_dir) as path:
             filename = hashlib.sha256(action_id.encode()).hexdigest() + ".json"
-            record = path / "actions" / filename
+            record = path / ("execution-actions" if runner else "actions") / filename
             return read_json(record) if record.exists() else None
 
     @staticmethod
-    def apply(run_dir, request, caller="coordinator"):
+    def apply(run_dir, request, caller="coordinator", *, execution=None):
         require(isinstance(request, dict) and "caller" not in request, "invalid", "caller is transport identity, not request data")
         require(nonempty(request.get("action_id")) and nonempty(request.get("op")), "invalid", "action_id and op are required")
+        internal = execution is not None
+        if internal:
+            require(isinstance(execution, ExecutionGuard) and execution.active
+                    and execution.run_dir == Path(run_dir).absolute()
+                    and execution.operation_id == request.get("operation_id")
+                    and request["op"] in {"dispatch", "finish"},
+                    "execution", "runner transitions require their live process-local execution guard")
         digest = hashlib.sha256(canonical({"caller": caller, "request": request}).encode()).hexdigest()
         filename = hashlib.sha256(request["action_id"].encode()).hexdigest() + ".json"
         with locked(run_dir) as path:
-            record_path = path / "actions" / filename
+            record_directory = "execution-actions" if internal else "actions"
+            if internal:
+                (path / record_directory).mkdir(mode=0o700, exist_ok=True)
+                private(path / record_directory, directory=True)
+            record_path = path / record_directory / filename
             if record_path.exists():
                 record = read_json(record_path)
                 require(record["digest"] == digest, "duplicate", "action ID was already used with different input or caller")
                 return record["result"]
             state = read_json(path / "state.json")
-            require(request.get("expected_policy") == state["policy_version"], "stale_policy", "current policy revision is required")
             task = state["tasks"].get(request.get("task_id"))
+            expected = request.get("expected_policy")
+            task_operation = task is not None and request["op"] in Engine.TASK_OPERATIONS
+            require(type(expected) is int and (1 <= expected <= state["policy_version"] if task_operation
+                    else expected == state["policy_version"]), "stale_policy", "valid policy revision is required")
             if task is not None:
                 require(request.get("expected_task") == task["version"], "stale_task", "current task version is required")
             Engine._authorize(state, request, caller, task)
+            pending = task.get("pending_intent") if task else None
+            if pending and pending.get("execution"):
+                if request["op"] == "dispatch":
+                    require(caller == pending["executor"], "forbidden", "only the prepared executor may issue this operation")
+                    require(internal, "execution", "dispatch runner operations through execute")
+                if request["op"] == "outcome" or (request["op"] == "finish" and pending["execution"]["dispatched_at"]):
+                    require(internal, "execution", "issued runner outcomes require lock-held execution or inspection")
             details = Engine._transition(state, request, caller, task, path)
             state["version"] += 1
             state["updated_at"] = timestamp()
@@ -358,7 +431,8 @@ class Engine:
             record = {"digest": digest, "caller": caller, "request": request, "result": result,
                       "recorded_at": state["updated_at"]}
             # Recovery completes both durable writes; a crash never makes the action replayable.
-            write_atomic(path / "transaction.json", {"state": state, "record": record, "filename": filename})
+            write_atomic(path / "transaction.json", {"state": state, "record": record, "filename": filename,
+                                                    "record_directory": record_directory})
             write_atomic(path / "state.json", state)
             write_atomic(record_path, record)
             (path / "transaction.json").unlink()
@@ -374,7 +448,7 @@ class Engine:
                 "forbidden", "caller has no verified helper route")
         require(task is not None and task["id"] in actor["task_ids"] and task["driver"] == caller
                 and task["host"] == actor["host"], "forbidden", "caller does not drive this task")
-        require(req["op"] in {"reserve", "settle", "park", "observe", "intent", "outcome", "staging"},
+        require(req["op"] in Engine.TASK_OPERATIONS,
                 "forbidden", "operation is coordinator-only")
 
     @staticmethod
@@ -404,9 +478,22 @@ class Engine:
     def _delegated(state, task, caller, kind):
         if caller != "coordinator":
             delegation = task["delegation"] or {}
-            require(delegation.get("executor") == caller and kind in delegation.get("actions", [])
-                    and delegation.get("policy_version") == state["policy_version"],
+            binding = delegation.get("binding")
+            current = (binding == Engine._grant_binding(state, task) if binding is not None
+                       else delegation.get("policy_version") == state["policy_version"])
+            require(delegation.get("executor") == caller and kind in delegation.get("actions", []) and current,
                     "authority", "current delegated action authority is required")
+
+    @staticmethod
+    def _grant_binding(state, task):
+        actor = state["config"].get("actors", {}).get(task["driver"], {})
+        host = state["config"]["hosts"][task["host"]]
+        return copy.deepcopy({
+            **{key: task.get(key) for key in ("id", "driver", "host", "identity", "worktree", "branch", "acceptance_ref")},
+            "owner": task["claim"]["owner"],
+            "actor": {key: actor.get(key) for key in ("role", "host", "helper_route")},
+            "host_binding": {key: value for key, value in host.items() if key != "slots"},
+        })
 
     @staticmethod
     def _claim_transfer(state, task, target, proof):
@@ -470,7 +557,7 @@ class Engine:
         config = state["config"]
         if op == "configure":
             fields = req.get("fields", {})
-            allowed = {"authority", "unfinished_task_cap", "limits", "launch_cutoff", "scope", "hosts", "actors", "scheduler"}
+            allowed = {"authority", "unfinished_task_cap", "limits", "launch_cutoff", "scope", "hosts", "actors", "scheduler", "adapters"}
             require(isinstance(fields, dict) and fields and set(fields) <= allowed,
                     "invalid", "unsupported configuration fields")
             evidence(req.get("evidence"))
@@ -501,7 +588,13 @@ class Engine:
                     new_host = {k: v for k, v in candidate["hosts"][host].items() if k != "slots"}
                     require(old_host == new_host, "unsettled", "park host tasks before changing endpoint/runtime binding")
                     if driver != "coordinator":
-                        require(config["actors"][driver] == candidate["actors"][driver],
+                        old_actor, new_actor = config["actors"][driver], candidate["actors"][driver]
+                        old_binding = {k: v for k, v in old_actor.items() if k != "task_ids"}
+                        new_binding = {k: v for k, v in new_actor.items() if k != "task_ids"}
+                        route_revoked = (new_actor.get("helper_route") is False
+                                         and {k: v for k, v in old_binding.items() if k != "helper_route"}
+                                         == {k: v for k, v in new_binding.items() if k != "helper_route"})
+                        require(old_binding == new_binding or route_revoked,
                                 "unsettled", "settle registered actor work before changing its binding")
             for host, binding in candidate["hosts"].items():
                 occupied = sum(t["host"] == host and t["slot"] is not None for t in state["tasks"].values())
@@ -525,6 +618,14 @@ class Engine:
                 state["scheduler"]["enabled"] = candidate["scheduler"]["enabled"]
                 state["scheduler"]["version"] += 1
             state["config"] = candidate
+            for existing in state["tasks"].values():
+                grant = existing.get("delegation")
+                if grant and "binding" in grant:
+                    # Removing authority is revocation, not a temporary pause:
+                    # adding it back later must not resurrect the old grant.
+                    grant["actions"] = [kind for kind in grant["actions"] if kind in candidate["authority"]]
+                    if grant["binding"] != Engine._grant_binding(state, existing):
+                        existing["delegation"] = None
             state["policy_version"] += 1
             return {"configured": sorted(fields)}
         if op in {"claim_intent", "claim_outcome", "claim_release_intent", "claim_release_outcome"}:
@@ -615,16 +716,22 @@ class Engine:
                 require(req["task_id"] in actor.get("task_ids", []) and actor.get("host") == host,
                         "forbidden", "driver is not registered for task/host")
             require(nonempty(req.get("branch")), "invalid", "task branch is required")
+            require("acceptance_ref" not in req or nonempty(req["acceptance_ref"]),
+                    "closure", "acceptance_ref must be a nonempty contract reference")
             state["tasks"][req["task_id"]] = {
                 "id": req["task_id"], "version": 0, "host": host, "driver": driver,
                 "worktree": worktree, "branch": req["branch"], "claim": claim,
                 "identity": copy.deepcopy(req.get("identity", {})), "phase": "admitted", "parked": True,
+                "acceptance_ref": req.get("acceptance_ref"),
                 "slot": None, "paused": False, "cancel_requested": False, "holds": {},
                 "refs": {}, "counters": {}, "reservations": {}, "pending_intent": None,
                 "delegation": None, "findings": [], "blocker": None, "next_action": None,
                 "merged_prs": {},
                 "budget_root": state.get("task_links", {}).get(req["task_id"], {}).get("budget_root", req["task_id"]),
             }
+            if "actions" in req:
+                Engine._transition(state, {**req, "op": "delegate", "executor": driver}, caller,
+                                   state["tasks"][req["task_id"]], run_dir)
             return {"admitted": req["task_id"]}
         if op == "control":
             control = req.get("control")
@@ -903,17 +1010,112 @@ class Engine:
             if "identity" in fields:
                 require(caller == "coordinator" and not task["reservations"] and not task["pending_intent"],
                         "unsettled", "only coordinator may rebind a settled session identity")
+                if fields["identity"] != task["identity"]:
+                    task["delegation"] = None
             task.update(fields)
             task["last_observation"] = req["evidence"]
             return {"observed": sorted(fields)}
+        if op == "pin_acceptance":
+            require(not task["reservations"] and not task["pending_intent"], "unsettled", "settle task work before pinning acceptance")
+            reference = req.get("acceptance_ref")
+            require(nonempty(reference) and task.get("acceptance_ref") in {None, reference},
+                    "closure", "pin the original contract; an existing acceptance pin cannot be replaced")
+            evidence(req.get("evidence"))
+            if task.get("acceptance_ref") != reference:
+                task["acceptance_ref"] = reference
+                task["delegation"] = None
+            return {"acceptance_ref": reference}
         if op == "delegate":
             executor = req.get("executor")
             require(executor in {"coordinator", task["driver"]}, "forbidden", "executor must be the registered driver or coordinator")
-            actions = req.get("actions", [])
-            require(isinstance(actions, list) and actions and set(actions) <= set(config["authority"]), "authority", "delegation exceeds run authority")
-            require(task["pending_intent"] is None, "uncertain", "reconcile the pending executor before replacing delegation")
-            task["delegation"] = {"executor": executor, "actions": actions, "policy_version": state["policy_version"]}
+            actions = req.get("actions")
+            require(isinstance(actions, list) and set(actions) <= set(config["authority"]), "authority", "delegation needs an explicit action list within run authority")
+            require(executor == "coordinator" or "close" not in actions or nonempty(task.get("acceptance_ref")),
+                    "closure", "pin acceptance before granting driver closure")
+            prior = task.get("delegation") or {}
+            narrowing = (executor == prior.get("executor") and set(actions) <= set(prior.get("actions", []))
+                         and prior.get("binding") == Engine._grant_binding(state, task))
+            require(task["pending_intent"] is None or narrowing, "uncertain", "reconcile pending work before expanding or replacing delegation")
+            task["delegation"] = {"executor": executor, "actions": actions, "policy_version": state["policy_version"],
+                                  "id": prior["id"] if task["pending_intent"] else req["action_id"],
+                                  "binding": Engine._grant_binding(state, task)}
             return {"delegation": task["delegation"]}
+        if op == "prepare":
+            adapter = config.get("adapters", {}).get(req.get("adapter"))
+            require(adapter is not None and adapter["kind"] == req.get("kind") and adapter["host"] == task["host"],
+                    "adapter", "select a configured adapter for this action and host")
+            # Both transitions live in this one journaled transaction. A failed
+            # gate cannot leak a reservation or consume an attempt.
+            reserve = {**req, "op": "reserve", "unit": Engine.UNITS[req["kind"]]}
+            Engine._transition(state, reserve, caller, task, run_dir)
+            intent = {**req, "op": "intent", "reservation_id": req["action_id"]}
+            Engine._transition(state, intent, caller, task, run_dir)
+            task["pending_intent"]["execution"] = {
+                "adapter": req["adapter"], "adapter_binding": copy.deepcopy(adapter),
+                "binding": Engine._grant_binding(state, task), "task_refs": copy.deepcopy(task["refs"]),
+                "refs": copy.deepcopy(req.get("refs", {})), "record_namespace": "execution-actions",
+                "grant_id": (task.get("delegation") or {}).get("id"),
+                "request": copy.deepcopy(intent), "dispatched_at": None,
+            }
+            return {"prepared": req["action_id"], "intent": task["pending_intent"]}
+        if op == "dispatch":
+            pending = task["pending_intent"]
+            require(pending and pending["id"] == req.get("operation_id") and pending.get("execution"),
+                    "identity", "dispatch requires the exact prepared operation")
+            require(caller == pending["executor"], "forbidden", "only the prepared executor may issue this operation")
+            execution, kind = pending["execution"], pending["kind"]
+            require(execution["dispatched_at"] is None, "uncertain", "already issued; inspect the original operation")
+            Engine._active(state, task, kind, launching=True)
+            Engine._delegated(state, task, caller, kind)
+            require(execution["binding"] == Engine._grant_binding(state, task)
+                    and execution.get("task_refs", execution["refs"]) == task["refs"], "identity", "prepared ownership or source binding changed")
+            require(execution["adapter_binding"] == config.get("adapters", {}).get(execution["adapter"]),
+                    "adapter", "prepared adapter changed; reconcile before preparing another operation")
+            if caller != "coordinator":
+                require(execution["grant_id"] == (task.get("delegation") or {}).get("id"),
+                        "authority", "prepared grant was replaced")
+            for limit in config.get("limits", []):
+                if limit["unit"] == Engine.UNITS[kind]:
+                    counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
+                    require(counters.get(limit["unit"], 0) <= limit["max"], "budget", "current limit prevents dispatch")
+            original = execution["request"]
+            if kind == "merge":
+                Engine._merge_gate(state, task, original)
+            elif kind == "close":
+                Engine._close_gate(state, task, original)
+            elif kind == "deploy":
+                require(state["staging"]["owner"] == task["id"]
+                        and state["staging"]["generation"] == pending["target"].get("staging_generation"),
+                        "ownership", "prepared staging ownership changed")
+            execution["dispatched_at"] = timestamp()
+            return {"dispatch": pending}
+        if op == "finish":
+            pending = task["pending_intent"]
+            require(pending and pending["id"] == req.get("operation_id") and pending.get("execution"),
+                    "identity", "finish requires the exact prepared operation")
+            status = req.get("status")
+            execution = pending["execution"]
+            require(execution["dispatched_at"] is not None or status == "not_started", "uncertain",
+                    "an unissued operation can only be settled as not started")
+            receipt = req.get("receipt")
+            evidence(receipt, settled=status != "unknown")
+            if status == "not_started":
+                require(receipt.get("no_effects") is True, "uncertain", "not-started requires evidence of no external effects")
+            result = Engine._transition(state, {**req, "op": "outcome", "intent_id": pending["id"],
+                                               "target": pending["target"]}, caller, task, run_dir)
+            if status != "unknown":
+                Engine._transition(state, {**req, "op": "settle", "reservation_id": pending["id"],
+                                          "refs": execution["request"].get("refs", {}), "evidence": receipt},
+                                   caller, task, run_dir)
+                # Final closure can still be fenced by new authority or a newly
+                # reopened prerequisite. Persist the external result regardless;
+                # reconciliation must never erase a completed side effect.
+                if pending["kind"] == "close" and status == "succeeded":
+                    try:
+                        result.update(Engine._transition(state, {**req, "op": "close"}, caller, task, run_dir))
+                    except StateError as exc:
+                        result["closure_pending"] = {"code": exc.code, "message": str(exc)}
+            return {**result, "operation_id": pending["id"], "receipt": receipt}
         if op == "intent":
             kind = req.get("kind")
             Engine._active(state, task, kind, launching=True)
@@ -991,6 +1193,9 @@ class Engine:
             if pending["kind"] == "split" and status in {"failed", "not_started"}:
                 require(req["receipt"].get("no_effects") is True, "uncertain",
                         "failed creation can be retried only after proving no tasks or dependency edges were created; otherwise reconcile as unknown")
+            if pending["kind"] == "close" and status == "succeeded":
+                require(req["receipt"].get("acceptance_ref") == pending["evidence"].get("acceptance_ref"),
+                        "closure", "closure receipt must match its authorized acceptance contract")
             if status == "unknown":
                 pending["status"] = "unknown"
                 pending["receipt"] = req["receipt"]
@@ -1042,6 +1247,12 @@ class Engine:
             reconciled_close = (last.get("kind") == "close" and last.get("status") == "succeeded"
                                 and req.get("receipt") == last.get("receipt"))
             Engine._active(state, task, "close", reconciling=reconciled_close)
+            if caller != "coordinator":
+                Engine._delegated(state, task, caller, "close")
+                require(reconciled_close and last.get("executor") == caller, "closure",
+                        "driver closure requires its exact successful gated tracker action")
+                require(nonempty(task.get("acceptance_ref")) and task["acceptance_ref"] == last["evidence"].get("acceptance_ref"),
+                        "closure", "driver closure requires its pinned and authorized acceptance contract")
             require(not task.get("recovery_open"), "recovery", "parked recovery is incomplete, not completed acceptance")
             Engine._dependencies_complete(state, task)
             require(not task["reservations"] and not task["pending_intent"] and state["staging"]["owner"] != task["id"],
@@ -1057,6 +1268,8 @@ class Engine:
                     and receipt.get("status") == "closed" and receipt.get("unpublished") is False
                     and receipt.get("criteria_met") is True and nonempty(receipt.get("acceptance_ref")),
                     "closure", "canonical published closure and required acceptance evidence are required")
+            require(not task.get("acceptance_ref") or receipt["acceptance_ref"] == task["acceptance_ref"],
+                    "closure", "closure must preserve the admitted acceptance contract")
             task["phase"] = "closed"
             task["closure"] = receipt
             task["slot"] = None
@@ -1080,10 +1293,7 @@ class Engine:
                 successor = state["tasks"][new_owner]
                 Engine._active(state, successor, "deploy")
                 if caller != "coordinator":
-                    delegation = task["delegation"] or {}
-                    require(delegation.get("executor") == caller and "deploy" in delegation.get("actions", [])
-                            and delegation.get("policy_version") == state["policy_version"],
-                            "authority", "staging grants require current delegated deployment authority")
+                    Engine._delegated(state, task, caller, "deploy")
                 require(nonempty(req.get("purpose")) and nonempty(req.get("release_condition")), "invalid", "staging grant needs purpose and release condition")
             state["staging"] = {"owner": new_owner, "generation": current["generation"] + 1,
                                 "purpose": req.get("purpose"), "release_condition": req.get("release_condition"),
@@ -1146,6 +1356,8 @@ class Engine:
         evidence(proof, settled=True)
         require(proof.get("criteria_met") is True and nonempty(proof.get("acceptance_ref")),
                 "closure", "closure authorization requires completed acceptance evidence")
+        require(not task.get("acceptance_ref") or proof["acceptance_ref"] == task["acceptance_ref"],
+                "closure", "closure must preserve the admitted acceptance contract")
 
     @staticmethod
     def _merge_gate(state, task, req):

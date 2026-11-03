@@ -32,6 +32,8 @@ The designated executor must inspect fresh evidence for all of these:
 
 Persist a delegated action's executor, task/PR, expected head/target, authority revision, evidence references, and hold conditions through the helper. Recheck live gates immediately before the external operation. With the installed GitHub CLI, `gh pr merge <pr> --repo <owner/repo> --match-head-commit <head>` supplies a head guard; also choose the repository's authorized merge strategy/queue behavior. Never use admin bypass to escape a gate.
 
+A configured execution adapter must perform these same fresh external checks before its side effect. Helper preparation or cached evidence never replaces them. The [runner](execution.md) binds the adapter, action, target and source references, and checks current helper authority immediately before issuing it.
+
 A head guard does not atomically pin the target. Use repository up-to-date checks or its required merge queue; where unavailable, disclose the remaining target-update race. Do not alter repository protections. A queued or auto-merge acknowledgement is not a completed merge: verify the final external result before advancing.
 
 For uncertain delivery, inspect the actual PR and action record before retrying. Record the receipt once and notify dependent owners. Driver delegation changes the executor, not the gates; no second full coordinator review is needed. If the helper or current authority is unavailable, pause the irreversible transition while independent authorized checks continue.
@@ -45,3 +47,5 @@ One task can require several PRs. A small independently testable prerequisite ma
 For deployed acceptance, verify actual deployed revision/configuration, the required signed-in journey, and cleanup under deployment authority. Identify concrete product prerequisites separately from harness setup. A whole epic is not a prerequisite when only one verified account or deployed fix is needed. Preserve the acceptance contract when choosing alternate setup.
 
 Use [resource ownership](recovery.md#shared-staging) for staging grants/handoffs. At a handoff choose an eligible journey by configured priority; a blocked preferred journey does not reserve staging against ready work. Identify natural waits early and release exclusive resources only when the contract permits. Merged-but-unaccepted tasks retain ownership and unfinished-task accounting.
+
+Drivers with `close` authority can finish the lifecycle: gated tracker closure, publication verification, settlement, then helper closure using the exact receipt from their successful closure action. The runner combines result recording, settlement and helper closure. Changed authority or a reopened prerequisite can prevent helper closure after the external effect; preserve the published result and report `closure_pending` for reconciliation. Neither free-standing receipts nor a changed acceptance reference permit driver closure.
