@@ -409,6 +409,95 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "closed")
         self.assertEqual(self.effects(), [request["action_id"]])
 
+    def deferred_closure(self):
+        request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
+        self.apply("delegate", "A", executor="worker-a", actions=["close", "validate", "repair"])
+        self.apply("configure", fields={"limits": [
+            {"id": "one-close", "unit": "closure", "scope": "task", "max": 1, "enforced": True}
+        ]}, evidence=self.proof())
+        request["expected_task"] = Engine.read(self.run)["tasks"]["A"]["version"]
+        original = runner.invoke
+        def held(*args):
+            result = original(*args)
+            self.apply("control", "A", control="hold", hold_id="acceptance", reason="inspect", actions=["close"])
+            return result
+        with patch.object(runner, "invoke", side_effect=held):
+            result = self.run_action(request)
+        self.assertEqual(result["closure_pending"]["code"], "held")
+        return request, result
+
+    def reconcile_after_validation(self, caller, legacy=False):
+        request, result = self.deferred_closure()
+        if legacy:
+            state = Engine.read(self.run)
+            task = state["tasks"]["A"]
+            task.pop("closure_outcome")
+            task["last_outcome"].pop("closure_binding")
+            write_atomic(self.run / "state.json", state)
+        self.adapter("validate")
+        validation = self.request("execute", "A", kind="validate", adapter="test", target={"head": "H"},
+                                  refs={}, evidence=self.proof())
+        self.run_action(validation)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["last_outcome"]["kind"], "validate")
+        self.assert_error("held", self.apply, "close", "A", caller=caller, receipt=result["receipt"])
+        self.apply("control", "A", control="unhold", hold_id="acceptance")
+        self.assert_error("budget", self.reserve, kind="close", caller="worker-a")
+        self.assert_error("closure" if caller != "coordinator" else "budget", self.apply, "close", "A", caller=caller,
+                          receipt={**result["receipt"], "ref": "/different-observation"})
+        self.apply("control", control="pause")
+        self.apply("close", "A", caller=caller, receipt=result["receipt"])
+        task = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(task["phase"], "closed")
+        self.assertEqual(task["counters"]["closure"], 1)
+        self.assertEqual(self.effects(), [request["action_id"], validation["action_id"]])
+        self.assertEqual(self.resume(request), result)
+
+    def test_driver_reconciles_closure_after_validation_with_exhausted_budget(self):
+        self.reconcile_after_validation("worker-a")
+
+    def test_coordinator_reconciles_closure_after_validation_with_exhausted_budget(self):
+        self.reconcile_after_validation("coordinator")
+
+    def test_legacy_successful_closure_survives_intervening_validation(self):
+        self.reconcile_after_validation("worker-a", legacy=True)
+
+    def test_coordinator_can_reconcile_closure_after_driver_route_revocation(self):
+        request, result = self.deferred_closure()
+        actors = copy.deepcopy(self.config["actors"])
+        actors["worker-a"]["helper_route"] = False
+        self.apply("configure", fields={"actors": actors}, evidence=self.proof())
+        self.apply("control", "A", control="unhold", hold_id="acceptance")
+        self.apply("control", control="pause")
+        self.apply("close", "A", receipt=result["receipt"])
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "closed")
+        self.assertEqual(self.effects(), [request["action_id"]])
+
+    def test_source_repair_invalidates_previous_closure_evidence(self):
+        _, result = self.deferred_closure()
+        self.adapter("repair")
+        request = self.request("execute", "A", kind="repair", adapter="test", target={"head": "new"},
+                               refs={}, evidence=self.proof())
+        self.run_action(request)
+        self.apply("control", "A", control="unhold", hold_id="acceptance")
+        self.assert_error("closure", self.apply, "close", "A", caller="worker-a", receipt=result["receipt"])
+        self.assert_error("budget", self.apply, "close", "A", receipt=result["receipt"])
+
+    def test_reference_change_invalidates_previous_closure_evidence(self):
+        _, result = self.deferred_closure()
+        self.apply("observe", "A", fields={"refs": {"review_head": "new"}}, evidence=self.proof())
+        self.apply("control", "A", control="unhold", hold_id="acceptance")
+        self.assert_error("closure", self.apply, "close", "A", caller="worker-a", receipt=result["receipt"])
+
+    def test_reopening_invalidates_previous_closure_evidence(self):
+        request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
+        result = self.run_action(request)
+        target = {"authority": "canonical-ref", "owner": "tracker-actor"}
+        intent = self.apply("reopen_intent", "A", target=target, evidence=self.proof())["intent"]
+        self.apply("reopen_outcome", "A", intent_id=intent["id"], target=target, status="succeeded",
+                   receipt={**self.proof(), **target, "task_id": "A", "status": "open", "unpublished": False})
+        self.assert_error("closure", self.apply, "close", "A", caller="worker-a", receipt=result["receipt"])
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "admitted")
+
     def test_legacy_completed_receipt_is_replayed_without_another_effect(self):
         import hashlib
         request = self.start()

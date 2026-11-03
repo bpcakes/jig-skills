@@ -405,6 +405,14 @@ class Engine:
                 return record["result"]
             state = read_json(path / "state.json")
             task = state["tasks"].get(request.get("task_id"))
+            if task is not None and "closure_outcome" not in task:
+                # Retain a pre-upgrade closure before another outcome replaces
+                # last_outcome. An explicit null marks invalidated evidence.
+                last = task.get("last_outcome", {})
+                task["closure_outcome"] = (copy.deepcopy(last)
+                                           if last.get("kind") == "close" and last.get("status") == "succeeded" else None)
+                if task["closure_outcome"] is not None:
+                    task["closure_outcome"].setdefault("closure_binding", Engine._closure_binding(state, task))
             expected = request.get("expected_policy")
             task_operation = task is not None and request["op"] in Engine.TASK_OPERATIONS
             require(type(expected) is int and (1 <= expected <= state["policy_version"] if task_operation
@@ -493,6 +501,15 @@ class Engine:
             "owner": task["claim"]["owner"],
             "actor": {key: actor.get(key) for key in ("role", "host", "helper_route")},
             "host_binding": {key: value for key, value in host.items() if key != "slots"},
+        })
+
+    @staticmethod
+    def _closure_binding(state, task):
+        # Transport configuration can change during coordinator recovery without
+        # changing the candidate that was accepted and closed.
+        return copy.deepcopy({
+            **{key: task.get(key) for key in ("id", "driver", "host", "identity", "worktree", "branch", "acceptance_ref", "refs")},
+            "owner": task["claim"]["owner"],
         })
 
     @staticmethod
@@ -909,6 +926,7 @@ class Engine:
                     task.setdefault("closure_history", []).append(task.pop("closure"))
                     task["phase"] = "admitted"
                     task["acceptance"] = None
+                    task["closure_outcome"] = None
                 task["last_outcome"] = {**pending, "status": status, "receipt": receipt}
                 task["pending_intent"] = None
             return {"reopen_outcome": status}
@@ -933,6 +951,10 @@ class Engine:
                 counters[req["unit"]] = counters.get(req["unit"], 0) + 1
             task["reservations"][req["action_id"]] = {"kind": kind, "unit": req["unit"], "refs": refs,
                                                          "reserved_at": timestamp(), "status": "reserved"}
+            if kind not in {"review", "validate", "close"}:
+                # A new mutation needs fresh acceptance; read-only follow-up
+                # work must not erase an already published tracker closure.
+                task["closure_outcome"] = None
             task["phase"] = kind
             return {"reservation_id": req["action_id"], "slot": task["slot"]}
         if op == "settle":
@@ -1180,6 +1202,10 @@ class Engine:
             task["pending_intent"] = {"id": req["action_id"], "executor": caller, "kind": kind,
                                       "target": req["target"], "evidence": req["evidence"],
                                       "policy_version": state["policy_version"], "status": "pending"}
+            if kind == "close":
+                task["pending_intent"]["closure_binding"] = Engine._closure_binding(state, task)
+            elif kind not in {"review", "validate"}:
+                task["closure_outcome"] = None
             return {"intent": task["pending_intent"]}
         if op == "outcome":
             pending = task["pending_intent"]
@@ -1201,6 +1227,9 @@ class Engine:
                 pending["receipt"] = req["receipt"]
             else:
                 task["last_outcome"] = {**pending, "status": status, "receipt": req["receipt"]}
+                if pending["kind"] == "close" and status == "succeeded":
+                    task["closure_outcome"] = copy.deepcopy(task["last_outcome"])
+                    task["closure_outcome"].setdefault("closure_binding", Engine._closure_binding(state, task))
                 task["pending_intent"] = None
                 if status == "succeeded" and pending["kind"] == "split":
                     target, receipt = pending["target"], req["receipt"]
@@ -1243,9 +1272,10 @@ class Engine:
                     }
             return {"outcome": status}
         if op == "close":
-            last = task.get("last_outcome", {})
+            last = task.get("closure_outcome") or {}
             reconciled_close = (last.get("kind") == "close" and last.get("status") == "succeeded"
-                                and req.get("receipt") == last.get("receipt"))
+                                and req.get("receipt") == last.get("receipt")
+                                and last.get("closure_binding") == Engine._closure_binding(state, task))
             Engine._active(state, task, "close", reconciling=reconciled_close)
             if caller != "coordinator":
                 Engine._delegated(state, task, caller, "close")
@@ -1260,8 +1290,7 @@ class Engine:
             receipt = req.get("receipt", {})
             evidence(receipt)
             if any(limit["unit"] == "closure" for limit in config.get("limits", [])):
-                last = task.get("last_outcome", {})
-                require(last.get("kind") == "close" and last.get("status") == "succeeded",
+                require(reconciled_close,
                         "budget", "counted closure requires the successful reserved tracker action")
             require(receipt.get("authority") == config["tracker"]["authority"]
                     and receipt.get("task_id") == task["id"] and receipt.get("owner") == task["claim"]["owner"]
