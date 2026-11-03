@@ -141,7 +141,7 @@ def execute(run_dir, request, caller="coordinator"):
             return transition(run_dir, caller, task_id, "finish", completion_id,
                               execution=guard, operation_id=operation_id, **result)
         except StateError as exc:
-            if result["status"] == "unknown" or exc.code not in {"evidence", "closure", "identity", "invalid", "uncertain"}:
+            if result["status"] == "unknown" or exc.code in {"stale_policy", "stale_task", "contention"}:
                 raise
             # A normalized result can still fail an action-specific receipt
             # check. Preserve that observation without declaring settlement.

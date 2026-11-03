@@ -455,6 +455,40 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"]["closure"], 1)
         self.assertEqual(self.effects(), [request["action_id"]])
 
+    def test_split_receipt_rejections_are_saved_and_inspected_without_redispatch(self):
+        self.adapter("split")
+        self.admit()
+        self.admit("B")
+        self.apply("observe", "A", fields={"refs": {"run_id": "controller-run"}}, evidence=self.proof())
+        self.apply("recover", "A", decision=fixtures.EngineTests.recovery(self, "split"),
+                   acceptance_ref="original-contract.json", evidence=self.proof(True))
+        target = {"recovery_id": "recovery-1", "authority": "canonical-ref", "parent_task": "A",
+                  "acceptance_ref": "original-contract.json", "children": [
+                      {"key": "prerequisite", "title": "Required fix", "acceptance": "Original requirement"}]}
+        request = self.request("execute", "A", kind="split", adapter="test", target=target,
+                               refs={"run_id": "controller-run"}, evidence=self.proof())
+        original = runner.invoke
+        for index, (child, edges, rejection) in enumerate((
+                ("B", [], "dependency"), ("B", ["B"], "duplicate"), ("C", ["C"], None))):
+            def observed(*args):
+                result = original(*args)
+                result["receipt"].update(children={"prerequisite": child}, blocked_by=edges)
+                return result
+            with patch.object(runner, "invoke", side_effect=observed):
+                result = runner.execute(self.run, request if index == 0 else {
+                    "op": "execute", "action_id": request["action_id"], "task_id": "A"})
+            if rejection:
+                self.assertEqual(result["outcome"], "unknown")
+                self.assertEqual(result["receipt"]["rejection"]["code"], rejection)
+                task = Engine.read(self.run)["tasks"]["A"]
+                self.assertEqual(task["pending_intent"]["status"], "unknown")
+                self.assertEqual(task["pending_intent"]["receipt"], result["receipt"])
+                self.assertTrue(task["reservations"])
+            else:
+                self.assertEqual(result["outcome"], "succeeded")
+                self.assertFalse(Engine.read(self.run)["tasks"]["A"]["reservations"])
+        self.assertEqual(self.effects(), [request["action_id"]])
+
     def test_closure_pending_preserves_success_and_reconciles_without_repeating_effect(self):
         request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
         original = runner.invoke
