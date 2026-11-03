@@ -478,6 +478,131 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
                    target={"head": self.heads["C"]}, evidence=self.proof())
         self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 1)
 
+    def test_reserved_head_change_requires_settlement_without_retry_or_recount(self):
+        self.refresh()
+        reserved = self.reserve("C")
+        before = Engine.read(self.run)["tasks"]["C"]
+        self.git("update-ref", "refs/heads/task/C", self.base_oid)
+        token = None
+        for head in (self.base_oid, self.heads["C"], self.base_oid):
+            request = self.request("intent", "C", kind="review", reservation_id=reserved["reservation_id"],
+                                   target={"head": head}, evidence=self.proof())
+            self.assert_error("integration", supervise.apply_request, self.run, request)
+            self.assertEqual(Engine.read(self.run)["tasks"]["C"], before)
+            view = supervise.task_view(self.run, "C")
+            candidate = view["integration"]["candidates"]["branch"]
+            self.assertEqual(candidate["waiting"]["status"], "head_changed")
+            self.assertIn("settle", candidate["next_action"].lower())
+            if token is not None:
+                self.assertEqual(view["change_token"], token)
+            token = view["change_token"]
+        self.settle(reserved["reservation_id"], "C")
+        self.heads["C"] = self.base_oid
+        replacement = self.reserve("C")
+        self.assertNotEqual(replacement["reservation_id"], reserved["reservation_id"])
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 2)
+        self.assertIsNone(supervise.task_view(self.run, "C")["integration"]["candidates"]["branch"]["waiting"])
+
+    def test_reserved_candidate_change_requires_settlement_even_at_the_same_head(self):
+        for cid in ("branch", "other"):
+            self.apply("candidate", "C", candidate={"id": cid, "ref": "refs/heads/task/C"}, evidence=self.proof())
+        self.refresh()
+        reserved = self.reserve("C", candidate_id="branch")
+        before = Engine.read(self.run)["tasks"]["C"]
+        token = None
+        for _ in range(2):
+            request = self.request("intent", "C", kind="review", candidate_id="other",
+                                   reservation_id=reserved["reservation_id"], target={"head": self.heads["C"]},
+                                   evidence=self.proof())
+            self.assert_error("integration", supervise.apply_request, self.run, request)
+            self.assertEqual(Engine.read(self.run)["tasks"]["C"], before)
+            view = supervise.task_view(self.run, "C")
+            candidate = view["integration"]["candidates"]["other"]
+            self.assertEqual(candidate["waiting"]["status"], "candidate_changed")
+            self.assertIn("settle", candidate["next_action"].lower())
+            if token is not None:
+                self.assertEqual(view["change_token"], token)
+            token = view["change_token"]
+        self.settle(reserved["reservation_id"], "C")
+        self.reserve("C", candidate_id="other")
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 2)
+        self.assertIsNone(supervise.task_view(self.run, "C")["integration"]["candidates"]["other"]["waiting"])
+
+    def test_busy_prepared_stage_preserves_binding_until_explicit_unstarted_settlement(self):
+        self.adapter("review")
+        self.refresh()
+        request = self.request("prepare", "C", kind="review", adapter="fixture",
+                               target={"head": self.heads["C"]}, evidence=self.proof())
+        Engine.apply(self.run, request)
+        before = Engine.read(self.run)["tasks"]["C"]
+        resume = {"op": "execute", "action_id": request["action_id"], "task_id": "C"}
+        self.git("update-ref", "refs/heads/task/C", self.base_oid)
+        with patch.object(integration, "refresh", return_value={"status": "busy"}):
+            self.assert_error("integration", runner.execute, self.run, resume)
+        waiting = supervise.task_view(self.run, "C")["change_token"]
+        self.refresh()
+        view = supervise.task_view(self.run, "C")
+        self.assertNotEqual(view["change_token"], waiting)
+        candidate = view["integration"]["candidates"]["branch"]
+        self.assertEqual(candidate["waiting"]["status"], "head_changed")
+        self.assertIn("settle", candidate["next_action"].lower())
+        self.assert_error("integration", runner.execute, self.run, resume)
+        self.assertEqual(supervise.task_view(self.run, "C")["change_token"], view["change_token"])
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"], before)
+        self.assertFalse((self.base / "effects").exists())
+        self.apply("finish", "C", operation_id=request["action_id"], status="not_started",
+                   receipt={**self.proof(True), "no_effects": True})
+        replacement = self.request("execute", "C", kind="review", adapter="fixture",
+                                   target={"head": self.base_oid}, evidence=self.proof())
+        self.assertEqual(runner.execute(self.run, replacement)["outcome"], "succeeded")
+        self.assertEqual((self.base / "effects").read_text().splitlines(), [replacement["action_id"]])
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 2)
+
+    def test_post_merge_acceptance_runs_with_retired_candidate_and_unavailable_integration(self):
+        merge = self.merge_request()
+        self.assertEqual(runner.execute(self.run, merge, "worker-a")["outcome"], "succeeded")
+        self.adapter("validate")
+        config = Engine.read(self.run)["config"]["integration"]
+        self.apply("configure", fields={"integration": {**config, "source": str(self.base / "missing-source")}},
+                   evidence=self.proof())
+        self.refresh()
+        before = Engine.read(self.run)
+        self.assertFalse(integration.registrations(before)["A"])
+        self.assertEqual(before["tasks"]["A"]["merged_prs"]["42"]["head"], self.heads["A"])
+        self.assertEqual(self.observation("C")["status"], "unknown")
+        request = self.request("execute", "A", kind="validate", adapter="fixture",
+                               target={"head": self.heads["A"]}, evidence=self.proof())
+        self.assert_error("integration", runner.execute, self.run, request, "worker-a")
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"], before["tasks"]["A"]["counters"])
+        scans = Engine.read(self.run)["integration"]["stats"]["scans"]
+        request = self.request("execute", "A", kind="validate", purpose="acceptance", adapter="fixture",
+                               target={"head": self.heads["A"]}, evidence=self.proof())
+        result = supervise.serve(self.run, "worker-a", request)
+        self.assertEqual(result["outcome"], "succeeded")
+        after = Engine.read(self.run)
+        self.assertEqual(after["integration"]["stats"]["scans"], scans)
+        self.assertEqual(after["tasks"]["A"]["counters"], {**before["tasks"]["A"]["counters"], "validation": 1})
+        payload = json.loads((self.base / "effects.requests").read_text().splitlines()[-1])
+        self.assertEqual(payload["purpose"], "acceptance")
+        self.assertIsNone(payload["integration"])
+        self.assertEqual((self.base / "effects").read_text().splitlines(), [merge["action_id"], request["action_id"]])
+
+    def test_acceptance_without_a_recorded_merge_is_rejected_before_counting_or_dispatch(self):
+        self.adapter("validate")
+        self.git("update-ref", "-d", "refs/heads/task/C")
+        self.refresh()
+        before = Engine.read(self.run)
+        request = self.request("execute", "C", kind="validate", purpose="acceptance", adapter="fixture",
+                               target={"head": self.heads["C"]}, evidence=self.proof())
+        with self.assertRaises(integration.StateError) as caught:
+            runner.execute(self.run, request)
+        self.assertEqual(caught.exception.code, "integration")
+        self.assertIn("recorded merge", str(caught.exception))
+        after = Engine.read(self.run)
+        self.assertEqual(after["tasks"]["C"], before["tasks"]["C"])
+        self.assertEqual(after["integration"]["stats"], before["integration"]["stats"])
+        self.assertFalse((self.base / "effects").exists())
+
     def test_busy_waiter_wakes_once_for_changed_head_or_unavailable_candidate(self):
         self.adapter("review")
         for missing in (False, True):

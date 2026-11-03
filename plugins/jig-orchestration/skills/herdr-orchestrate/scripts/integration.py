@@ -116,6 +116,16 @@ def fresh(state):
             <= settings(state["config"])["max_age_seconds"])
 
 
+def stage_waiter(task, request, candidate_id, expected=None):
+    """Keep the counted assignment's identity as well as the rejected request."""
+    if expected is None:
+        expected = task["reservations"].get(request.get("reservation_id"), {}).get("integration")
+    waiter = {"task_id": task["id"], "candidate_id": candidate_id, "head": request["target"]["head"]}
+    if expected is not None:
+        waiter["assignment"] = {key: expected.get(key) for key in ("candidate_id", "head", "configuration")}
+    return waiter
+
+
 def gate(state, task, request, expected=None):
     """Bind a new final stage to fresh evidence without changing review refs."""
     if not gated(state["config"], request):
@@ -144,9 +154,7 @@ def gate(state, task, request, expected=None):
                                            for key in ("candidate_id", "head", "configuration"))
     if reason != "clean" or changed:
         error = StateError("integration", f"Integration {reason if reason != 'clean' else 'changed'} for {cid}; refresh and inspect this candidate before starting the stage")
-        error.integration_waiter = {"task_id": task["id"], "candidate_id": cid, "head": target["head"]}
-        if expected is not None:
-            error.integration_waiter["configuration"] = expected.get("configuration")
+        error.integration_waiter = stage_waiter(task, request, cid, expected)
         if reason == "stale":
             error.integration_waiter["after"] = current.get("checked_at")
         raise error
@@ -240,16 +248,19 @@ def view(state, task_id):
         active = incident.get("active", False)
         outcome = None
         if waiting:
+            bound = waiting.get("assignment", waiting)
             # This is a notification about a completed observation, not an
             # admission check. Clock expiry/global invalidation stays silent;
             # gate() always checks freshness again before starting work.
             if "after" in waiting and current.get("checked_at") == waiting["after"]:
                 outcome = {"status": "pending"}
+            elif bound["candidate_id"] != cid:
+                outcome = {"status": "candidate_changed", "candidate_id": cid}
             elif result.get("status", "unknown") == "unknown":
                 outcome = {"status": "unknown", "reason": result.get("reason") or "not_observed"}
-            elif result.get("head") != waiting["head"]:
+            elif result.get("head") != waiting["head"] or result.get("head") != bound["head"]:
                 outcome = {"status": "head_changed", "head": result.get("head")}
-            elif "configuration" in waiting and waiting["configuration"] != current.get("configuration"):
+            elif "configuration" in bound and bound["configuration"] != current.get("configuration"):
                 outcome = {"status": "policy_changed", "configuration": current.get("configuration")}
             else:
                 outcome = {"status": "ready" if result["status"] == "clean" else "conflicted"}
@@ -260,6 +271,8 @@ def view(state, task_id):
             "policy_changed": "Inspect the changed merge policy and settle the unstarted stage before replacing it.",
             "unknown": "Restore candidate/source access or probe support, then refresh integration evidence.",
         }.get((outcome or {}).get("status"))
+        if waiting and waiting.get("assignment") and outcome["status"] in {"candidate_changed", "head_changed"}:
+            next_action = "Inspect the changed candidate; settle the unstarted stage before replacing its frozen assignment."
         signals[cid] = {"conflict": incident.get("id") if active else None,
                         "waiting": outcome, "overlaps": [] if active else warnings}
         values[cid] = {"status": result.get("status", "unknown"), "head": result.get("head"),
