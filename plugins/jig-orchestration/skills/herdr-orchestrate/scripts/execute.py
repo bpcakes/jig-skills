@@ -137,5 +137,45 @@ def execute(run_dir, request, caller="coordinator"):
         # while that original local process is still capable of an effect.
         result = invoke(directory, execution["adapter_binding"], mode, payload, fd)
         completion_id = operation_id + ("/observe-" + uuid.uuid4().hex if result["status"] == "unknown" else "/complete")
-        return transition(run_dir, caller, task_id, "finish", completion_id,
-                          execution=guard, operation_id=operation_id, **result)
+        try:
+            return transition(run_dir, caller, task_id, "finish", completion_id,
+                              execution=guard, operation_id=operation_id, **result)
+        except StateError as exc:
+            if result["status"] == "unknown" or exc.code not in {"evidence", "closure", "identity", "invalid", "uncertain"}:
+                raise
+            # A normalized result can still fail an action-specific receipt
+            # check. Preserve that observation without declaring settlement.
+            receipt = {"ref": result["receipt"].get("adapter_log", result["receipt"]["ref"]),
+                       "observed_at": timestamp(), "rejected_result": result,
+                       "rejection": {"code": exc.code, "message": str(exc)}}
+            return transition(run_dir, caller, task_id, "finish", operation_id + "/observe-" + uuid.uuid4().hex,
+                              execution=guard, operation_id=operation_id, status="unknown", receipt=receipt)
+
+
+def reconcile(run_dir, request, caller="coordinator"):
+    """Record separately observed settlement when the pinned inspector fails."""
+    require(caller == "coordinator", "forbidden", "external reconciliation is coordinator-only")
+    require("caller" not in request and nonempty(request.get("action_id"))
+            and nonempty(request.get("task_id")), "invalid", "reconciliation requires action_id and task_id")
+    require(request.get("status") in {"succeeded", "failed", "not_started"}, "invalid", "reconciliation requires a terminal status")
+    evidence(request.get("receipt"), settled=True)
+    operation_id, task_id = request["action_id"], request["task_id"]
+    with execution_guard(run_dir, operation_id) as guard:
+        if guard is None:
+            return {"operation_id": operation_id, "status": "busy"}
+        record = Engine.action(run_dir, operation_id)
+        require(record is not None and record["request"]["op"] == "prepare"
+                and record["request"].get("task_id") == task_id, "identity", "reconciliation requires the original prepared operation")
+        completed = Engine.action(run_dir, operation_id + "/complete", runner=True)
+        if completed:
+            original = completed["request"]
+            require(original.get("task_id") == task_id and original.get("operation_id") == operation_id
+                    and original.get("status") == request["status"] and original.get("receipt") == request["receipt"],
+                    "duplicate", "operation already completed with a different receipt")
+            return completed["result"]
+        task = Engine.read(run_dir)["tasks"][task_id]
+        pending = task["pending_intent"]
+        require(pending and pending["id"] == operation_id and pending.get("execution", {}).get("dispatched_at"),
+                "uncertain", "reconciliation requires an issued pending runner operation")
+        return transition(run_dir, caller, task_id, "finish", operation_id + "/complete", execution=guard,
+                          operation_id=operation_id, status=request["status"], receipt=request["receipt"])

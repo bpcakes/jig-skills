@@ -309,6 +309,8 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
             process.kill()
             process.communicate(timeout=5)
             self.assertEqual(self.resume(request)["status"], "busy")
+            self.assertEqual(runner.reconcile(self.run, {"action_id": request["action_id"], "task_id": "A",
+                "status": "not_started", "receipt": {**self.proof(True), "no_effects": True}})["status"], "busy")
             while time.monotonic() < deadline:
                 result = self.resume(request)
                 if result.get("status") != "busy":
@@ -384,9 +386,44 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
             result["receipt"]["acceptance_ref"] = "/other"
             return result
         with patch.object(runner, "invoke", side_effect=changed):
-            self.assert_error("closure", self.run_action, request)
+            result = self.run_action(request)
+        self.assertEqual(result["outcome"], "unknown")
+        self.assertEqual(result["receipt"]["rejection"]["code"], "closure")
         self.assertTrue(Engine.read(self.run)["tasks"]["A"]["reservations"])
         self.assertEqual(self.resume(request)["closed"], "A")
+        self.assertEqual(self.effects(), [request["action_id"]])
+
+    def test_coordinator_reconciles_repeated_invalid_inspector_receipts(self):
+        request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
+        script = self.base / "adapter.py"
+        script.write_text(script.read_text().replace('"acceptance_ref": "/acceptance"', '"acceptance_ref": "/wrong"'))
+        for result in (self.run_action(request), self.resume(request)):
+            self.assertEqual(result["outcome"], "unknown")
+            self.assertEqual(result["receipt"]["rejection"]["code"], "closure")
+            self.assertTrue(Engine.read(self.run)["tasks"]["A"]["reservations"])
+        rejected = result["receipt"]["rejected_result"]["receipt"]
+        recovery = {"op": "reconcile", "action_id": request["action_id"], "task_id": "A", "status": "succeeded",
+                    "receipt": {**rejected, "acceptance_ref": "/acceptance", "ref": str(self.base / "effects")}}
+        self.assert_error("forbidden", runner.reconcile, self.run, recovery, "worker-a")
+        self.assert_error("closure", runner.reconcile, self.run, {**recovery, "receipt": rejected})
+        self.assert_error("unsettled", runner.reconcile, self.run,
+                          {**recovery, "receipt": {**recovery["receipt"], "all_jobs_settled": False}})
+        self.assert_error("uncertain", runner.reconcile, self.run,
+                          {**recovery, "status": "not_started", "receipt": {**recovery["receipt"], "no_effects": False}})
+        self.assert_error("identity", runner.reconcile, self.run, {**recovery, "task_id": "B"})
+        route_request = self.request("reconcile", "A", status="succeeded", receipt=recovery["receipt"])
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": ""}):
+            self.assert_error("forbidden", supervise.serve, self.run, "worker-a", route_request)
+        command = [sys.executable, "-B", str(SCRIPTS / "supervise.py"), "reconcile", "--run-dir", str(self.run)]
+        completed = subprocess.run(command, input=json.dumps(recovery), text=True, capture_output=True,
+                                   env={**os.environ, "SSH_ORIGINAL_COMMAND": ""})
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        fixed = json.loads(completed.stdout)
+        self.assertEqual(fixed["closed"], "A")
+        self.assertEqual(runner.reconcile(self.run, recovery), fixed)
+        self.assertEqual(self.resume(request), fixed)
+        self.assert_error("duplicate", runner.reconcile, self.run,
+                          {**recovery, "receipt": {**recovery["receipt"], "ref": "/another-receipt"}})
         self.assertEqual(self.effects(), [request["action_id"]])
 
     def test_closure_pending_preserves_success_and_reconciles_without_repeating_effect(self):
@@ -460,6 +497,51 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
 
     def test_legacy_successful_closure_survives_intervening_validation(self):
         self.reconcile_after_validation("worker-a", legacy=True)
+
+    def test_legacy_closure_migration_rejects_already_started_repair(self):
+        _, result = self.deferred_closure()
+        self.adapter("repair")
+        request = self.request("execute", "A", kind="repair", adapter="test", target={"head": "new"},
+                               refs={}, evidence=self.proof())
+        Engine.apply(self.run, {**request, "op": "prepare"}, "worker-a")
+        state = Engine.read(self.run)
+        task = state["tasks"]["A"]
+        task.pop("closure_outcome")
+        task["last_outcome"].pop("closure_binding")
+        write_atomic(self.run / "state.json", state)
+        self.resume(request)
+        self.apply("control", "A", control="unhold", hold_id="acceptance")
+        self.assert_error("closure", self.apply, "close", "A", caller="worker-a", receipt=result["receipt"])
+        self.assert_error("budget", self.apply, "close", "A", receipt=result["receipt"])
+        self.apply("control", control="pause")
+        self.assert_error("paused", self.apply, "close", "A", caller="worker-a", receipt=result["receipt"])
+
+    def test_legacy_closure_migration_preserves_original_source_binding(self):
+        _, result = self.deferred_closure()
+        state = Engine.read(self.run)
+        task = state["tasks"]["A"]
+        task.pop("closure_outcome")
+        task["last_outcome"].pop("closure_binding")
+        task["refs"]["review_head"] = "new"
+        write_atomic(self.run / "state.json", state)
+        self.apply("control", "A", control="unhold", hold_id="acceptance")
+        self.assert_error("closure", self.apply, "close", "A", caller="worker-a", receipt=result["receipt"])
+
+    def test_legacy_closure_migration_allows_already_started_validation(self):
+        closure, result = self.deferred_closure()
+        self.adapter("validate")
+        request = self.request("execute", "A", kind="validate", adapter="test", target={"head": "H"},
+                               refs={}, evidence=self.proof())
+        Engine.apply(self.run, {**request, "op": "prepare"}, "worker-a")
+        state = Engine.read(self.run)
+        task = state["tasks"]["A"]
+        task.pop("closure_outcome")
+        task["last_outcome"].pop("closure_binding")
+        write_atomic(self.run / "state.json", state)
+        self.resume(request)
+        self.apply("control", "A", control="unhold", hold_id="acceptance")
+        self.apply("close", "A", caller="worker-a", receipt=result["receipt"])
+        self.assertEqual(self.effects(), [closure["action_id"], request["action_id"]])
 
     def test_coordinator_can_reconcile_closure_after_driver_route_revocation(self):
         request, result = self.deferred_closure()

@@ -407,12 +407,22 @@ class Engine:
             task = state["tasks"].get(request.get("task_id"))
             if task is not None and "closure_outcome" not in task:
                 # Retain a pre-upgrade closure before another outcome replaces
-                # last_outcome. An explicit null marks invalidated evidence.
+                # last_outcome, only if no later mutation has started. An
+                # explicit null marks invalidated evidence.
                 last = task.get("last_outcome", {})
+                readonly = {"review", "validate", "close"}
+                active = [*task["reservations"].values(), task.get("pending_intent") or {}]
+                current = (task["phase"] in readonly | {"closed"}
+                           and all(not work or work.get("kind") in readonly for work in active))
                 task["closure_outcome"] = (copy.deepcopy(last)
-                                           if last.get("kind") == "close" and last.get("status") == "succeeded" else None)
+                                           if current and last.get("kind") == "close" and last.get("status") == "succeeded" else None)
                 if task["closure_outcome"] is not None:
-                    task["closure_outcome"].setdefault("closure_binding", Engine._closure_binding(state, task))
+                    binding = Engine._closure_binding(state, task)
+                    saved = last.get("execution", {})
+                    if saved.get("binding"):
+                        binding = {key: saved["binding"].get(key) for key in binding if key != "refs"}
+                        binding["refs"] = copy.deepcopy(saved.get("task_refs", saved.get("refs", {})))
+                    task["closure_outcome"].setdefault("closure_binding", binding)
             expected = request.get("expected_policy")
             task_operation = task is not None and request["op"] in Engine.TASK_OPERATIONS
             require(type(expected) is int and (1 <= expected <= state["policy_version"] if task_operation

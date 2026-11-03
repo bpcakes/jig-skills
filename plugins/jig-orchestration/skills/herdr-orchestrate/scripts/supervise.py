@@ -699,7 +699,7 @@ def serve(run_dir, caller, request):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "status", "watch", "apply", "execute", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
+    for name in ("init", "status", "watch", "apply", "execute", "reconcile", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
         child = sub.add_parser(name)
         child.add_argument("--run-dir", required=True)
         if name == "init":
@@ -710,7 +710,7 @@ def main(argv=None):
             child.add_argument("--task", required=True)
             child.add_argument("--after", required=True)
             child.add_argument("--timeout-seconds", type=float, default=30)
-        elif name in {"apply", "execute"}:
+        elif name in {"apply", "execute", "reconcile"}:
             child.add_argument("--request", default="-")
         elif name == "action":
             child.add_argument("--id", required=True)
@@ -745,6 +745,9 @@ def main(argv=None):
     if args.command == "execute":
         from execute import execute
         return execute(args.run_dir, read_json(args.request))
+    if args.command == "reconcile":
+        from execute import reconcile
+        return reconcile(args.run_dir, read_json(args.request))
     if args.command == "action":
         return Engine.action(args.run_dir, args.id)
     if args.command == "serve":
