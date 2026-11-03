@@ -413,8 +413,11 @@ class Engine:
             if not isinstance(cid, str) or cid not in candidates or not isinstance(head, str) or not OID.fullmatch(head):
                 return
             waiter = stage_waiter(task, request, cid, expected)
-            state.setdefault("integration", {}).setdefault("waiters", {})[canonical([task["id"], cid])] = {
+            current = state.setdefault("integration", {})
+            current.setdefault("waiters", {})[canonical([task["id"], cid])] = {
                 **waiter, "after": after}
+            stats = current.setdefault("stats", {})
+            stats["blocked_stage_requests"] = stats.get("blocked_stage_requests", 0) + 1
             write_atomic(path / "state.json", state)
 
     @staticmethod

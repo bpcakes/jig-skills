@@ -565,12 +565,52 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
         self.adapter("review")
         self.refresh()
         request = self.request("execute", "C", kind="review", adapter="fixture", target={"head": self.heads["C"]}, evidence=self.proof())
-        with patch.object(integration, "refresh", return_value={"status": "busy"}):
-            self.assert_error("integration", runner.execute, self.run, request)
+        for count, status in enumerate(("busy", "superseded", "timeout", "busy"), 1):
+            with self.subTest(status=status, count=count), patch.object(integration, "refresh", return_value={"status": status}):
+                self.assert_error("integration", runner.execute, self.run, request)
+            self.assertEqual(Engine.read(self.run)["integration"]["stats"]["blocked_stage_requests"], count)
         waiting = supervise.task_view(self.run, "C")["change_token"]
         self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"], {})
         self.refresh()
         self.assertNotEqual(supervise.task_view(self.run, "C")["change_token"], waiting)
+        self.assertEqual(runner.execute(self.run, request)["outcome"], "succeeded")
+        self.assertEqual(Engine.read(self.run)["integration"]["stats"]["blocked_stage_requests"], 4)
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 1)
+
+    def test_timeout_does_not_rescan_routine_worker_updates_but_new_publication_does(self):
+        self.adapter("implement")
+        self.refresh()
+        def routed(op, **fields):
+            return supervise.serve(self.run, "worker-a", self.request(op, "A", **fields))
+        with patch.object(integration, "scan", side_effect=integration.ProbeTimeout()) as scan:
+            self.assertEqual(integration.refresh(self.run)["status"], "timeout")
+            for index in range(2):
+                routed("observe", fields={"next_action": "record " + str(index)}, evidence=self.proof())
+            routed("candidate", candidate={"id": "branch", "ref": "refs/heads/task/A"}, evidence=self.proof())
+            reservation = routed("reserve", kind="implement", unit="implementation")
+            target = {"head": self.heads["A"]}
+            intent = routed("intent", kind="implement", reservation_id=reservation["reservation_id"],
+                            target=target, evidence=self.proof())
+            routed("outcome", intent_id=intent["intent"]["id"], target=target, status="succeeded", receipt=self.proof(True))
+            self.settle(reservation["reservation_id"], "A")
+            request = self.request("execute", "A", kind="implement", adapter="fixture", target=target, evidence=self.proof())
+            self.assertEqual(supervise.serve(self.run, "worker-a", request)["outcome"], "succeeded")
+            self.assertEqual(supervise.serve(self.run, "worker-a", request)["outcome"], "succeeded")
+            self.assertEqual(scan.call_count, 1)
+            self.assertEqual((self.base / "effects").read_text().splitlines(), [request["action_id"]])
+            # New registration still merits an immediate attempt during an outage.
+            routed("candidate", candidate={"id": "second", "ref": "refs/heads/task/C"}, evidence=self.proof())
+            self.assertEqual(scan.call_count, 2)
+            routed("observe", fields={"next_action": "record after timeout"}, evidence=self.proof())
+            self.assertEqual(scan.call_count, 2)
+        self.assertEqual(Engine.read(self.run)["integration"]["pending_refresh"], "scan_timeout")
+        self.advance("B")
+        reservation = routed("reserve", kind="push", unit=Engine.UNITS["push"])
+        target = {"repository": str(self.repo), "head": self.heads["A"]}
+        intent = routed("intent", kind="push", reservation_id=reservation["reservation_id"], target=target, evidence=self.proof())
+        routed("outcome", intent_id=intent["intent"]["id"], target=target, status="succeeded", receipt=self.proof(True))
+        self.assertEqual(self.observation("A")["status"], "conflicted")
+        self.assertIsNone(Engine.read(self.run)["integration"]["pending_refresh"])
 
     def test_clean_target_update_keeps_reserved_assignment_and_frozen_review_scope(self):
         refs = {"run_id": "reserved-review", "review_base": self.base_oid}
@@ -1306,6 +1346,55 @@ os.execv({executable!r}, [{executable!r}, *args])
         payload = json.loads((self.base / "effects.requests").read_text())
         self.assertEqual(payload["mode"], "dispatch")
         self.assertEqual(payload["integration"]["target"], self.heads["A"])
+
+    def test_adopted_branch_survives_registration_growth_and_bound_dispatch(self):
+        self.adapter("review")
+        refs = {"run_id": "adopted-review", "review_base": self.base_oid}
+        self.apply("observe", "C", fields={"refs": refs, "findings": [{"id": "carry", "status": "unresolved"}]}, evidence=self.proof())
+        saved = Engine.read(self.run)
+        saved["config"].pop("integration")
+        saved.pop("integration")
+        for task in saved["tasks"].values():
+            task.pop("candidates")
+        write_atomic(self.run / "state.json", saved)
+        self.git("remote", "add", "origin", str(self.repo))
+        self.refresh()
+        request = self.request("prepare", "C", kind="review", adapter="fixture", refs=refs,
+                               target={"head": self.heads["C"]}, evidence=self.proof())
+        Engine.apply(self.run, request)
+        before = Engine.read(self.run)["tasks"]["C"]
+        self.apply("candidate", "C", candidate={"id": "second", "ref": "refs/heads/task/A"}, evidence=self.proof())
+        self.refresh()
+        self.assertEqual(set(Engine.read(self.run)["integration"]["observations"]["C"]), {"branch", "second"})
+        self.assertEqual(self.observation("C")["head"], self.heads["C"])
+        self.assertEqual(runner.execute(self.run, {"op": "execute", "action_id": request["action_id"], "task_id": "C"})["outcome"], "succeeded")
+        after = Engine.read(self.run)["tasks"]["C"]
+        for field in ("claim", "delegation", "refs", "findings", "counters"):
+            self.assertEqual(after[field], before[field])
+        payload = json.loads((self.base / "effects.requests").read_text())
+        self.assertEqual(payload["operation_id"], request["action_id"])
+        self.assertEqual(payload["integration"]["candidate_id"], "branch")
+        self.assertEqual(payload["integration"]["head"], self.heads["C"])
+        self.assertEqual((self.base / "effects").read_text().splitlines(), [request["action_id"]])
+
+    def test_candidate_materialization_honors_replacement_retirement_and_explicit_empty_map(self):
+        saved = Engine.read(self.run)
+        for task in ("A", "B"):
+            saved["tasks"][task].pop("candidates")
+        saved["tasks"]["C"]["candidates"] = {}
+        write_atomic(self.run / "state.json", saved)
+        self.apply("candidate", "A", candidate={"id": "branch", "ref": "refs/heads/task/B", "pr": 42}, evidence=self.proof())
+        self.apply("candidate", "B", candidate={"id": "branch", "ref": "refs/heads/task/B", "active": False}, evidence=self.proof())
+        for task in ("B", "C"):
+            self.apply("candidate", task, candidate={"id": "second", "ref": "refs/heads/task/A"}, evidence=self.proof())
+        self.refresh()
+        state = Engine.read(self.run)
+        self.assertEqual(state["tasks"]["A"]["candidates"]["branch"], {"ref": "refs/heads/task/B", "pr": 42, "active": True})
+        self.assertEqual(self.observation("A")["head"], self.heads["B"])
+        self.assertFalse(state["tasks"]["B"]["candidates"]["branch"]["active"])
+        self.assertNotIn("branch", state["tasks"]["C"]["candidates"])
+        for task in ("B", "C"):
+            self.assertEqual(set(state["integration"]["observations"][task]), {"second"})
 
 
 if __name__ == "__main__":

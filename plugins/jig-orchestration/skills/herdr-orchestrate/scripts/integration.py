@@ -62,9 +62,13 @@ def valid_ref(value):
             and all(not p.startswith(".") and not p.endswith(".lock") for p in value.split("/")))
 
 
+def candidate_records(task):
+    return task.get("candidates", {
+        "branch": {"ref": "refs/heads/" + task["branch"], "pr": None, "active": True}})
+
+
 def registrations(state):
-    return {tid: {cid: c for cid, c in task.get("candidates", {
-                "branch": {"ref": "refs/heads/" + task["branch"], "pr": None, "active": True}}).items() if c.get("active", True)}
+    return {tid: {cid: c for cid, c in candidate_records(task).items() if c.get("active", True)}
             for tid, task in state["tasks"].items() if task["phase"] != "closed"}
 
 
@@ -90,8 +94,9 @@ def register(state, task, candidate):
             "invalid", "candidate pr must be a positive number")
     require(type(candidate.get("active", True)) is bool, "invalid", "candidate.active must be boolean")
     normalized = {"ref": candidate["ref"], "pr": candidate.get("pr"), "active": candidate.get("active", True)}
-    candidates = task.setdefault("candidates", {})
-    if candidates.get(cid) != normalized:
+    materialized = "candidates" not in task
+    candidates = task.setdefault("candidates", candidate_records(task))
+    if materialized or candidates.get(cid) != normalized:
         candidates[cid] = normalized
         invalidate(state, "candidate_changed")
     return {"candidate_id": cid, **normalized}
@@ -610,7 +615,10 @@ def after_transition(run_dir, request, result):
     """A durable invalidation survives a crash or a concurrently running scan."""
     if request.get("op") in {"candidate", "observe", "outcome", "finish"}:
         state = Engine.read(run_dir)
-        if state.get("integration", {}).get("pending_refresh"):
+        pending = state.get("integration", {}).get("pending_refresh")
+        # A timed-out scan is retried by explicit scans, stage admission and
+        # reconciliation, without delaying every routine status recording.
+        if pending and pending != "scan_timeout":
             try:
                 refresh(run_dir)
             except (OSError, StateError):
