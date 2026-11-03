@@ -10,7 +10,7 @@ Install dependencies in the agent home/profile actually selected for each role. 
 
 | Assigned role | Required on that host/profile |
 | --- | --- |
-| Coordinator | `herdr-orchestrate`, its complete scripts/references, Python runtime, Git 2.42+ and authenticated integration-source access, installed Herdr skill/CLI, GitHub CLI/authentication, and the selected tracker access route. |
+| Coordinator | `herdr-orchestrate`, its complete scripts/references, Python runtime, Git 2.43+ and authenticated integration-source access, installed Herdr skill/CLI, GitHub CLI/authentication, and the selected tracker access route. |
 | Implementation worker | Its native agent CLI/profile, repository toolchain, Git/authentication, and task-specific skills. |
 | Review/repair driver | Codex or Claude Code plus the matching `panel-review` and `review-fix-loop` skill pair, their scripts, supported Node/Git/platform runtime, and selected external reviewer CLIs/authentication. |
 

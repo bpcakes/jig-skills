@@ -589,7 +589,7 @@ def preflight(config, host_id):
             review_agents.add(agent)
     from integration import settings as integration_settings
     needs_git_probe = "coordinator" in runtime_roles and integration_settings(config)["enabled"]
-    required = {"git": (2, 42) if "review" in runtime_roles or needs_git_probe else None, "herdr": None}
+    required = {"git": (2, 43) if needs_git_probe else (2, 42) if "review" in runtime_roles else None, "herdr": None}
     if "coordinator" in runtime_roles or "review" in runtime_roles:
         required["gh"] = None
     if "coordinator" in runtime_roles:

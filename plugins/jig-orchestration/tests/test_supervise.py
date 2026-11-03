@@ -1362,12 +1362,13 @@ class RuntimeTests(unittest.TestCase):
         for name, overrides, failures in (
                 ("missing", {"node": None, "codex": None}, {"node", "codex"}),
                 ("old-git", {"git": "2.39.0"}, {"git"}),
+                ("old-probe-git", {"git": "2.42.0"}, {"git"}),
                 ("old-node", {"node": "20.0.0"}, {"node"}),
                 ("supported", {}, set())):
             with self.subTest(name=name):
                 binary_dir = self.root / name
                 binary_dir.mkdir()
-                versions = {"git": "2.42.0", "herdr": "1.0.0", "gh": "2.0.0",
+                versions = {"git": "2.43.0", "herdr": "1.0.0", "gh": "2.0.0",
                             "python3": "3.10.0", "node": "22.0.0", "codex": "1.0.0", **overrides}
                 for tool, version in versions.items():
                     if version is not None:
@@ -1380,6 +1381,12 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual({item["tool"] for item in result["tools"] if not item["ok"]}, failures)
                 self.assertEqual(result["missing_role_skills"], [])
                 self.assertTrue(all(item["ok"] for item in result["installations"]))
+
+        # Disabling integration keeps the review controller's own Git minimum.
+        self.config["integration"] = {"enabled": False}
+        with patch.dict(os.environ, {"PATH": str(self.root / "old-probe-git")}):
+            self.assertTrue(runtime.preflight(self.config, "local")["local_inventory_ok"])
+        self.config.pop("integration")
 
         host = self.config["hosts"]["local"]
         host["profiles"] = [profiles[1]]

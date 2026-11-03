@@ -4,7 +4,7 @@ Use `python3 <skill-root>/scripts/supervise.py --help` for installed commands. P
 
 CLI JSON input allows at most 64 nested objects or arrays, counting the root object as level 1. Deeper input is rejected before routing or persistence with an `invalid_input` JSON error, keeping later copying and serialization within safe recursion depth.
 
-Version 0.5.0 also runs [integration probes](integration.md) in a private Git cache on the coordinator. Git 2.42+ and a verified source are required. Observations have their own state and do not rebind active reviews or wake drivers for clean freshness updates. New final stages default to requiring fresh integration evidence; active outcomes and settlement remain available during adoption.
+Version 0.5.0 also runs [integration probes](integration.md) in a private Git cache on the coordinator. Git 2.43+ and a verified source are required. Observations have their own state and do not rebind active reviews or wake drivers for clean freshness updates. New final stages default to requiring fresh integration evidence; active outcomes and settlement remain available during adoption.
 
 ## Initialize and inspect
 

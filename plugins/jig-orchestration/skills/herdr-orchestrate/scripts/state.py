@@ -386,6 +386,18 @@ class Engine:
             return True
 
     @staticmethod
+    def integration_timed_out(run_dir, snapshot, checked_at):
+        from integration import binding
+        with locked(run_dir) as path:
+            state = read_json(path / "state.json")
+            current = state.setdefault("integration", {})
+            # Retain last-known observations without admitting old clean
+            # evidence or invalidating a newer completed observation.
+            if binding(state) == snapshot and current.get("checked_at") == checked_at:
+                current["pending_refresh"] = "scan_timeout"
+                write_atomic(path / "state.json", state)
+
+    @staticmethod
     def wait_for_integration(run_dir, request, caller, after):
         from integration import registrations, stage_waiter, OID
         with locked(run_dir) as path:

@@ -290,6 +290,10 @@ class ProbeError(Exception):
     pass
 
 
+class ProbeTimeout(Exception):
+    """The scan exhausted its own budget, without a publishable observation."""
+
+
 class Git:
     def __init__(self, directory, timeout):
         self.directory = directory
@@ -308,7 +312,7 @@ class Git:
             env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_ATTR_NOSYSTEM="1")
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
-            raise ProbeError("timeout")
+            raise ProbeTimeout("timeout")
         with tempfile.TemporaryFile(dir=self.directory) as out, tempfile.TemporaryFile(dir=self.directory) as err:
             try:
                 process = subprocess.Popen(["git", *args], stdout=out, stderr=err, env=env, start_new_session=True)
@@ -321,8 +325,10 @@ class Git:
                         pass
                     process.wait()
                     raise
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                raise ProbeError("git_unavailable_or_timeout") from exc
+            except subprocess.TimeoutExpired as exc:
+                raise ProbeTimeout("timeout") from exc
+            except OSError as exc:
+                raise ProbeError("git_unavailable") from exc
             out.seek(0)
             data = out.read(4 * 1024 * 1024 + 1)
             if len(data) > 4 * 1024 * 1024:
@@ -340,10 +346,12 @@ class Git:
 def merge_policy(git, repository):
     git.version = git.checked("--version").decode().strip()
     version = re.search(r"(\d+)\.(\d+)", git.version)
-    if version is None or tuple(map(int, version.groups())) < (2, 42):
-        raise ProbeError("git_2_42_required")
+    if version is None or tuple(map(int, version.groups())) < (2, 43):
+        raise ProbeError("git_2_43_required")
+    if "GIT_ATTR_SOURCE" in os.environ:
+        raise ProbeError("custom_merge_policy")
     code, raw = git.run("-C", repository, "config", "--null", "--get-regexp",
-        r"^(merge\.|filter\.|diff\.(renames|renamelimit)$|branch\..*\.mergeoptions$|core\.(attributesfile|autocrlf|eol|safecrlf|checkroundtripencoding)$)")
+        r"^(merge\.|filter\.|attr\.tree$|diff\.(renames|renamelimit)$|branch\..*\.mergeoptions$|core\.(attributesfile|autocrlf|eol|safecrlf|checkroundtripencoding)$)")
     if code not in {0, 1}:
         raise ProbeError("repository_config_unavailable")
     entries = []
@@ -355,7 +363,7 @@ def merge_policy(git, repository):
     normalization = dict(entries).get("merge.renormalize", "false")
     renormalize = normalization is None or normalization.lower() in {"true", "yes", "on", "1"}
     for key, value in entries:
-        if ((key.startswith("filter.") and renormalize) or key in {"core.attributesfile", "merge.default"}
+        if ((key.startswith("filter.") and renormalize) or key in {"attr.tree", "core.attributesfile", "merge.default"}
                 or key.endswith((".driver", ".mergeoptions"))):
             raise ProbeError("custom_merge_policy")
         if key in {"merge.renames", "merge.renamelimit", "merge.directoryrenames", "merge.renormalize",
@@ -506,6 +514,10 @@ def refresh(run_dir, task_id=None, caller="coordinator", *, wait=False):
     after = state.get("integration", {}).get("checked_at")
     deadline = time.monotonic() + settings(state["config"])["timeout_seconds"]
 
+    def timed_out(snapshot):
+        Engine.integration_timed_out(run_dir, binding(snapshot), snapshot.get("integration", {}).get("checked_at"))
+        return {"status": "timeout"}
+
     def observed(latest, coalesced=False):
         if caller != "coordinator":
             Engine._authorize(latest, {"op": "observe"}, caller, latest["tasks"].get(task_id))
@@ -527,7 +539,7 @@ def refresh(run_dir, task_id=None, caller="coordinator", *, wait=False):
             except BlockingIOError:
                 remaining = deadline - time.monotonic()
                 if not wait or remaining <= 0:
-                    return {"status": "busy" if not wait else "timeout"}
+                    return {"status": "busy"} if not wait else timed_out(state)
                 time.sleep(min(0.05, remaining))
         # Re-read after acquiring the separate probe lock; no state lock crosses Git.
         attempts = 0
@@ -542,8 +554,13 @@ def refresh(run_dir, task_id=None, caller="coordinator", *, wait=False):
             if state.get("integration", {}).get("checked_at") != after and fresh(state):
                 return observed(state, coalesced=True)
             if time.monotonic() >= deadline:
-                return {"status": "timeout"}
-            report = scan(directory, state, deadline=deadline)
+                return timed_out(state)
+            try:
+                report = scan(directory, state, deadline=deadline)
+            except ProbeTimeout:
+                return timed_out(state)
+            if time.monotonic() >= deadline:
+                return timed_out(state)
             if Engine.publish_integration(run_dir, binding(state), report):
                 return observed(Engine.read(run_dir))
             attempts += 1

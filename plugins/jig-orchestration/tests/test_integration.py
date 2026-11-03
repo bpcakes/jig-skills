@@ -206,6 +206,57 @@ class IntegrationTests(unittest.TestCase):
         self.refresh()
         self.assertEqual(self.observation("B")["status"], "clean")
 
+    def test_alternate_attribute_sources_cannot_reuse_clean_evidence_or_reserved_policy(self):
+        for task in ("A", "B"):
+            self.git("checkout", "task/" + task)
+            (self.repo / ".gitattributes").write_text("*.txt merge=union\n")
+            self.git("add", ".gitattributes")
+            self.git("commit", "-m", "union policy")
+            self.heads[task] = self.git("rev-parse", "HEAD")
+        self.git("checkout", "-b", "attribute-policy", self.base_oid)
+        (self.repo / ".gitattributes").write_text("*.txt -merge\n")
+        self.git("add", ".gitattributes")
+        self.git("commit", "-m", "binary policy")
+        attributes = self.git("rev-parse", "HEAD")
+        self.git("checkout", "main")
+        self.advance()
+        self.refresh()
+        self.assertEqual(self.observation("B")["status"], "clean")
+        reserved = self.reserve("B")
+        before = Engine.read(self.run)["tasks"]["B"]
+        for source in ("config", "environment"):
+            with self.subTest(source=source):
+                if source == "config":
+                    self.git("config", "attr.tree", attributes)
+                with patch.dict(os.environ, {"GIT_ATTR_SOURCE": attributes} if source == "environment" else {}):
+                    actual = subprocess.run(["git", "-C", str(self.repo), "merge-tree", "--write-tree",
+                                             self.heads["A"], self.heads["B"]], capture_output=True)
+                    self.assertEqual(actual.returncode, 1, actual.stderr)
+                    self.refresh()
+                    self.assertEqual(self.observation("B")["status"], "unknown")
+                    self.assertEqual(self.observation("B")["reason"], "custom_merge_policy")
+                    self.assert_error("integration", self.apply, "intent", "B", kind="review",
+                        reservation_id=reserved["reservation_id"], target={"head": self.heads["B"]}, evidence=self.proof())
+                    self.assertEqual(Engine.read(self.run)["tasks"]["B"], before)
+                if source == "config":
+                    self.git("config", "--unset", "attr.tree")
+                self.refresh()
+                self.assertEqual(self.observation("B")["status"], "clean")
+
+    def test_git_with_unfixed_attribute_source_merge_is_rejected_before_cached_admission(self):
+        self.refresh()
+        original = integration.Git.run
+        def old_version(git, *args, **kwargs):
+            return (0, b"git version 2.42.0\n") if args == ("--version",) else original(git, *args, **kwargs)
+        with patch.object(integration.Git, "run", old_version):
+            self.refresh()
+        self.assertEqual(self.observation("C")["status"], "unknown")
+        self.assertEqual(self.observation("C")["reason"], "git_2_43_required")
+        self.assert_error("integration", self.reserve, "C")
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"], {})
+        self.refresh()
+        self.assertEqual(self.observation("C")["status"], "clean")
+
     def test_multiple_candidates_and_migration_group_warning(self):
         for task in ("B", "C"):
             self.git("checkout", "task/" + task)
@@ -275,6 +326,34 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
         self.assertEqual(self.observation("B")["status"], "conflicted")
         self.assertEqual(supervise.task_view(self.run, "C")["change_token"], before_c)
         self.reserve("C")
+
+    def test_successful_push_and_pr_outcomes_detect_conflicts_without_an_explicit_refresh(self):
+        self.advance()
+        for kind in ("push", "pr"):
+            with self.subTest(kind=kind):
+                self.git("update-ref", "refs/heads/task/C", self.heads["C"])
+                self.refresh()
+                self.assertEqual(self.observation("C")["status"], "clean")
+                reserved = self.reserve("C", kind)
+                target = {"repository": str(self.repo), "head": self.heads["B"]}
+                intent = self.apply("intent", "C", kind=kind, reservation_id=reserved["reservation_id"],
+                                    target=target, evidence=self.proof())
+                # The external publication changes the registered remote head.
+                self.git("update-ref", "refs/heads/task/C", self.heads["B"])
+                refresh = integration.refresh
+                def observe_invalidation(*args, **kwargs):
+                    self.assertEqual(Engine.read(self.run)["integration"]["pending_refresh"], kind + "_succeeded")
+                    return refresh(*args, **kwargs)
+                request = self.request("outcome", "C", intent_id=intent["intent"]["id"], target=target,
+                                       status="succeeded", receipt=self.proof(True))
+                with patch.object(integration, "refresh", side_effect=observe_invalidation) as scanning:
+                    self.assertEqual(supervise.apply_request(self.run, request)["outcome"], "succeeded")
+                    scanning.assert_called_once()
+                self.assertEqual(self.observation("C")["head"], self.heads["B"])
+                self.assertEqual(self.observation("C")["status"], "conflicted")
+                self.assertTrue(supervise.task_view(self.run, "C")["integration"]["candidates"]["branch"]["incident_id"])
+                self.assertIsNone(Engine.read(self.run)["integration"]["pending_refresh"])
+                self.settle(reserved["reservation_id"], "C")
 
     def test_prepared_review_is_fenced_when_target_moves_before_dispatch(self):
         self.adapter("review")
@@ -747,6 +826,56 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
         schedule = Engine.read(self.run)["scheduler"]
         self.assertIsNone(schedule["pending_action_id"])
         self.assertIsNone(schedule["integration_completion"])
+
+    def test_expired_scan_preserves_observations_and_waiters_until_scheduler_retries(self):
+        original = integration.Git.run
+        for boundary in ("--version", "merge-tree"):
+            with self.subTest(boundary=boundary):
+                self.advance()
+                self.refresh()
+                self.assertEqual(self.observation("B")["status"], "conflicted")
+                Engine.wait_for_integration(self.run, {"task_id": "C", "target": {"head": self.heads["C"]}},
+                                            "coordinator", None)
+                before = Engine.read(self.run)["integration"]
+                token = supervise.task_view(self.run, "C")["change_token"]
+                # A new target forces a real probe even with cached pairs.
+                target = self.git("commit-tree", self.git("rev-parse", self.heads["A"] + "^{tree}"),
+                                  "-p", self.heads["A"], "-m", "advance for " + boundary)
+                self.git("update-ref", "refs/heads/main", target)
+                wake = "scan-budget-" + boundary
+                supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": wake})
+                reached = []
+                def expire_budget(git, *args, **kwargs):
+                    if boundary in args:
+                        reached.append(True)
+                        git.deadline = 0
+                    return original(git, *args, **kwargs)
+                with patch.object(integration.Git, "run", expire_budget):
+                    self.assertEqual(supervise.complete(self.run, wake)["status"], "integration_pending")
+                self.assertTrue(reached)
+                after = Engine.read(self.run)
+                self.assertEqual(after["integration"], {**before, "pending_refresh": "scan_timeout"})
+                self.assertEqual(after["scheduler"]["integration_completion"], wake)
+                self.assertEqual(supervise.task_view(self.run, "C")["change_token"], token)
+                self.assertFalse(integration.fresh(after))
+                self.assert_error("integration", self.reserve, "C")
+                self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"], {})
+                with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+                    self.assertEqual(supervise.tick(self.run)["status"], "completed")
+                    herdr.assert_not_called()
+                self.assertEqual(Engine.read(self.run)["integration"]["target"], target)
+                self.assertTrue(integration.fresh(Engine.read(self.run)))
+                self.assertIsNone(Engine.read(self.run)["scheduler"]["integration_completion"])
+
+    def test_git_process_timeout_is_distinct_from_an_observed_command_failure(self):
+        self.refresh()
+        git = integration.Git(self.run / "integration", 0.1)
+        with self.assertRaises(integration.ProbeTimeout):
+            git.run("-c", "alias.delayed=!sleep 5", "delayed")
+        git = integration.Git(self.run / "integration", 5)
+        with patch.dict(os.environ, {"PATH": str(self.base / "missing-bin")}):
+            with self.assertRaisesRegex(integration.ProbeError, "git_unavailable"):
+                git.run("--version")
 
     def test_reconciliation_retries_superseded_snapshots_inside_its_time_budget(self):
         original = Engine.publish_integration
