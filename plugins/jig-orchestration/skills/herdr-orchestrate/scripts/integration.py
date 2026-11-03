@@ -31,14 +31,14 @@ DEFAULT_GROUPS = {
 
 def settings(config):
     return {"enabled": True, "remote": "origin", "max_age_seconds": 120,
-            "timeout_seconds": 30, "overlap_groups": DEFAULT_GROUPS,
+            "timeout_seconds": 30, "bootstrap_timeout_seconds": 300, "overlap_groups": DEFAULT_GROUPS,
             **config.get("integration", {})}
 
 
 def validate_config(config):
     raw = config.get("integration", {})
     require(isinstance(raw, dict) and set(raw) <= {
-        "enabled", "source", "remote", "max_age_seconds", "timeout_seconds", "overlap_groups"},
+        "enabled", "source", "remote", "max_age_seconds", "timeout_seconds", "bootstrap_timeout_seconds", "overlap_groups"},
         "invalid", "unsupported integration configuration")
     cfg = settings(config)
     require(type(cfg["enabled"]) is bool, "invalid", "integration.enabled must be boolean")
@@ -46,7 +46,7 @@ def validate_config(config):
         if key in cfg:
             require(nonempty(cfg[key]) and not cfg[key].startswith("-") and "\0" not in cfg[key],
                     "invalid", f"integration.{key} must name a configured Git source")
-    for key, maximum in (("max_age_seconds", 3600), ("timeout_seconds", 60)):
+    for key, maximum in (("max_age_seconds", 3600), ("timeout_seconds", 60), ("bootstrap_timeout_seconds", 3600)):
         require(type(cfg[key]) in {int, float} and 0 < cfg[key] <= maximum,
                 "invalid", f"integration.{key} must be positive and at most {maximum}")
     groups = cfg["overlap_groups"]
@@ -360,8 +360,14 @@ def merge_policy(git, repository):
             key, separator, value = record.partition("\n")
             entries.append((key, value if separator else None))
     options = []
-    normalization = dict(entries).get("merge.renormalize", "false")
-    renormalize = normalization is None or normalization.lower() in {"true", "yes", "on", "1"}
+    renormalize = False
+    if "merge.renormalize" in dict(entries):
+        # Git also treats nonzero numeric values as true. Use its effective
+        # boolean semantics before deciding whether filters are representable.
+        value = git.checked("-C", repository, "config", "--type=bool", "--get", "merge.renormalize").strip()
+        if value not in {b"true", b"false"}:
+            raise ProbeError("invalid_merge_policy")
+        renormalize = value == b"true"
     for key, value in entries:
         if ((key.startswith("filter.") and renormalize) or key in {"attr.tree", "core.attributesfile", "merge.default"}
                 or key.endswith((".driver", ".mergeoptions"))):
@@ -412,9 +418,9 @@ def probe(git, cache, head, target, options):
     return result
 
 
-def scan(directory, state, deadline=None):
+def scan(directory, state, deadline=None, *, bootstrap=False):
     cfg = settings(state["config"])
-    timeout = cfg["timeout_seconds"]
+    timeout = cfg["bootstrap_timeout_seconds" if bootstrap else "timeout_seconds"]
     if deadline is not None:
         timeout = min(timeout, max(0, deadline - time.monotonic()))
     git = Git(directory, timeout)
@@ -503,20 +509,26 @@ def scan(directory, state, deadline=None):
     return report
 
 
-def refresh(run_dir, task_id=None, caller="coordinator", *, wait=False):
+def refresh(run_dir, task_id=None, caller="coordinator", *, wait=False, bootstrap=False):
     state = Engine.read(run_dir)
     if caller != "coordinator":
         Engine._authorize(state, {"op": "observe"}, caller, state["tasks"].get(task_id))
+    require(type(bootstrap) is bool, "invalid", "bootstrap must be boolean")
+    require(not bootstrap or caller == "coordinator", "forbidden", "cache bootstrap is coordinator-only")
+    wait = wait or bootstrap
     if not settings(state["config"])["enabled"]:
         return {"status": "disabled"}
     if not any(registrations(state).values()):
         return {"status": "idle"}
     after = state.get("integration", {}).get("checked_at")
-    deadline = time.monotonic() + settings(state["config"])["timeout_seconds"]
+    budget = "bootstrap_timeout_seconds" if bootstrap else "timeout_seconds"
+    deadline = time.monotonic() + settings(state["config"])[budget]
 
     def timed_out(snapshot):
         Engine.integration_timed_out(run_dir, binding(snapshot), snapshot.get("integration", {}).get("checked_at"))
-        return {"status": "timeout"}
+        return {"status": "timeout", "reason": "scan_timeout",
+                "next_action": "Verify source access. For a cold or outgrown cache, the coordinator can run "
+                    "integration --bootstrap with a sufficient bootstrap_timeout_seconds budget; then resume completion."}
 
     def observed(latest, coalesced=False):
         if caller != "coordinator":
@@ -556,7 +568,7 @@ def refresh(run_dir, task_id=None, caller="coordinator", *, wait=False):
             if time.monotonic() >= deadline:
                 return timed_out(state)
             try:
-                report = scan(directory, state, deadline=deadline)
+                report = scan(directory, state, deadline=deadline, bootstrap=bootstrap)
             except ProbeTimeout:
                 return timed_out(state)
             if time.monotonic() >= deadline:
@@ -579,7 +591,8 @@ def before_stage(run_dir, request, caller):
         if result["status"] in {"busy", "superseded", "timeout"}:
             Engine.wait_for_integration(run_dir, request, caller, state.get("integration", {}).get("checked_at"))
         require(result["status"] == "observed", "integration",
-                "Integration refresh " + result["status"] + "; inspect candidate registration or retry this unstarted stage")
+                "Integration refresh " + result["status"] + "; " + result.get("next_action",
+                "inspect candidate registration or retry this unstarted stage"))
 
 
 def after_transition(run_dir, request, result):

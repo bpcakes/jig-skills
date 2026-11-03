@@ -34,7 +34,7 @@ The export uses the local binary without network access or binary installation. 
 
 Check actual skill paths/content versions, executable paths and versions, selected profiles/models, project dependencies, authenticated GitHub repository access, tracker access, and working directories. Do not print secrets. The helper's `preflight` is a local path/version check, not proof of remote installation, reviewer authentication, provider availability, or successful hosted acceptance. Obtain those receipts using each selected environment before dependent work.
 
-Verify [integration source and merge policy](integration.md#configuration-and-candidates) on the coordinator before new final stages. Probes require a coordinator-accessible repository and the published source refs; unavailable custom merge policy remains unknown.
+Verify [integration source and merge policy](integration.md#configuration-and-candidates) on the coordinator before new final stages. Probes require a coordinator-accessible repository and the published source refs; unavailable custom merge policy remains unknown. Prepare the private object cache with `integration --bootstrap`, using its separately configured bounded budget for a cold repository, before relying on short routine scans.
 
 Record canonical checkout/worktree-root paths verified on the host that owns them, including symlink resolution. The helper normalizes lexical POSIX aliases such as a trailing `/.`; it cannot resolve remote symlinks on the coordinator. Check that each physical checkout has one writer and is outside protected main working trees before admission or handoff.
 

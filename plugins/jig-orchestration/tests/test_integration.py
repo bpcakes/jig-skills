@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
@@ -256,6 +257,73 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"], {})
         self.refresh()
         self.assertEqual(self.observation("C")["status"], "clean")
+
+    def test_renormalization_uses_git_boolean_semantics_without_running_filters(self):
+        self.git("checkout", "task/B")
+        (self.repo / ".gitattributes").write_text("*.txt filter=fixture\n")
+        self.git("add", ".gitattributes")
+        self.git("commit", "-m", "filtered path")
+        self.heads["B"] = self.git("rev-parse", "HEAD")
+        self.git("checkout", "main")
+        marker = self.base / "filter-ran"
+        self.git("config", "filter.fixture.clean", "touch " + str(marker))
+        self.git("config", "filter.fixture.smudge", "touch " + str(marker))
+        for value in ("2", "-1", "true", "invalid", "0", "false"):
+            with self.subTest(value=value):
+                self.git("config", "merge.renormalize", value)
+                self.refresh()
+                if value in {"0", "false"}:
+                    self.assertEqual(self.observation("B")["status"], "clean")
+                else:
+                    self.assertEqual(self.observation("B")["status"], "unknown")
+                    self.assert_error("integration", self.reserve, "B")
+                    self.assertEqual(Engine.read(self.run)["tasks"]["B"]["counters"], {})
+                self.assertFalse(marker.exists())
+
+    def test_explicit_bootstrap_finishes_a_cold_fetch_that_exceeds_normal_scan_budget(self):
+        config = Engine.read(self.run)["config"]["integration"]
+        self.apply("configure", fields={"integration": {**config, "timeout_seconds": 2,
+                   "bootstrap_timeout_seconds": 15}}, evidence=self.proof())
+        executable = shutil.which("git")
+        binaries = self.base / "slow-git"
+        binaries.mkdir()
+        log = self.base / "fetches"
+        shim = binaries / "git"
+        shim.write_text(f'''#!{sys.executable}
+import os, sys, time
+if "fetch" in sys.argv[1:]:
+    with open({str(log)!r}, "a") as stream: stream.write("fetch\\n")
+    time.sleep(3)
+os.execv({executable!r}, [{executable!r}, *sys.argv[1:]])
+''')
+        shim.chmod(0o700)
+        before = (self.git("status", "--porcelain"), (self.repo / ".git/index").read_bytes(), self.git("show-ref"))
+        with patch.dict(os.environ, {"PATH": str(binaries) + os.pathsep + os.environ["PATH"]}):
+            failed = integration.refresh(self.run)
+            self.assertEqual(failed["status"], "timeout")
+            self.assertIn("--bootstrap", failed["next_action"])
+            self.assertEqual(self.git("--git-dir", str(self.run / "integration/objects.git"), "for-each-ref"), "")
+            command = subprocess.run([sys.executable, "-B", str(fixtures.SCRIPTS / "supervise.py"),
+                "integration", "--run-dir", str(self.run), "--bootstrap"], capture_output=True, text=True, timeout=20)
+            self.assertEqual(command.returncode, 0, command.stdout + command.stderr)
+            self.assertEqual(json.loads(command.stdout)["status"], "observed")
+            self.assertEqual(self.observation("C")["status"], "clean")
+            warmed = integration.refresh(self.run)
+            self.assertEqual(warmed["status"], "observed")
+            self.assertEqual(warmed["counts"]["fetches"], 0)
+            self.assertEqual(warmed["counts"]["cache_hits"], 3)
+            self.reserve("C")
+        self.assertEqual(log.read_text().splitlines(), ["fetch", "fetch"])
+        self.assertEqual(before, (self.git("status", "--porcelain"), (self.repo / ".git/index").read_bytes(), self.git("show-ref")))
+
+    def test_bootstrap_budget_is_bounded_and_restricted_to_the_coordinator(self):
+        config = Engine.read(self.run)["config"]["integration"]
+        for invalid in (0, -1, 3601, True):
+            self.assert_error("invalid", self.apply, "configure", fields={"integration": {
+                **config, "bootstrap_timeout_seconds": invalid}}, evidence=self.proof())
+        self.assert_error("forbidden", supervise.serve, self.run, "worker-a",
+                          {"op": "integration", "task_id": "A", "bootstrap": True})
+        self.assertFalse((self.run / "integration").exists())
 
     def test_multiple_candidates_and_migration_group_warning(self):
         for task in ("B", "C"):
@@ -876,6 +944,29 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
         with patch.dict(os.environ, {"PATH": str(self.base / "missing-bin")}):
             with self.assertRaisesRegex(integration.ProbeError, "git_unavailable"):
                 git.run("--version")
+
+    def test_repeated_timeouts_retain_completion_until_source_recovery(self):
+        self.refresh()
+        supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": "repeated-timeout"})
+        original = integration.Git.run
+        def expired(git, *args, **kwargs):
+            git.deadline = 0
+            return original(git, *args, **kwargs)
+        with patch.object(integration.Git, "run", expired):
+            first = supervise.complete(self.run, "repeated-timeout")
+            self.assertEqual(first["status"], "integration_pending")
+            self.assertIn("--bootstrap", first["integration"]["next_action"])
+            with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+                for _ in range(2):
+                    self.assertEqual(supervise.tick(self.run)["status"], "integration_pending")
+                    self.assertEqual(Engine.read(self.run)["scheduler"]["integration_completion"], "repeated-timeout")
+                herdr.assert_not_called()
+            self.assert_error("integration", self.reserve, "C")
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+            self.assertEqual(supervise.tick(self.run)["status"], "completed")
+            herdr.assert_not_called()
+        self.assertTrue(integration.fresh(Engine.read(self.run)))
+        self.assertIsNone(Engine.read(self.run)["scheduler"]["integration_completion"])
 
     def test_reconciliation_retries_superseded_snapshots_inside_its_time_budget(self):
         original = Engine.publish_integration

@@ -11,6 +11,7 @@ Integration checks are enabled by default, including for resumed state. The defa
   "integration": {
     "source": "ssh://git@example.invalid/team/repository.git",
     "timeout_seconds": 30,
+    "bootstrap_timeout_seconds": 300,
     "max_age_seconds": 120,
     "overlap_groups": {
       "migrations": ["db/migrations/*"],
@@ -20,7 +21,7 @@ Integration checks are enabled by default, including for resumed state. The defa
 }
 ```
 
-Use `configure` with existing setup authority and capability evidence. `source` is coordinator-owned; a worker cannot choose an executable, remote URL or another task's observation route. Without `source`, `remote` selects a registered Git remote name (default `origin`). A scan has a total time budget, at most 60 seconds; evidence age is bounded at stage admission and dispatch (default 120 seconds, configurable up to 3600). Default overlap groups cover common migration directories and generated-file paths. An explicit `overlap_groups` replaces those defaults; `{}` retains exact-path overlap detection only.
+Use `configure` with existing setup authority and capability evidence. `source` is coordinator-owned; a worker cannot choose an executable, remote URL or another task's observation route. Without `source`, `remote` selects a registered Git remote name (default `origin`). Normal scans have a total time budget of at most 60 seconds. Explicit coordinator cache bootstrap uses its own total budget (`bootstrap_timeout_seconds`, default 300, maximum 3600); it does not enlarge routine scans or grant workers a longer probe. Evidence age is bounded at stage admission and dispatch (default 120 seconds, configurable up to 3600). Default overlap groups cover common migration directories and generated-file paths. An explicit `overlap_groups` replaces those defaults; `{}` retains exact-path overlap detection only.
 
 Admission registers candidate `branch` at `refs/heads/<task-branch>`. Older tasks without candidate registrations use the same fallback. Publish useful commits early so the source can supply them. A missing branch or inaccessible commit is unknown, not a conflict or a clean result. For a PR, bind that candidate to the PR number and its fetchable ref through the normal authenticated transition:
 
@@ -43,6 +44,14 @@ The CLI `apply`, restricted `serve`, and configured `execute` paths refresh obse
 python3 <skill-root>/scripts/supervise.py integration --run-dir <private-run-dir>
 python3 <skill-root>/scripts/supervise.py integration --run-dir <private-run-dir> --task A
 ```
+
+Prepare a cold cache on the coordinator before final work, or recover a cache whose initial/large fetch exceeds the normal scan budget:
+
+```sh
+python3 <skill-root>/scripts/supervise.py integration --run-dir <private-run-dir> --bootstrap
+```
+
+Bootstrap waits for the same private-cache lock and runs the same source, policy and publication checks with its separate bounded budget. It fetches committed objects without touching worker checkouts, then normal scans reuse them. If necessary, configure a sufficient bootstrap budget and verified source access before retrying. A restricted worker route cannot request bootstrap. Timeout responses include this recovery action; `complete` retains it in the `integration` field beside `integration_pending`. Persistent source failure remains pending until repaired; the scheduler resumes completion after recovery without another coordinator pass. A timeout never authorizes acknowledging a stale scan or disabling the integration gate.
 
 The restricted route accepts `{"op":"integration","task_id":"A"}` and returns only that driver's compact evidence. A scan refreshes registered candidates together, using one remote ref listing and at most one object fetch. One failed ref does not make other candidates unknown. Results are cached by source/target commit pair, Git version and relevant policy. A failed remote observation cannot reuse an old clean result as fresh evidence. A transient listing failure gets one bounded retry inside code. Concurrent stage refreshes return `busy` and record a waiting predicate; superseded scans cannot publish over newer registrations or observations. Reconciliation completion waits for the shared scan within the configured time budget and retries superseded snapshots in code. If that budget expires, the scheduler retains `integration_completion` and resumes that completion on a later tick without another coordinator prompt. An expired scan cannot publish: earlier observations remain last-known evidence, stale for admission, without new unknown-result notifications. A stopped scheduler retains the pending completion until resumed or explicitly completed.
 

@@ -363,7 +363,7 @@ def complete(run_dir, wake_id, now=None):
         from integration import refresh
         check = refresh(run_dir, wait=True)
         if check["status"] in {"busy", "superseded", "timeout"}:
-            return {"status": "integration_pending", "wake_id": wake_id}
+            return {"status": "integration_pending", "wake_id": wake_id, "integration": check}
     def acknowledge(current):
         update = finish(current)
         if update is not None:
@@ -738,7 +738,7 @@ def serve(run_dir, caller, request, response_fd=None):
                           caller, request.get("until_change", False), response_fd=response_fd)
     if request.get("op") == "integration":
         from integration import refresh
-        return refresh(run_dir, request.get("task_id"), caller)
+        return refresh(run_dir, request.get("task_id"), caller, bootstrap=request.get("bootstrap", False))
     if request.get("op") == "action":
         record = Engine.action(run_dir, request["action_id"])
         if record is None:
@@ -763,6 +763,8 @@ def main(argv=None):
             child.add_argument("--config", required=True)
         elif name in {"status", "integration"}:
             child.add_argument("--task")
+            if name == "integration":
+                child.add_argument("--bootstrap", action="store_true")
         elif name == "watch":
             child.add_argument("--task", required=True)
             child.add_argument("--after", required=True)
@@ -807,7 +809,7 @@ def main(argv=None):
         return apply_request(args.run_dir, read_json(args.request), caller="coordinator")
     if args.command == "integration":
         from integration import refresh
-        return refresh(args.run_dir, args.task)
+        return refresh(args.run_dir, args.task, bootstrap=args.bootstrap)
     if args.command == "execute":
         from execute import execute
         return execute(args.run_dir, read_json(args.request))
