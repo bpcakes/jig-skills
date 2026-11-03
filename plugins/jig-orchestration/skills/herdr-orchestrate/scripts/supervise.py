@@ -378,12 +378,17 @@ def complete(run_dir, wake_id, now=None):
         if update is not None:
             from integration import fresh, registrations, settings
             if (settings(current["config"])["enabled"] and any(registrations(current).values())
-                    and not fresh(current)):
-                return None  # An invalidation raced the scan; the next tick resumes completion.
+                    and (not fresh(current) or current.get("integration", {}).get("counts", {}).get("failed_scans"))):
+                return None  # Retain failed or superseded observations for recovery, never completion.
         return update
     state = scheduler_patch(run_dir, acknowledge)
     if state["scheduler"].get("integration_completion"):
-        return {"status": "integration_pending", "wake_id": wake_id}
+        result = {"status": "integration_pending", "wake_id": wake_id}
+        current = state.get("integration", {})
+        if current.get("counts", {}).get("failed_scans"):
+            result["integration"] = {"status": "failed", "reason": "scan_failed", "evidence": current.get("evidence"),
+                "next_action": "Restore source access or probe support, then resume the retained completion."}
+        return result
     return {"status": "completed", "last_completed_at": state["scheduler"].get("last_completed_at"),
             "next_due_at": state["scheduler"].get("next_due_at")}
 

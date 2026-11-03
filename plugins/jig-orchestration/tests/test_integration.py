@@ -630,6 +630,39 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
         self.assertEqual((self.base / "effects").read_text().splitlines(), [request["action_id"]])
         self.assert_error("integration", self.reserve, "C")  # New work must still disambiguate.
 
+    def test_implicit_reserved_merge_survives_registration_growth_at_intent(self):
+        request = self.merge_request()
+        request.pop("candidate_id")
+        self.refresh()
+        reserved = self.apply("reserve", "A", kind="merge", unit=Engine.UNITS["merge"],
+                              target=request["target"], refs=request["refs"])
+        before = Engine.read(self.run)["tasks"]["A"]
+        self.apply("candidate", "A", candidate={"id": "second", "ref": "refs/heads/task/C", "pr": 43}, evidence=self.proof())
+        result = supervise.apply_request(self.run, self.request("intent", "A", kind="merge",
+            reservation_id=reserved["reservation_id"], target=request["target"], gates=request["gates"],
+            refs=request["refs"], evidence=self.proof()))
+        self.assertEqual(result["intent"]["integration"]["candidate_id"], "branch")
+        after = Engine.read(self.run)["tasks"]["A"]
+        self.assertEqual(after["counters"], before["counters"])
+        self.assertEqual(after["refs"], before["refs"])
+        self.assertEqual(set(after["reservations"]), {reserved["reservation_id"]})
+
+    def test_implicit_prepared_merge_dispatches_original_candidate_after_registration_growth(self):
+        request = self.merge_request()
+        request.pop("candidate_id")
+        self.refresh()
+        Engine.apply(self.run, {**request, "op": "prepare"}, "worker-a")
+        self.apply("candidate", "A", candidate={"id": "second", "ref": "refs/heads/task/C", "pr": 43}, evidence=self.proof())
+        resume = {"op": "execute", "action_id": request["action_id"], "task_id": "A"}
+        self.assertEqual(runner.execute(self.run, resume, "worker-a")["outcome"], "succeeded")
+        payload = json.loads((self.base / "effects.requests").read_text())
+        self.assertEqual(payload["operation_id"], request["action_id"])
+        self.assertEqual(payload["integration"]["candidate_id"], "branch")
+        self.assertEqual(payload["target"]["pr"], 42)
+        self.assertEqual(payload["integration"]["head"], self.heads["A"])
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"]["merge"], 1)
+        self.assertEqual((self.base / "effects").read_text().splitlines(), [request["action_id"]])
+
     def test_changed_merge_policy_still_fences_a_reserved_final_stage(self):
         self.refresh()
         reserved = self.reserve("C")
@@ -1086,6 +1119,61 @@ os.execv({executable!r}, [{executable!r}, *args])
             herdr.assert_not_called()
         self.assertTrue(integration.fresh(Engine.read(self.run)))
         self.assertIsNone(Engine.read(self.run)["scheduler"]["integration_completion"])
+
+    def test_source_failure_retains_completion_and_recovers_with_individual_unknowns(self):
+        self.advance()
+        self.refresh()
+        Engine.wait_for_integration(self.run, {"task_id": "C", "target": {"head": self.heads["C"]}},
+                                    "coordinator", None)
+        ready = supervise.task_view(self.run, "C")["change_token"]
+        config = Engine.read(self.run)["config"]["integration"]
+        self.apply("configure", fields={"integration": {**config, "source": str(self.base / "missing-source")}},
+                   evidence=self.proof())
+        supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": "source-failure"})
+        result = supervise.complete(self.run, "source-failure")
+        self.assertEqual(result["status"], "integration_pending")
+        self.assertEqual(result["integration"]["reason"], "scan_failed")
+        self.assertTrue(result["integration"]["next_action"])
+        failed = Engine.read(self.run)
+        self.assertEqual(failed["scheduler"]["integration_completion"], "source-failure")
+        self.assertEqual(failed["scheduler"]["pending_action_id"], "source-failure")
+        self.assertIsNone(failed["scheduler"].get("last_completed_at"))
+        unknown = supervise.task_view(self.run, "C")
+        self.assertNotEqual(unknown["change_token"], ready)
+        self.assertEqual(unknown["integration"]["candidates"]["branch"]["waiting"]["status"], "unknown")
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+            self.assertEqual(supervise.tick(self.run)["status"], "integration_pending")
+            herdr.assert_not_called()
+        self.assertEqual(supervise.task_view(self.run, "C")["change_token"], unknown["change_token"])
+        self.apply("configure", fields={"integration": config}, evidence=self.proof())
+        self.apply("candidate", "A", candidate={"id": "draft", "ref": "refs/heads/unpublished"}, evidence=self.proof())
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+            self.assertEqual(supervise.tick(self.run)["status"], "completed")
+            herdr.assert_not_called()
+        recovered = Engine.read(self.run)
+        self.assertIsNone(recovered["scheduler"]["integration_completion"])
+        self.assertEqual(recovered["integration"]["observations"]["A"]["draft"]["status"], "unknown")
+        self.assertEqual(self.observation("B")["status"], "conflicted")
+        self.assertNotIn("failed_scans", recovered["integration"]["counts"])
+
+    def test_completion_rechecks_whole_scan_failure_at_acknowledgement(self):
+        self.refresh()
+        supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": "racing-source-failure"})
+        refresh, git_run = integration.refresh, integration.Git.run
+        def unavailable(git, *args, **kwargs):
+            return (1, b"") if "ls-remote" in args else git_run(git, *args, **kwargs)
+        def failure_after_clean(*args, **kwargs):
+            result = refresh(*args, **kwargs)
+            with patch.object(integration.Git, "run", unavailable):
+                self.assertEqual(refresh(self.run)["status"], "observed")
+            return result
+        with patch.object(integration, "refresh", side_effect=failure_after_clean):
+            self.assertEqual(supervise.complete(self.run, "racing-source-failure")["status"], "integration_pending")
+        self.assertTrue(integration.fresh(Engine.read(self.run)))  # Fresh failure is not a completed target observation.
+        self.assertEqual(Engine.read(self.run)["scheduler"]["integration_completion"], "racing-source-failure")
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+            self.assertEqual(supervise.tick(self.run)["status"], "completed")
+            herdr.assert_not_called()
 
     def test_reconciliation_retries_superseded_snapshots_inside_its_time_budget(self):
         original = Engine.publish_integration

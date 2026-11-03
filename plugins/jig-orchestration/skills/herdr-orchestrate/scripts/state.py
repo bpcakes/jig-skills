@@ -1537,8 +1537,8 @@ class Engine:
 
     @staticmethod
     def _merge_gate(state, task, req):
-        from integration import gate
-        gate(state, task, {**req, "kind": "merge"})
+        # Intent and dispatch already bind integration to this assignment.
+        # Keep repository/PR protections separate from candidate selection.
         require(not task.get("recovery_open"), "recovery", "resolve parked recovery before merge")
         Engine._dependencies_complete(state, task)
         target = req["target"]
