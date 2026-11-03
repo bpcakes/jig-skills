@@ -406,23 +406,7 @@ class Engine:
             state = read_json(path / "state.json")
             task = state["tasks"].get(request.get("task_id"))
             if task is not None and "closure_outcome" not in task:
-                # Retain a pre-upgrade closure before another outcome replaces
-                # last_outcome, only if no later mutation has started. An
-                # explicit null marks invalidated evidence.
-                last = task.get("last_outcome", {})
-                readonly = {"review", "validate", "close"}
-                active = [*task["reservations"].values(), task.get("pending_intent") or {}]
-                current = (task["phase"] in readonly | {"closed"}
-                           and all(not work or work.get("kind") in readonly for work in active))
-                task["closure_outcome"] = (copy.deepcopy(last)
-                                           if current and last.get("kind") == "close" and last.get("status") == "succeeded" else None)
-                if task["closure_outcome"] is not None:
-                    binding = Engine._closure_binding(state, task)
-                    saved = last.get("execution", {})
-                    if saved.get("binding"):
-                        binding = {key: saved["binding"].get(key) for key in binding if key != "refs"}
-                        binding["refs"] = copy.deepcopy(saved.get("task_refs", saved.get("refs", {})))
-                    task["closure_outcome"].setdefault("closure_binding", binding)
+                task["closure_outcome"] = Engine._legacy_closure(path, state, task)
             expected = request.get("expected_policy")
             task_operation = task is not None and request["op"] in Engine.TASK_OPERATIONS
             require(type(expected) is int and (1 <= expected <= state["policy_version"] if task_operation
@@ -521,6 +505,55 @@ class Engine:
             **{key: task.get(key) for key in ("id", "driver", "host", "identity", "worktree", "branch", "acceptance_ref", "refs")},
             "owner": task["claim"]["owner"],
         })
+
+    @staticmethod
+    def _legacy_closure(path, state, task):
+        """Import only closure evidence newer than all recorded mutations."""
+        last = task.get("last_outcome", {})
+        if last.get("kind") != "close" or last.get("status") != "succeeded":
+            return None
+        readonly = {"review", "validate", "close"}
+        active = [*task["reservations"].values(), task.get("pending_intent") or {}]
+        if any(work and work.get("kind") not in readonly for work in active):
+            return None
+        closure_version, mutation_version = None, 0
+        for directory in ("actions", "execution-actions"):
+            for file in (path / directory).glob("*.json"):
+                record = read_json(file)
+                req, version = record["request"], record["result"]["version"]
+                if req.get("task_id") != task["id"]:
+                    continue
+                op = req["op"]
+                if (op in {"outcome", "finish"} and req.get("intent_id", req.get("operation_id")) == last["id"]
+                        and req.get("status") == "succeeded" and req.get("receipt") == last["receipt"]):
+                    closure_version = max(closure_version or 0, version)
+                mutation = (op in {"reserve", "prepare", "intent"} and req.get("kind") not in readonly
+                            or op in {"handoff", "recover_session", "reconcile_claim", "pin_acceptance"}
+                            or op in {"reopen_outcome", "claim_transfer_outcome"} and req.get("status") == "succeeded"
+                            or op == "observe" and bool({"identity", "refs"} & req.get("fields", {}).keys()))
+                if mutation:
+                    mutation_version = max(mutation_version, version)
+        # Phase can still describe work that preceded an unreserved manual
+        # close. Journal versions establish order; missing evidence cannot.
+        if closure_version is None or mutation_version > closure_version:
+            return None
+        result = copy.deepcopy(last)
+        binding = Engine._closure_binding(state, task)
+        saved = last.get("execution", {})
+        if saved.get("binding"):
+            binding = {key: saved["binding"].get(key) for key in binding if key != "refs"}
+            binding["refs"] = copy.deepcopy(saved.get("task_refs", saved.get("refs", {})))
+        result.setdefault("closure_binding", binding)
+        return result
+
+    @staticmethod
+    def _closure_receipt(receipt, target, acceptance_ref):
+        require(all(receipt.get(key) == target.get(key) for key in ("authority", "task_id", "owner"))
+                and receipt.get("status") == "closed" and receipt.get("unpublished") is False
+                and receipt.get("criteria_met") is True and nonempty(receipt.get("acceptance_ref")),
+                "closure", "canonical published closure and required acceptance evidence are required")
+        require(acceptance_ref is None or receipt["acceptance_ref"] == acceptance_ref,
+                "closure", "closure receipt must match its authorized acceptance contract")
 
     @staticmethod
     def _claim_transfer(state, task, target, proof):
@@ -1230,8 +1263,7 @@ class Engine:
                 require(req["receipt"].get("no_effects") is True, "uncertain",
                         "failed creation can be retried only after proving no tasks or dependency edges were created; otherwise reconcile as unknown")
             if pending["kind"] == "close" and status == "succeeded":
-                require(req["receipt"].get("acceptance_ref") == pending["evidence"].get("acceptance_ref"),
-                        "closure", "closure receipt must match its authorized acceptance contract")
+                Engine._closure_receipt(req["receipt"], pending["target"], pending["evidence"]["acceptance_ref"])
             if status == "unknown":
                 pending["status"] = "unknown"
                 pending["receipt"] = req["receipt"]
@@ -1302,13 +1334,9 @@ class Engine:
             if any(limit["unit"] == "closure" for limit in config.get("limits", [])):
                 require(reconciled_close,
                         "budget", "counted closure requires the successful reserved tracker action")
-            require(receipt.get("authority") == config["tracker"]["authority"]
-                    and receipt.get("task_id") == task["id"] and receipt.get("owner") == task["claim"]["owner"]
-                    and receipt.get("status") == "closed" and receipt.get("unpublished") is False
-                    and receipt.get("criteria_met") is True and nonempty(receipt.get("acceptance_ref")),
-                    "closure", "canonical published closure and required acceptance evidence are required")
-            require(not task.get("acceptance_ref") or receipt["acceptance_ref"] == task["acceptance_ref"],
-                    "closure", "closure must preserve the admitted acceptance contract")
+            Engine._closure_receipt(receipt, {"authority": config["tracker"]["authority"],
+                                             "task_id": task["id"], "owner": task["claim"]["owner"]},
+                                    task.get("acceptance_ref"))
             task["phase"] = "closed"
             task["closure"] = receipt
             task["slot"] = None

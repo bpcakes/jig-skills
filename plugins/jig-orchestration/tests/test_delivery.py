@@ -393,17 +393,17 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         self.assertEqual(self.resume(request)["closed"], "A")
         self.assertEqual(self.effects(), [request["action_id"]])
 
-    def test_coordinator_reconciles_repeated_invalid_inspector_receipts(self):
+    def reconcile_rejected_inspector(self, corruption):
         request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
         script = self.base / "adapter.py"
-        script.write_text(script.read_text().replace('"acceptance_ref": "/acceptance"', '"acceptance_ref": "/wrong"'))
+        script.write_text(script.read_text().replace(*corruption))
         for result in (self.run_action(request), self.resume(request)):
             self.assertEqual(result["outcome"], "unknown")
             self.assertEqual(result["receipt"]["rejection"]["code"], "closure")
             self.assertTrue(Engine.read(self.run)["tasks"]["A"]["reservations"])
         rejected = result["receipt"]["rejected_result"]["receipt"]
         recovery = {"op": "reconcile", "action_id": request["action_id"], "task_id": "A", "status": "succeeded",
-                    "receipt": {**rejected, "acceptance_ref": "/acceptance", "ref": str(self.base / "effects")}}
+                    "receipt": {**rejected, "owner": "tracker-actor", "acceptance_ref": "/acceptance", "ref": str(self.base / "effects")}}
         self.assert_error("forbidden", runner.reconcile, self.run, recovery, "worker-a")
         self.assert_error("closure", runner.reconcile, self.run, {**recovery, "receipt": rejected})
         self.assert_error("unsettled", runner.reconcile, self.run,
@@ -424,6 +424,35 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         self.assertEqual(self.resume(request), fixed)
         self.assert_error("duplicate", runner.reconcile, self.run,
                           {**recovery, "receipt": {**recovery["receipt"], "ref": "/another-receipt"}})
+        self.assertEqual(self.effects(), [request["action_id"]])
+
+    def test_coordinator_reconciles_repeated_invalid_inspector_receipts(self):
+        self.reconcile_rejected_inspector(('"acceptance_ref": "/acceptance"', '"acceptance_ref": "/wrong"'))
+
+    def test_coordinator_reconciles_invalid_canonical_closure_receipt(self):
+        self.reconcile_rejected_inspector(('**target, "merge_commit"', '**target, "owner": "wrong", "merge_commit"'))
+
+    def test_invalid_canonical_closure_receipts_remain_inspectable(self):
+        request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
+        self.apply("configure", fields={"limits": [
+            {"id": "one-close", "unit": "closure", "scope": "task", "max": 1, "enforced": True}
+        ]}, evidence=self.proof())
+        original = runner.invoke
+        changes = {"owner": "wrong", "authority": "wrong", "task_id": "B", "status": "open",
+                   "unpublished": True, "criteria_met": False}
+        for index, (field, value) in enumerate(changes.items()):
+            def invalid(*args):
+                result = original(*args)
+                result["receipt"][field] = value
+                return result
+            with self.subTest(field=field), patch.object(runner, "invoke", side_effect=invalid):
+                result = self.run_action(request) if index == 0 else self.resume(request)
+                self.assertEqual(result["outcome"], "unknown")
+                self.assertEqual(result["receipt"]["rejection"]["code"], "closure")
+                self.assertTrue(Engine.read(self.run)["tasks"]["A"]["reservations"])
+                self.assertIsNone(Engine.action(self.run, request["action_id"] + "/complete", runner=True))
+        self.assertEqual(self.resume(request)["closed"], "A")
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["counters"]["closure"], 1)
         self.assertEqual(self.effects(), [request["action_id"]])
 
     def test_closure_pending_preserves_success_and_reconciles_without_repeating_effect(self):
@@ -542,6 +571,41 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         self.apply("control", "A", control="unhold", hold_id="acceptance")
         self.apply("close", "A", caller="worker-a", receipt=result["receipt"])
         self.assertEqual(self.effects(), [closure["action_id"], request["action_id"]])
+
+    def manual_closure_after_implementation(self):
+        self.admit()
+        work = self.reserve(kind="implement")
+        self.settle(work["reservation_id"])
+        target = {"authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor"}
+        proof = {**self.proof(True), "criteria_met": True, "acceptance_ref": "/acceptance"}
+        intent = self.apply("intent", "A", kind="close", target=target, evidence=proof)["intent"]
+        receipt = {**proof, **target, "status": "closed", "unpublished": False}
+        self.apply("outcome", "A", intent_id=intent["id"], target=target, status="succeeded", receipt=receipt)
+        return receipt
+
+    def save_legacy_closure(self):
+        state = Engine.read(self.run)
+        task = state["tasks"]["A"]
+        task.pop("closure_outcome")
+        task["last_outcome"].pop("closure_binding", None)
+        write_atomic(self.run / "state.json", state)
+
+    def test_legacy_unreserved_closure_survives_prior_implementation_phase(self):
+        receipt = self.manual_closure_after_implementation()
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "implement")
+        self.save_legacy_closure()
+        self.apply("control", control="pause")
+        self.apply("close", "A", receipt=receipt)
+        self.assertEqual(Engine.read(self.run)["tasks"]["A"]["phase"], "closed")
+
+    def test_legacy_unreserved_closure_rejects_later_settled_mutation(self):
+        receipt = self.manual_closure_after_implementation()
+        for kind in ("repair", "validate"):
+            work = self.reserve(kind=kind)
+            self.settle(work["reservation_id"])
+        self.save_legacy_closure()
+        self.apply("control", control="pause")
+        self.assert_error("paused", self.apply, "close", "A", receipt=receipt)
 
     def test_coordinator_can_reconcile_closure_after_driver_route_revocation(self):
         request, result = self.deferred_closure()

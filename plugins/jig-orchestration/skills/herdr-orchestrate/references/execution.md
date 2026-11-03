@@ -47,7 +47,7 @@ The normalized result is:
 }
 ```
 
-`status` is `succeeded`, `failed`, `not_started`, or `unknown`. All terminal results require `all_jobs_settled:true`. `not_started` also requires `no_effects:true`. If a launch acknowledgement arrives while jobs remain active, return `unknown` with durable handles/evidence and inspect later; do not claim terminal success. Merge receipts additionally bind `head` and `merge_commit`. Closure receipts bind canonical `authority`, `task_id`, `owner`, `status:"closed"`, `unpublished:false`, `criteria_met:true`, and the pinned `acceptance_ref`.
+`status` is `succeeded`, `failed`, `not_started`, or `unknown`. All terminal results require `all_jobs_settled:true`. `not_started` also requires `no_effects:true`. If a launch acknowledgement arrives while jobs remain active, return `unknown` with durable handles/evidence and inspect later; do not claim terminal success. Merge receipts additionally bind `head` and `merge_commit`. Closure receipts bind canonical `authority`, `task_id`, `owner`, `status:"closed"`, `unpublished:false`, `criteria_met:true`, and the pinned `acceptance_ref`. The helper validates these fields against the original authorized target before recording terminal success or settlement. `closure_pending` is reserved for valid external closure evidence blocked by current helper conditions.
 
 Nonzero exit, timeout or malformed output remains unknown because an effect may already have happened. The runner kills its local process group on timeout; that does not establish remote settlement. A process that cannot be started is recorded as `not_started`. The protocol output limit is one MiB. Inspectors must not mutate, retry, or manufacture a successful receipt.
 
