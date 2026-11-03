@@ -10,7 +10,7 @@ Install dependencies in the agent home/profile actually selected for each role. 
 
 | Assigned role | Required on that host/profile |
 | --- | --- |
-| Coordinator | `herdr-orchestrate`, its complete scripts/references, Python runtime, installed Herdr skill/CLI, GitHub CLI/authentication, and the selected tracker access route. |
+| Coordinator | `herdr-orchestrate`, its complete scripts/references, Python runtime, Git 2.42+ and authenticated integration-source access, installed Herdr skill/CLI, GitHub CLI/authentication, and the selected tracker access route. |
 | Implementation worker | Its native agent CLI/profile, repository toolchain, Git/authentication, and task-specific skills. |
 | Review/repair driver | Codex or Claude Code plus the matching `panel-review` and `review-fix-loop` skill pair, their scripts, supported Node/Git/platform runtime, and selected external reviewer CLIs/authentication. |
 
@@ -33,6 +33,8 @@ scripts/install.sh claude --dest "$HOME/.claude-featherenvy/skills" herdr
 The export uses the local binary without network access or binary installation. Explicitly selecting `herdr` or `herdr-orchestrate` fails before copying skills if `herdr --skill` is unavailable or unusable; an all-skills installation warns, skips orchestration and continues with unrelated skills. Matching automatic dependencies are preserved. A differing Herdr skill needs explicit replacement with `--force herdr herdr-orchestrate` for a direct orchestration install, or `--force herdr` for a plugin-based install. `--force herdr-orchestrate` alone cannot replace it. Explicitly select differing review dependencies too if those need replacement. Perform these updates during setup, preserving versions needed by active runs.
 
 Check actual skill paths/content versions, executable paths and versions, selected profiles/models, project dependencies, authenticated GitHub repository access, tracker access, and working directories. Do not print secrets. The helper's `preflight` is a local path/version check, not proof of remote installation, reviewer authentication, provider availability, or successful hosted acceptance. Obtain those receipts using each selected environment before dependent work.
+
+Verify [integration source and merge policy](integration.md#configuration-and-candidates) on the coordinator before new final stages. Probes require a coordinator-accessible repository and the published source refs; unavailable custom merge policy remains unknown.
 
 Record canonical checkout/worktree-root paths verified on the host that owns them, including symlink resolution. The helper normalizes lexical POSIX aliases such as a trailing `/.`; it cannot resolve remote symlinks on the coordinator. Check that each physical checkout has one writer and is outside protected main working trees before admission or handoff.
 

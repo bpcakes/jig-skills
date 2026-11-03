@@ -44,6 +44,9 @@ class EngineTests(unittest.TestCase):
                       "remote": {"slots": 1, "worktree_root": "/remote-worktrees", "endpoint": {"profile": "verified"}}},
             "actors": {"worker-a": {"role": "driver", "task_ids": ["A"], "host": "local", "helper_route": True}},
             "authority": sorted(Engine.ACTIONS), "unfinished_task_cap": None, "limits": [],
+            # These fixtures exercise the pre-0.5 manual evidence contract.
+            # Real Git observations and enabled gates are covered separately.
+            "integration": {"enabled": False},
             "scheduler": {"enabled": True, "session": "owned", "control_pane_id": "w1:p2",
                           "agent": {"name": "coordinator", "agent": "codex", "pane_id": "w1:p1",
                                     "terminal_id": "terminal-1", "agent_session": {

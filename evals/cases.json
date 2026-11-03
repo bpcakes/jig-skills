@@ -2632,6 +2632,53 @@
     ]
   },
   {
+    "id": "orchestration-proactive-integration",
+    "skill": "herdr-orchestrate",
+    "mode": "explicit",
+    "expectInvoke": true,
+    "prompt": "Use $herdr-orchestrate. This is an offline decision exercise. Read evidence.json and explain which task stages may proceed, which drivers need a new handoff, and what happens at the next safe writer boundary. Assess the repeated observation for token effectiveness. Do not edit files, contact machines or providers, run helpers or supervisors, initialize state, install dependencies, or launch agents. The evidence is a frozen observation format, not helper input.",
+    "files": {
+      "evidence.json": "{\n  \"version\": \"0.5.0\",\n  \"target\": {\n    \"previous\": \"T0\",\n    \"current\": \"T1\",\n    \"observedAfterConfirmedMerge\": true\n  },\n  \"tasks\": {\n    \"A\": {\n      \"pr\": 41,\n      \"mergeConfirmed\": true,\n      \"mergeCommit\": \"T1\"\n    },\n    \"B\": {\n      \"candidate\": \"pr-42\",\n      \"head\": \"HB\",\n      \"probe\": {\n        \"target\": \"T1\",\n        \"status\": \"conflicted\",\n        \"paths\": [\n          \"shared.rs\"\n        ]\n      },\n      \"incident\": \"B-incident-1\",\n      \"noticeAlreadyDelivered\": true,\n      \"driverAcknowledged\": false,\n      \"review\": {\n        \"run\": \"B-review-3\",\n        \"fixedBase\": \"T0\",\n        \"active\": true,\n        \"validationJob\": \"B-check-8\"\n      },\n      \"carriedFinding\": \"B-F2\",\n      \"repairsUsed\": 3,\n      \"integrationAuthorized\": true\n    },\n    \"C\": {\n      \"candidate\": \"pr-43\",\n      \"head\": \"HC\",\n      \"probe\": {\n        \"target\": \"T1\",\n        \"status\": \"clean\"\n      },\n      \"previousProbe\": {\n        \"target\": \"T0\",\n        \"status\": \"clean\"\n      },\n      \"watchTokenUnchanged\": true,\n      \"review\": {\n        \"run\": \"C-review-1\",\n        \"fixedBase\": \"T0\",\n        \"convergedHead\": \"HC\"\n      },\n      \"targetMovementMaterial\": false,\n      \"repositoryPolicyRequiresBranchUpdate\": false,\n      \"requiredChecks\": \"passed for current integration context\",\n      \"feedbackResolved\": true\n    },\n    \"D\": {\n      \"candidate\": \"pr-44\",\n      \"probe\": {\n        \"status\": \"unknown\",\n        \"reason\": \"target_unavailable\"\n      },\n      \"requestedStage\": \"final validation\",\n      \"repairChecksAuthorized\": true\n    }\n  },\n  \"repeatObservation\": {\n    \"target\": \"T1\",\n    \"sameCandidateHeads\": true,\n    \"onlyFreshnessTimestampChanged\": true\n  },\n  \"usage\": {\n    \"reportedTokens\": null,\n    \"measuredSpeedup\": null\n  }\n}\n"
+    },
+    "findings": {
+      "min": 0,
+      "max": 8
+    },
+    "forbidWorkflowLaunches": true,
+    "forbiddenScriptLaunches": [
+      "supervise.py",
+      "integration.py",
+      "herdr",
+      "ssh",
+      "br",
+      "bead",
+      "gh",
+      "install.sh"
+    ],
+    "criteria": [
+      {
+        "id": "safe-boundary",
+        "requirement": "B cannot start a new final stage or merge. Preserve its live validation job and active review run; let them settle normally before integrating the latest required target. A successor retains full scope, B-F2 and cumulative repair use."
+      },
+      {
+        "id": "quiet-handoff",
+        "requirement": "Do not resend B's already delivered unchanged conflict notice or equate delivery with acknowledgement. A repeated freshness-only observation needs no new model wake or coordinator review."
+      },
+      {
+        "id": "independent-delivery",
+        "requirement": "C can continue toward the existing live merge gate. Its clean probe, unchanged candidate and immaterial target movement do not require an automatic rebase, repeated full validation, or successor review."
+      },
+      {
+        "id": "unknown-is-selective",
+        "requirement": "D's final validation waits for fresh integration evidence; unknown is neither clean nor a proven conflict. Authorized focused repair checks and independent tasks may continue. A clean Git probe alone never proves semantic correctness."
+      },
+      {
+        "id": "honest-cost",
+        "requirement": "Do not claim measured speedup or treat unknown token usage as zero. Concentrate model work on changed actionable conditions."
+      }
+    ]
+  },
+  {
     "id": "orchestration-profile-budget",
     "skill": "herdr-orchestrate",
     "mode": "explicit",

@@ -9,7 +9,7 @@ const orchestration = cases.filter(c => c.id.startsWith('orchestration-'));
 const evidence = id => JSON.parse(cases.find(c => c.id === `orchestration-${id}`).files['evidence.json']);
 
 test('orchestration observations are current selectable cases with bounded command traces', () => {
-  assert.equal(orchestration.length, 6);
+  assert.equal(orchestration.length, 7);
   assert.equal(orchestration.filter(c => c.expectInvoke === false).length, 1);
   for (const c of orchestration) {
     assert.equal(selectCases(cases, [c.id])[0], c);
@@ -96,4 +96,22 @@ test('profile fixture preserves distinct homes, a one-way route, and unknown spe
   assert.equal(e.budget.reportedUsd, null);
   assert.equal(e.budget.inFlightBoundUsd, null);
   assert.equal(e.existingTask.strictBudgetApplies, false);
+});
+
+test('integration fixture separates a busy conflict, unaffected candidate, and unknown evidence', () => {
+  const e = evidence('proactive-integration');
+  assert.equal(e.tasks.A.mergeCommit, e.target.current);
+  assert.equal(e.tasks.B.probe.target, e.target.current);
+  assert.equal(e.tasks.B.probe.status, 'conflicted');
+  assert.equal(e.tasks.B.review.active, true);
+  assert.equal(e.tasks.B.review.fixedBase, e.target.previous);
+  assert.equal(e.tasks.B.noticeAlreadyDelivered, true);
+  assert.equal(e.tasks.B.driverAcknowledged, false);
+  assert.equal(e.tasks.C.watchTokenUnchanged, true);
+  assert.equal(e.tasks.C.probe.status, 'clean');
+  assert.equal(e.tasks.C.repositoryPolicyRequiresBranchUpdate, false);
+  assert.equal(e.tasks.D.probe.status, 'unknown');
+  assert.equal(e.tasks.D.repairChecksAuthorized, true);
+  assert.equal(e.repeatObservation.onlyFreshnessTimestampChanged, true);
+  assert.equal(e.usage.reportedTokens, null);
 });

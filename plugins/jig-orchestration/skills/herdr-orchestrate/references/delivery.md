@@ -14,6 +14,8 @@ Follow the exact returned controller path/run ID and recorded successor links. A
 
 ## Moving target and history
 
+Use [proactive integration checks](integration.md) for source/target commit observations, publication/merge hooks, selective stage gates and quiet driver handoffs. They detect conflicts before expensive work and retain evidence independently of the frozen review range. Check all active candidates during reconciliation, including PR heads changed externally. A mergeability result does not establish semantic compatibility or repository-policy compliance.
+
 Fetch observations while workers run, but integrate source only at a safe writer boundary. Do not repeatedly merge the target into an active review to improve a status indicator. Independent worktrees can integrate/review concurrently; coordinate concrete target conflicts and required merge queues, not a new global integration queue.
 
 If material target movement requires integration after review starts, settle the old run normally. A permitted successor reviews the complete current PR diff from the new integrated target, retaining original provenance, prior scopes/results, cumulative expenditure, and unresolved findings. An explicit immutable-base contract forbids this change until the user changes that contract.

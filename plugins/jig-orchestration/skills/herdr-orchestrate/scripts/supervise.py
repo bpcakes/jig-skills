@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
 import shlex
 import signal
@@ -213,6 +214,8 @@ def tick(run_dir, now=None):
         Engine.heartbeat(run_dir, timestamp(now))
         state = Engine.read(run_dir)
         schedule = state["scheduler"]
+        if schedule.get("integration_completion"):
+            return complete(run_dir, schedule["integration_completion"], now=now)
         if schedule.get("pending_action_id"):
             return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
                     "delivery_status": schedule.get("delivery_status")}
@@ -228,6 +231,8 @@ def tick(run_dir, now=None):
             return {"status": "not_due", "next_due_at": timestamp(due)}
         scheduler_patch(run_dir, lambda _: {"last_attempt_at": timestamp(now),
                         "next_due_at": timestamp(scheduler_deadline(now, settings["cadence_seconds"]))})
+        from integration import refresh
+        refresh(run_dir)
 
         def check_binding(current):
             if scheduler_config(current["config"], current["scheduler"]) != settings:
@@ -340,12 +345,36 @@ def complete(run_dir, wake_id, now=None):
         # during this pass; only a full manual reconciliation may consume it too.
         requested = schedule.get("wake_requested_at") if wake_id != "manual" else None
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
+                "integration_completion": None,
                 "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
                 "last_completed_wake_id": pending or schedule.get("last_completed_wake_id"),
                 "next_due_at": timestamp(scheduler_deadline(now, interval)),
                 "wake_requested_at": requested, "wake_reason": schedule.get("wake_reason") if requested else None,
                 "failure": endpoint_failure(schedule), "busy_since_at": None}
-    state = scheduler_patch(run_dir, finish)
+    # Validate before observing; replayed completion remains a no-op. Recheck
+    # the wake/configuration in the final short transaction after Git settles.
+    if finish(Engine.read(run_dir)) is not None:
+        # A bounded wait can expire or the process can stop. The existing
+        # scheduler resumes only this completion, without another model turn
+        # or a second reconciliation prompt.
+        scheduler_patch(run_dir, lambda current: None if finish(current) is None
+                        or current["scheduler"].get("integration_completion") == wake_id
+                        else {"integration_completion": wake_id})
+        from integration import refresh
+        check = refresh(run_dir, wait=True)
+        if check["status"] in {"busy", "superseded", "timeout"}:
+            return {"status": "integration_pending", "wake_id": wake_id}
+    def acknowledge(current):
+        update = finish(current)
+        if update is not None:
+            from integration import fresh, registrations, settings
+            if (settings(current["config"])["enabled"] and any(registrations(current).values())
+                    and not fresh(current)):
+                return None  # An invalidation raced the scan; the next tick resumes completion.
+        return update
+    state = scheduler_patch(run_dir, acknowledge)
+    if state["scheduler"].get("integration_completion"):
+        return {"status": "integration_pending", "wake_id": wake_id}
     return {"status": "completed", "last_completed_at": state["scheduler"].get("last_completed_at"),
             "next_due_at": state["scheduler"].get("next_due_at")}
 
@@ -558,7 +587,9 @@ def preflight(config, host_id):
         runtime_roles.update(profile_roles)
         if "review" in profile_roles:
             review_agents.add(agent)
-    required = {"git": (2, 42) if "review" in runtime_roles else None, "herdr": None}
+    from integration import settings as integration_settings
+    needs_git_probe = "coordinator" in runtime_roles and integration_settings(config)["enabled"]
+    required = {"git": (2, 42) if "review" in runtime_roles or needs_git_probe else None, "herdr": None}
     if "coordinator" in runtime_roles or "review" in runtime_roles:
         required["gh"] = None
     if "coordinator" in runtime_roles:
@@ -651,24 +682,46 @@ def task_view(run_dir, task_id, caller="coordinator"):
             "prerequisites": {key: task_complete(state["tasks"].get(key, {})) for key in task.get("recovery_dependencies", [])},
         }
     # Scheduler ticks/config revisions alone do not wake a waiting driver.
-    token = hashlib.sha256(canonical(view).encode()).hexdigest()
-    return {**view, "policy_version": state["policy_version"], "change_token": token}
+    from integration import view as integration_view
+    observations, signal = integration_view(state, task_id)
+    token = hashlib.sha256(canonical({**view, "integration": signal}).encode()).hexdigest()
+    return {**view, "integration": observations, "policy_version": state["policy_version"], "change_token": token}
 
 
-def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator"):
-    if not isinstance(after, str) or type(timeout_seconds) not in {int, float} or not 0 <= timeout_seconds <= 30:
+def apply_request(run_dir, request, caller="coordinator"):
+    from integration import before_stage, after_transition
+    recorded = Engine.action(run_dir, request["action_id"]) if isinstance(request.get("action_id"), str) and request["action_id"] else None
+    if recorded is None and request.get("op") in {"reserve", "prepare", "intent"}:
+        before_stage(run_dir, request, caller)
+    result = Engine.apply(run_dir, request, caller)
+    after_transition(run_dir, request, result)
+    return result
+
+
+def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator", until_change=False, response_fd=None):
+    if (not isinstance(after, str) or type(timeout_seconds) not in {int, float}
+            or not 0 <= timeout_seconds <= 30 or type(until_change) is not bool):
         raise RuntimeErrorDetail("invalid_input", "watch requires a change token and a timeout between zero and 30 seconds")
     deadline = time.monotonic() + timeout_seconds
+    response = None
+    if until_change and response_fd is not None:
+        # Request EOF is the JSON delimiter, not a disconnect. Watch the
+        # response side: pipe readers and SSH's no-PTY socket can disappear
+        # without sending this process a signal or changing task state.
+        response = select.poll()
+        response.register(response_fd, select.POLLERR | select.POLLHUP | select.POLLNVAL)
     while True:
+        if response is not None and response.poll(0):
+            raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
         view = task_view(run_dir, task_id, caller)
         changed = view["change_token"] != after
         remaining = deadline - time.monotonic()
-        if changed or remaining <= 0:
+        if changed or remaining <= 0 and not until_change:
             return {**view, "changed": changed}
-        time.sleep(min(0.25, remaining))
+        time.sleep(0.25 if until_change else min(0.25, remaining))
 
 
-def serve(run_dir, caller, request):
+def serve(run_dir, caller, request, response_fd=None):
     # Pin caller and run-dir in an authorized_keys forced command, with restrict.
     if os.environ.get("SSH_ORIGINAL_COMMAND", ""):
         raise RuntimeErrorDetail("remote_command_rejected", "Send JSON on stdin without a remote command")
@@ -681,7 +734,11 @@ def serve(run_dir, caller, request):
     if request.get("op") == "query":
         return task_view(run_dir, request.get("task_id"), caller)
     if request.get("op") == "watch":
-        return watch_task(run_dir, request.get("task_id"), request.get("after"), request.get("timeout_seconds", 30), caller)
+        return watch_task(run_dir, request.get("task_id"), request.get("after"), request.get("timeout_seconds", 30),
+                          caller, request.get("until_change", False), response_fd=response_fd)
+    if request.get("op") == "integration":
+        from integration import refresh
+        return refresh(run_dir, request.get("task_id"), caller)
     if request.get("op") == "action":
         record = Engine.action(run_dir, request["action_id"])
         if record is None:
@@ -693,23 +750,24 @@ def serve(run_dir, caller, request):
     if request.get("op") == "execute":
         from execute import execute
         return execute(run_dir, request, caller)
-    return Engine.apply(run_dir, request, caller=caller)
+    return apply_request(run_dir, request, caller=caller)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "status", "watch", "apply", "execute", "reconcile", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
+    for name in ("init", "status", "integration", "watch", "apply", "execute", "reconcile", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
         child = sub.add_parser(name)
         child.add_argument("--run-dir", required=True)
         if name == "init":
             child.add_argument("--config", required=True)
-        elif name == "status":
+        elif name in {"status", "integration"}:
             child.add_argument("--task")
         elif name == "watch":
             child.add_argument("--task", required=True)
             child.add_argument("--after", required=True)
             child.add_argument("--timeout-seconds", type=float, default=30)
+            child.add_argument("--until-change", action="store_true")
         elif name in {"apply", "execute", "reconcile"}:
             child.add_argument("--request", default="-")
         elif name == "action":
@@ -737,11 +795,19 @@ def main(argv=None):
                 "scheduler_started": False, "notifications": "authorized" if settings.get("notifier_argv") else "local_evidence_only"}
     if args.command == "status":
         state = Engine.read(args.run_dir)
-        return state["tasks"].get(args.task) if args.task else {**state, "summary": Engine.summary(state)}
+        if args.task:
+            task = state["tasks"].get(args.task)
+            from integration import view as integration_view
+            return {**task, "integration": integration_view(state, args.task)[0]} if task else None
+        return {**state, "summary": Engine.summary(state)}
     if args.command == "watch":
-        return watch_task(args.run_dir, args.task, args.after, args.timeout_seconds)
+        return watch_task(args.run_dir, args.task, args.after, args.timeout_seconds, until_change=args.until_change,
+                          response_fd=sys.stdout.fileno())
     if args.command == "apply":
-        return Engine.apply(args.run_dir, read_json(args.request), caller="coordinator")
+        return apply_request(args.run_dir, read_json(args.request), caller="coordinator")
+    if args.command == "integration":
+        from integration import refresh
+        return refresh(args.run_dir, args.task)
     if args.command == "execute":
         from execute import execute
         return execute(args.run_dir, read_json(args.request))
@@ -751,7 +817,7 @@ def main(argv=None):
     if args.command == "action":
         return Engine.action(args.run_dir, args.id)
     if args.command == "serve":
-        return serve(args.run_dir, args.caller, read_json("-"))
+        return serve(args.run_dir, args.caller, read_json("-"), response_fd=sys.stdout.fileno())
     if args.command == "preflight":
         return preflight(read_json(args.config), args.host)
     if args.command == "wake":
@@ -765,5 +831,7 @@ if __name__ == "__main__":
     try:
         output(main())
     except (StateError, RuntimeErrorDetail, OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        if getattr(error, "code", None) == "watch_disconnected":
+            sys.exit(0)
         output({"ok": False, "error": {"code": getattr(error, "code", "invalid_input"), "message": str(error)}})
         sys.exit(1)

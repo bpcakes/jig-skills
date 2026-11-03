@@ -244,14 +244,14 @@ class Engine:
     # These operations inspect current restrictions inside the transaction. A
     # changed run configuration is not itself a reason to reject task progress.
     TASK_OPERATIONS = {"reserve", "settle", "park", "observe", "intent", "outcome", "staging", "close",
-                       "prepare", "dispatch", "finish"}
+                       "prepare", "dispatch", "finish", "candidate", "integration_ack"}
     SCHEDULER_FIELDS = {
         "enabled", "heartbeat_at", "last_attempt_at", "last_delivered_at", "last_completed_at",
         "next_due_at", "pending_action_id", "delivery_status", "failure", "alerted_failure_id",
         "last_completed_action_id", "wake_requested_at", "wake_reason",
         "last_alert", "busy_since_at", "last_dispatched_action_id", "last_dispatched_at",
         "last_delivered_action_id",
-        "last_completed_wake_id", "health_alerts",
+        "last_completed_wake_id", "health_alerts", "integration_completion",
     }
 
     @staticmethod
@@ -274,6 +274,8 @@ class Engine:
     @staticmethod
     def _validate_config(run_dir, config):
         require(isinstance(config, dict), "invalid", "config must be an object")
+        from integration import validate_config
+        validate_config(config)
         repo = config.get("repository", {})
         require(nonempty(repo.get("path")) and Path(repo["path"]).is_absolute()
                 and nonempty(repo.get("target")), "invalid", "repository requires absolute path and target")
@@ -373,6 +375,37 @@ class Engine:
             write_atomic(path / "heartbeat.json", {"heartbeat_at": at})
 
     @staticmethod
+    def publish_integration(run_dir, snapshot, report):
+        from integration import publish
+        with locked(run_dir) as path:
+            state = read_json(path / "state.json")
+            if not publish(state, snapshot, copy.deepcopy(report)):
+                return False
+            # Observations do not rebind grants, task versions or review refs.
+            write_atomic(path / "state.json", state)
+            return True
+
+    @staticmethod
+    def wait_for_integration(run_dir, request, caller, after):
+        from integration import registrations, OID
+        with locked(run_dir) as path:
+            state = read_json(path / "state.json")
+            task = state["tasks"].get(request.get("task_id"))
+            Engine._authorize(state, {"op": "observe"}, caller, task)
+            if task is None:
+                return
+            candidates = registrations(state).get(task["id"], {})
+            cid = request.get("candidate_id")
+            if cid is None and len(candidates) == 1:
+                cid = next(iter(candidates))
+            head = request.get("target", {}).get("head")
+            if not isinstance(cid, str) or cid not in candidates or not isinstance(head, str) or not OID.fullmatch(head):
+                return
+            state.setdefault("integration", {}).setdefault("waiters", {})[canonical([task["id"], cid])] = {
+                "task_id": task["id"], "candidate_id": cid, "head": head, "after": after}
+            write_atomic(path / "state.json", state)
+
+    @staticmethod
     def action(run_dir, action_id, *, runner=False):
         require(nonempty(action_id), "invalid", "action_id must be a nonempty string")
         with locked(run_dir) as path:
@@ -421,7 +454,22 @@ class Engine:
                     require(internal, "execution", "dispatch runner operations through execute")
                 if request["op"] == "outcome" or (request["op"] == "finish" and pending["execution"]["dispatched_at"]):
                     require(internal, "execution", "issued runner outcomes require lock-held execution or inspection")
-            details = Engine._transition(state, request, caller, task, path)
+            try:
+                details = Engine._transition(state, request, caller, task, path)
+            except StateError as exc:
+                waiter = getattr(exc, "integration_waiter", None)
+                if waiter:
+                    # Persist only the wait predicate, never a partially failed
+                    # reservation or attempt counter. Future readiness can wake
+                    # this driver without broadcasting transient fetch failures.
+                    original = read_json(path / "state.json")
+                    current = original.setdefault("integration", {})
+                    key = canonical([waiter["task_id"], waiter["candidate_id"]])
+                    current.setdefault("waiters", {})[key] = waiter
+                    stats = current.setdefault("stats", {})
+                    stats["blocked_stage_requests"] = stats.get("blocked_stage_requests", 0) + 1
+                    write_atomic(path / "state.json", original)
+                raise
             state["version"] += 1
             state["updated_at"] = timestamp()
             task = state["tasks"].get(request.get("task_id"))
@@ -617,7 +665,7 @@ class Engine:
         config = state["config"]
         if op == "configure":
             fields = req.get("fields", {})
-            allowed = {"authority", "unfinished_task_cap", "limits", "launch_cutoff", "scope", "hosts", "actors", "scheduler", "adapters"}
+            allowed = {"authority", "unfinished_task_cap", "limits", "launch_cutoff", "scope", "hosts", "actors", "scheduler", "adapters", "integration"}
             require(isinstance(fields, dict) and fields and set(fields) <= allowed,
                     "invalid", "unsupported configuration fields")
             evidence(req.get("evidence"))
@@ -678,6 +726,9 @@ class Engine:
                 state["scheduler"]["enabled"] = candidate["scheduler"]["enabled"]
                 state["scheduler"]["version"] += 1
             state["config"] = candidate
+            if "integration" in fields:
+                from integration import invalidate
+                invalidate(state, "configuration_changed")
             for existing in state["tasks"].values():
                 grant = existing.get("delegation")
                 if grant and "binding" in grant:
@@ -789,6 +840,10 @@ class Engine:
                 "merged_prs": {},
                 "budget_root": state.get("task_links", {}).get(req["task_id"], {}).get("budget_root", req["task_id"]),
             }
+            from integration import register, settings
+            if settings(config)["enabled"]:
+                register(state, state["tasks"][req["task_id"]],
+                         {"id": "branch", "ref": "refs/heads/" + req["branch"]})
             if "actions" in req:
                 Engine._transition(state, {**req, "op": "delegate", "executor": driver}, caller,
                                    state["tasks"][req["task_id"]], run_dir)
@@ -985,6 +1040,8 @@ class Engine:
             for key, value in refs.items():
                 require(nonempty(value) and (key not in task["refs"] or task["refs"][key] == value),
                         "identity", "reservation references do not match the registered run")
+            from integration import gate
+            integration = gate(state, task, req)
             for limit in config.get("limits", []):
                 if limit["unit"] == req["unit"]:
                     counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
@@ -994,6 +1051,9 @@ class Engine:
                 counters[req["unit"]] = counters.get(req["unit"], 0) + 1
             task["reservations"][req["action_id"]] = {"kind": kind, "unit": req["unit"], "refs": refs,
                                                          "reserved_at": timestamp(), "status": "reserved"}
+            task["reservations"][req["action_id"]].update(integration=integration, purpose=req.get("purpose", "final"))
+            if integration:
+                state.get("integration", {}).get("waiters", {}).pop(canonical([task["id"], integration["candidate_id"]]), None)
             if kind not in {"review", "validate", "close"}:
                 # A new mutation needs fresh acceptance; read-only follow-up
                 # work must not erase an already published tracker closure.
@@ -1056,6 +1116,19 @@ class Engine:
                 "text": req["resolution"], "evidence": req["evidence"]}
             task.update(recovery_open=False, blocker=None, next_action=req["resolution"])
             return {"resolved": req["recovery_id"]}
+        if op == "candidate":
+            from integration import register
+            evidence(req.get("evidence"))
+            return register(state, task, req.get("candidate"))
+        if op == "integration_ack":
+            evidence(req.get("evidence"))
+            key = canonical([task["id"], req.get("candidate_id")])
+            incident = state.get("integration", {}).get("incidents", {}).get(key)
+            require(incident and incident.get("active") and incident["id"] == req.get("incident_id"),
+                    "integration", "acknowledge the active integration incident")
+            incident.setdefault("acknowledged_at", req["evidence"]["observed_at"])
+            incident.setdefault("acknowledgement", req["evidence"])
+            return {"acknowledged": incident["id"]}
         if op == "observe":
             fields = req.get("fields", {})
             allowed = {"blocker", "next_action", "findings", "refs", "pr", "acceptance", "usage", "identity"}
@@ -1144,6 +1217,8 @@ class Engine:
                     counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
                     require(counters.get(limit["unit"], 0) <= limit["max"], "budget", "current limit prevents dispatch")
             original = execution["request"]
+            from integration import gate
+            pending["integration"] = gate(state, task, original, expected=pending.get("integration"))
             if kind == "merge":
                 Engine._merge_gate(state, task, original)
             elif kind == "close":
@@ -1152,6 +1227,10 @@ class Engine:
                 require(state["staging"]["owner"] == task["id"]
                         and state["staging"]["generation"] == pending["target"].get("staging_generation"),
                         "ownership", "prepared staging ownership changed")
+            if pending.get("integration"):
+                task["reservations"][pending["id"]]["integration"] = pending["integration"]
+                state.get("integration", {}).get("waiters", {}).pop(
+                    canonical([task["id"], pending["integration"]["candidate_id"]]), None)
             execution["dispatched_at"] = timestamp()
             return {"dispatch": pending}
         if op == "finish":
@@ -1189,6 +1268,12 @@ class Engine:
             Engine._delegated(state, task, caller, kind)
             require(isinstance(req.get("target"), dict) and req["target"], "identity", "explicit side-effect target is required")
             evidence(req.get("evidence"))
+            from integration import gate, settings
+            prior_reservation = task["reservations"].get(req.get("reservation_id"), {})
+            if settings(config)["enabled"] and kind == "validate" and prior_reservation:
+                require(prior_reservation.get("purpose", "final") == req.get("purpose", "final"),
+                        "integration", "validation purpose must match its reservation")
+            integration = gate(state, task, req, expected=prior_reservation.get("integration"))
             if kind == "split":
                 require(caller == "coordinator", "forbidden", "only the coordinator creates dependency tasks")
                 target = req["target"]
@@ -1245,6 +1330,11 @@ class Engine:
             task["pending_intent"] = {"id": req["action_id"], "executor": caller, "kind": kind,
                                       "target": req["target"], "evidence": req["evidence"],
                                       "policy_version": state["policy_version"], "status": "pending"}
+            task["pending_intent"].update(integration=integration, purpose=req.get("purpose", "final"))
+            if integration:
+                if reservation:
+                    reservation["integration"] = integration
+                state.get("integration", {}).get("waiters", {}).pop(canonical([task["id"], integration["candidate_id"]]), None)
             if kind == "close":
                 task["pending_intent"]["closure_binding"] = Engine._closure_binding(state, task)
             elif kind not in {"review", "validate"}:
@@ -1312,6 +1402,13 @@ class Engine:
                         "head": pending["target"]["head"], "merge_commit": req["receipt"]["merge_commit"],
                         "receipt": req["receipt"], "intent_id": pending["id"], "outcome_action_id": req["action_id"],
                     }
+                    for candidate in task.get("candidates", {}).values():
+                        if candidate.get("pr") == pending["target"]["pr"]:
+                            candidate["active"] = False
+                if status == "succeeded" and pending["kind"] in {"merge", "push", "pr"}:
+                    from integration import invalidate, settings
+                    if settings(config)["enabled"]:
+                        invalidate(state, pending["kind"] + "_succeeded")
             return {"outcome": status}
         if op == "close":
             last = task.get("closure_outcome") or {}
@@ -1428,6 +1525,8 @@ class Engine:
 
     @staticmethod
     def _merge_gate(state, task, req):
+        from integration import gate
+        gate(state, task, {**req, "kind": "merge"})
         require(not task.get("recovery_open"), "recovery", "resolve parked recovery before merge")
         Engine._dependencies_complete(state, task)
         target = req["target"]

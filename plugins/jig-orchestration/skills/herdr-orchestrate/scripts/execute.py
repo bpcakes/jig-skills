@@ -114,8 +114,12 @@ def execute(run_dir, request, caller="coordinator"):
                 if key not in {"op", "expected_policy", "expected_task"}:
                     require(record["request"].get(key) == value, "duplicate", "operation input changed; inspect its original result")
         else:
+            from integration import before_stage
+            before_stage(run_dir, request, caller)
             Engine.apply(run_dir, {**request, "op": "prepare"}, caller)
         if completed:
+            from integration import after_transition
+            after_transition(run_dir, {"op": "finish"}, completed["result"])
             return completed["result"]
         task = Engine.read(run_dir)["tasks"][task_id]
         pending = task["pending_intent"]
@@ -126,20 +130,26 @@ def execute(run_dir, request, caller="coordinator"):
         require(mode == "inspect" or pending["executor"] == caller, "authority",
                 "coordinator recovery may inspect issued work; it cannot dispatch another executor's prepared action")
         if mode == "dispatch":
+            if record:
+                from integration import before_stage
+                before_stage(run_dir, execution["request"], caller)
             # This durable transition is the issuance boundary. A crash after
             # it, even before Popen, always resumes with inspection.
-            transition(run_dir, caller, task_id, "dispatch", operation_id + "/dispatch", execution=guard, operation_id=operation_id)
+            issued = transition(run_dir, caller, task_id, "dispatch", operation_id + "/dispatch", execution=guard, operation_id=operation_id)
+            pending = issued["dispatch"]
+            execution = pending["execution"]
         payload = {"operation_id": operation_id, "task_id": task_id, "kind": pending["kind"],
                    "target": pending["target"], "evidence": pending["evidence"],
                    "gates": execution["request"].get("gates", {}),
-                   "task": execution["binding"], "refs": execution["request"].get("refs", {})}
+                   "task": execution["binding"], "refs": execution["request"].get("refs", {}),
+                   "integration": pending.get("integration"), "purpose": pending.get("purpose", "final")}
         # The adapter inherits the lock: parent loss cannot permit inspection
         # while that original local process is still capable of an effect.
         result = invoke(directory, execution["adapter_binding"], mode, payload, fd)
         completion_id = operation_id + ("/observe-" + uuid.uuid4().hex if result["status"] == "unknown" else "/complete")
         try:
-            return transition(run_dir, caller, task_id, "finish", completion_id,
-                              execution=guard, operation_id=operation_id, **result)
+            finished = transition(run_dir, caller, task_id, "finish", completion_id,
+                                  execution=guard, operation_id=operation_id, **result)
         except StateError as exc:
             if result["status"] == "unknown" or exc.code in {"stale_policy", "stale_task", "contention"}:
                 raise
@@ -150,6 +160,9 @@ def execute(run_dir, request, caller="coordinator"):
                        "rejection": {"code": exc.code, "message": str(exc)}}
             return transition(run_dir, caller, task_id, "finish", operation_id + "/observe-" + uuid.uuid4().hex,
                               execution=guard, operation_id=operation_id, status="unknown", receipt=receipt)
+        from integration import after_transition
+        after_transition(run_dir, {"op": "finish"}, finished)
+        return finished
 
 
 def reconcile(run_dir, request, caller="coordinator"):
@@ -172,10 +185,15 @@ def reconcile(run_dir, request, caller="coordinator"):
             require(original.get("task_id") == task_id and original.get("operation_id") == operation_id
                     and original.get("status") == request["status"] and original.get("receipt") == request["receipt"],
                     "duplicate", "operation already completed with a different receipt")
+            from integration import after_transition
+            after_transition(run_dir, {"op": "finish"}, completed["result"])
             return completed["result"]
         task = Engine.read(run_dir)["tasks"][task_id]
         pending = task["pending_intent"]
         require(pending and pending["id"] == operation_id and pending.get("execution", {}).get("dispatched_at"),
                 "uncertain", "reconciliation requires an issued pending runner operation")
-        return transition(run_dir, caller, task_id, "finish", operation_id + "/complete", execution=guard,
-                          operation_id=operation_id, status=request["status"], receipt=request["receipt"])
+        result = transition(run_dir, caller, task_id, "finish", operation_id + "/complete", execution=guard,
+                            operation_id=operation_id, status=request["status"], receipt=request["receipt"])
+        from integration import after_transition
+        after_transition(run_dir, {"op": "finish"}, result)
+        return result

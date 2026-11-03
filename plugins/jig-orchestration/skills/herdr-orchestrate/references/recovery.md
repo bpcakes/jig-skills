@@ -24,7 +24,7 @@ Use this reference for restarts, scheduling, shared staging, relocation, or reti
 
 ## Reconciliation and restart
 
-Run one bounded reconciliation at a time. Read compact current state, inspect the registered external identities and artifacts, and apply observations using current policy/task versions. Never hold a state lock across an external command or model turn. A blocker records its predicate, evidence source, observation time, and next action; historical/unknown data is not a fresh failure.
+Run one bounded reconciliation at a time. Include the helper's [integration scan](integration.md) of active candidates against the current target; `complete` performs it before acknowledging a new full pass. It waits for a concurrent scan in code; a timeout retains `integration_completion` so the existing scheduler can resume completion without repeating the coordinator pass. Preserve an integration incident while its driver is busy, then integrate at the supported writer boundary. Read compact current state, inspect the registered external identities and artifacts, and apply observations using current policy/task versions. Never hold a state lock across an external command or model turn. A blocker records its predicate, evidence source, observation time, and next action; historical/unknown data is not a fresh failure.
 
 Before restarting a session, inspect the actual pane occupant, surviving background jobs/reviewer handles, unsent input, and saved handoff. Adopt an existing replacement when appropriate. Rebind profile/session/native identity without losing claim, source revision, run IDs, active jobs, prior findings, limits, or tool denials. Native approval settings survive recovery.
 
