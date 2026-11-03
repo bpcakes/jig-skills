@@ -399,7 +399,7 @@ class Engine:
 
     @staticmethod
     def wait_for_integration(run_dir, request, caller, after):
-        from integration import registrations, stage_waiter, OID
+        from integration import registrations, select_candidate, stage_waiter, OID
         with locked(run_dir) as path:
             state = read_json(path / "state.json")
             task = state["tasks"].get(request.get("task_id"))
@@ -407,13 +407,12 @@ class Engine:
             if task is None:
                 return
             candidates = registrations(state).get(task["id"], {})
-            cid = request.get("candidate_id")
-            if cid is None and len(candidates) == 1:
-                cid = next(iter(candidates))
+            expected = task["reservations"].get(request.get("reservation_id"), {}).get("integration")
+            cid = select_candidate(candidates, request, expected)
             head = request.get("target", {}).get("head")
             if not isinstance(cid, str) or cid not in candidates or not isinstance(head, str) or not OID.fullmatch(head):
                 return
-            waiter = stage_waiter(task, request, cid)
+            waiter = stage_waiter(task, request, cid, expected)
             state.setdefault("integration", {}).setdefault("waiters", {})[canonical([task["id"], cid])] = {
                 **waiter, "after": after}
             write_atomic(path / "state.json", state)

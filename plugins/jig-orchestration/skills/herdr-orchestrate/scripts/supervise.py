@@ -215,7 +215,16 @@ def tick(run_dir, now=None):
         state = Engine.read(run_dir)
         schedule = state["scheduler"]
         if schedule.get("integration_completion"):
-            return complete(run_dir, schedule["integration_completion"], now=now)
+            def discard_orphan(current):
+                latest = current["scheduler"]
+                marker = latest.get("integration_completion")
+                if marker and marker != "manual" and marker != latest.get("pending_action_id"):
+                    return {"integration_completion": None}
+                return None
+            state = scheduler_patch(run_dir, discard_orphan)
+            schedule = state["scheduler"]
+            if schedule.get("integration_completion"):
+                return complete(run_dir, schedule["integration_completion"], now=now)
         if schedule.get("pending_action_id"):
             return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
                     "delivery_status": schedule.get("delivery_status")}

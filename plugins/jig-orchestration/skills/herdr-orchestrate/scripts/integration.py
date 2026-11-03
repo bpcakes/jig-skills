@@ -126,6 +126,14 @@ def stage_waiter(task, request, candidate_id, expected=None):
     return waiter
 
 
+def select_candidate(candidates, request, expected=None):
+    if request.get("candidate_id") is not None:
+        return request["candidate_id"]
+    if expected is not None:
+        return expected.get("candidate_id")
+    return next(iter(candidates)) if len(candidates) == 1 else None
+
+
 def gate(state, task, request, expected=None):
     """Bind a new final stage to fresh evidence without changing review refs."""
     if not gated(state["config"], request):
@@ -133,9 +141,7 @@ def gate(state, task, request, expected=None):
             require(bool(task.get("merged_prs")), "integration", "acceptance validation requires a recorded merge")
         return None
     candidates = registrations(state).get(task["id"], {})
-    cid = request.get("candidate_id")
-    if cid is None and len(candidates) == 1:
-        cid = next(iter(candidates))
+    cid = select_candidate(candidates, request, expected)
     require(cid in candidates, "integration", "select a registered active candidate_id for this stage")
     target = request.get("target", {})
     require(isinstance(target, dict) and OID.fullmatch(str(target.get("head", ""))),
@@ -295,10 +301,11 @@ class ProbeTimeout(Exception):
 
 
 class Git:
-    def __init__(self, directory, timeout):
+    def __init__(self, directory, timeout, lock_fd=None):
         self.directory = directory
         self.deadline = time.monotonic() + timeout
         self.version = ""
+        self.lock_fd = lock_fd
 
     def run(self, *args, isolated=False):
         # Repository identity never leaks in from the caller. Keep configured
@@ -315,10 +322,14 @@ class Git:
             raise ProbeTimeout("timeout")
         with tempfile.TemporaryFile(dir=self.directory) as out, tempfile.TemporaryFile(dir=self.directory) as err:
             try:
-                process = subprocess.Popen(["git", *args], stdout=out, stderr=err, env=env, start_new_session=True)
+                process = subprocess.Popen(["git", *args], stdout=out, stderr=err, env=env, start_new_session=True,
+                                           pass_fds=() if self.lock_fd is None else (self.lock_fd,))
                 try:
                     process.wait(timeout=remaining)
-                except subprocess.TimeoutExpired:
+                except BaseException:
+                    # Handled interruption reaps the command. If the scanner
+                    # dies outright, Git retains the private-cache lock until
+                    # its surviving operation finishes.
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
@@ -418,12 +429,12 @@ def probe(git, cache, head, target, options):
     return result
 
 
-def scan(directory, state, deadline=None, *, bootstrap=False):
+def scan(directory, state, deadline=None, *, bootstrap=False, lock_fd=None):
     cfg = settings(state["config"])
     timeout = cfg["bootstrap_timeout_seconds" if bootstrap else "timeout_seconds"]
     if deadline is not None:
         timeout = min(timeout, max(0, deadline - time.monotonic()))
-    git = Git(directory, timeout)
+    git = Git(directory, timeout, lock_fd)
     candidates = registrations(state)
     observations = {tid: {cid: {"status": "unknown", "reason": "not_observed"} for cid in items} for tid, items in candidates.items()}
     counts = {"scans": 1, "probes": 0, "cache_hits": 0, "fetches": 0}
@@ -568,7 +579,7 @@ def refresh(run_dir, task_id=None, caller="coordinator", *, wait=False, bootstra
             if time.monotonic() >= deadline:
                 return timed_out(state)
             try:
-                report = scan(directory, state, deadline=deadline, bootstrap=bootstrap)
+                report = scan(directory, state, deadline=deadline, bootstrap=bootstrap, lock_fd=fd)
             except ProbeTimeout:
                 return timed_out(state)
             if time.monotonic() >= deadline:

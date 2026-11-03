@@ -28,6 +28,8 @@ Run one bounded reconciliation at a time. Include the helper's [integration scan
 
 For repeated scan timeouts, use the recovery action returned in `integration.next_action`: verify source authentication/reachability and, for a cold or outgrown private cache, run coordinator `integration --bootstrap` with a sufficient `bootstrap_timeout_seconds` budget. Normal scans remain short. Retain pending completion while access or capacity is unresolved; do not acknowledge a full pass using stale evidence. After recovery, the existing scheduler completes the retained pass without another coordinator prompt.
 
+If a coordinator scheduler edit clears or replaces a pending wake, the next tick discards any completion marker belonging to the old wake and continues normal scheduling. Matching markers and explicit manual completion remain resumable; this does not acknowledge an obsolete pass.
+
 Before restarting a session, inspect the actual pane occupant, surviving background jobs/reviewer handles, unsent input, and saved handoff. Adopt an existing replacement when appropriate. Rebind profile/session/native identity without losing claim, source revision, run IDs, active jobs, prior findings, limits, or tool denials. Native approval settings survive recovery.
 
 Use the coordinator-only `recover_session` transition for a verified replacement at the existing host/worktree, supplying the exact old identity and evidence that the old model stopped and the replacement was inspected. It preserves reservations and uncertain outcomes; reconcile those by their original IDs before any new assignment. Revalidate delegation after recovery. Settled relocation remains a separate `handoff`; do not mark surviving jobs settled to replace only the model session.

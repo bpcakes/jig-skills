@@ -5,10 +5,12 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -600,6 +602,34 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
         self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 1)
         self.assertEqual((self.base / "effects").read_text().splitlines(), [req["action_id"]])
 
+    def test_prepared_candidate_survives_registration_growth_and_busy_wait(self):
+        self.adapter("review")
+        self.refresh()
+        request = self.request("prepare", "C", kind="review", adapter="fixture",
+                               target={"head": self.heads["C"]}, evidence=self.proof())
+        Engine.apply(self.run, request)
+        original = Engine.read(self.run)["tasks"]["C"]["pending_intent"]
+        self.apply("candidate", "C", candidate={"id": "second", "ref": "refs/heads/task/B"}, evidence=self.proof())
+        resume = {"op": "execute", "action_id": request["action_id"], "task_id": "C"}
+        with patch.object(integration, "refresh", return_value={"status": "busy"}):
+            self.assert_error("integration", runner.execute, self.run, resume)
+        waiting = supervise.task_view(self.run, "C")
+        candidates = waiting["integration"]["candidates"]
+        self.assertEqual(candidates["branch"]["waiting"]["status"], "pending")
+        self.assertIsNone(candidates["second"]["waiting"])
+        self.refresh()
+        ready = supervise.task_view(self.run, "C")
+        self.assertNotEqual(ready["change_token"], waiting["change_token"])
+        self.assertEqual(ready["integration"]["candidates"]["branch"]["waiting"]["status"], "ready")
+        self.assertEqual(runner.execute(self.run, resume)["outcome"], "succeeded")
+        payload = json.loads((self.base / "effects.requests").read_text())
+        self.assertEqual(payload["operation_id"], original["id"])
+        self.assertEqual(payload["integration"]["candidate_id"], "branch")
+        self.assertEqual(payload["integration"]["head"], self.heads["C"])
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 1)
+        self.assertEqual((self.base / "effects").read_text().splitlines(), [request["action_id"]])
+        self.assert_error("integration", self.reserve, "C")  # New work must still disambiguate.
+
     def test_changed_merge_policy_still_fences_a_reserved_final_stage(self):
         self.refresh()
         reserved = self.reserve("C")
@@ -944,6 +974,95 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
         with patch.dict(os.environ, {"PATH": str(self.base / "missing-bin")}):
             with self.assertRaisesRegex(integration.ProbeError, "git_unavailable"):
                 git.run("--version")
+
+    def test_cache_lock_survives_scanner_death_and_interrupt_reaps_git(self):
+        executable = shutil.which("git")
+        binaries = self.base / "held-git"
+        binaries.mkdir()
+        pid_file, entered, release = (self.base / name for name in ("git-pid", "upload-entered", "upload-release"))
+        upload = binaries / "upload"
+        upload.write_text(f'''#!{sys.executable}
+import os, pathlib, sys, time
+pathlib.Path({str(entered)!r}).touch()
+while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.02)
+os.execv({executable!r}, [{executable!r}, "upload-pack", *sys.argv[1:]])
+''')
+        upload.chmod(0o700)
+        shim = binaries / "git"
+        shim.write_text(f'''#!{sys.executable}
+import os, pathlib, sys
+args = sys.argv[1:]
+if "fetch" in args:
+    pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))
+    args.insert(args.index("fetch") + 1, "--upload-pack=" + {str(upload)!r})
+os.execv({executable!r}, [{executable!r}, *args])
+''')
+        shim.chmod(0o700)
+        for interruption in (signal.SIGKILL, signal.SIGINT):
+            with self.subTest(interruption=interruption):
+                for path in (pid_file, entered, release):
+                    path.unlink(missing_ok=True)
+                head = self.git("commit-tree", self.git("rev-parse", self.heads["C"] + "^{tree}"),
+                                "-p", self.heads["C"], "-m", "fetch for " + str(interruption))
+                self.git("update-ref", "refs/heads/task/C", head)
+                child = None
+                parent = subprocess.Popen([sys.executable, "-B", str(fixtures.SCRIPTS / "supervise.py"),
+                    "integration", "--run-dir", str(self.run)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    env={**os.environ, "PATH": str(binaries) + os.pathsep + os.environ["PATH"]})
+                try:
+                    deadline = time.monotonic() + 10
+                    while not entered.exists() and parent.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue(entered.exists(), "Git did not enter the held fetch")
+                    child = int(pid_file.read_text())
+                    parent.send_signal(interruption)
+                    parent.wait(timeout=5)
+                    if interruption == signal.SIGKILL:
+                        os.kill(child, 0)
+                        self.assertEqual(integration.refresh(self.run)["status"], "busy")
+                        release.touch()
+                        deadline = time.monotonic() + 10
+                        while True:
+                            result = integration.refresh(self.run)
+                            if result["status"] != "busy" or time.monotonic() >= deadline:
+                                break
+                            time.sleep(0.02)
+                        self.assertEqual(result["status"], "observed")
+                    else:
+                        with self.assertRaises(ProcessLookupError):
+                            os.kill(child, 0)
+                        self.assertEqual(integration.refresh(self.run)["status"], "observed")
+                    self.assertEqual(self.observation("C")["head"], head)
+                finally:
+                    release.touch()
+                    if parent.poll() is None:
+                        parent.kill()
+                        parent.wait(timeout=5)
+                    if child is not None:
+                        try:
+                            os.killpg(child, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    parent.stdout.close()
+                    parent.stderr.close()
+
+    def test_tick_discards_completion_for_a_manually_cleared_or_replaced_wake(self):
+        self.refresh()
+        for replacement in (None, "new-wake"):
+            with self.subTest(replacement=replacement):
+                supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": "old-wake",
+                    "integration_completion": "old-wake", "next_due_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()})
+                self.apply("scheduler", fields={"pending_action_id": replacement},
+                           expected_scheduler=Engine.read(self.run)["scheduler"]["version"])
+                with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+                    result = supervise.tick(self.run)
+                    herdr.assert_not_called()
+                self.assertEqual(result["status"], "not_due" if replacement is None else "awaiting_reconciliation")
+                schedule = Engine.read(self.run)["scheduler"]
+                self.assertIsNone(schedule["integration_completion"])
+                self.assertEqual(schedule["pending_action_id"], replacement)
+                with self.assertRaisesRegex(supervise.RuntimeErrorDetail, "pending wake"):
+                    supervise.complete(self.run, "old-wake")
 
     def test_repeated_timeouts_retain_completion_until_source_recovery(self):
         self.refresh()
