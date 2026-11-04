@@ -144,6 +144,69 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         self.assertEqual(Engine.read(self.run), before)
         self.assertFalse(self.effects())
 
+    def typed_merge_request(self):
+        self.adapter("merge")
+        self.admit(actions=["merge"])
+        self.admit("B", host="remote")
+        fixtures.EngineTests.dependency(self)
+        # Load a recorded prerequisite landing, leaving its acceptance task open.
+        state = Engine.read(self.run)
+        state["tasks"]["B"]["merged_prs"]["415"] = {"head": "a" * 40, "merge_commit": "c" * 40}
+        write_atomic(self.run / "state.json", state)
+        refs = {"run_id": "review-1", "controller_id": "controller-1", "review_head": "H", "review_base": "B"}
+        self.apply("observe", "A", caller="worker-a", fields={"refs": refs}, evidence=self.proof())
+        proof = {**self.proof(), "head": "a" * 40, "merge_commit": "c" * 40,
+                 "candidate_head": "H", "target": "main", "source_incorporated": True, "target_incorporated": True}
+        gates = {**{key: True for key in ("complete", "validation", "checks", "feedback", "findings", "target_current", "clean")},
+                 **refs, "checkout_head": "H", "pr_head": "H", "commit_mode": "per-round",
+                 "dependency_incorporation": {"B:source": proof}}
+        return self.request("execute", "A", kind="merge", adapter="test", refs=refs, gates=gates,
+                            target={"repository": str(self.repo), "base": "main", "pr": 12, "head": "H"},
+                            evidence=self.proof(True))
+
+    def test_typed_merge_rejects_missing_head_with_structured_identity_error(self):
+        request = self.typed_merge_request()
+        del request["target"]["head"]
+        before = Engine.read(self.run)
+        self.assert_error("identity", self.run_action, request)
+        self.assertEqual(Engine.read(self.run), before)
+        self.assertFalse(self.effects())
+
+    def test_typed_merge_prepare_rolls_back_missing_or_mismatched_incorporation(self):
+        request = self.typed_merge_request()
+        before = Engine.read(self.run)
+        for missing in (True, False):
+            with self.subTest(missing=missing):
+                invalid = copy.deepcopy(request)
+                if missing:
+                    del invalid["gates"]["dependency_incorporation"]
+                else:
+                    invalid["gates"]["dependency_incorporation"]["B:source"]["candidate_head"] = "stale"
+                self.assert_error("evidence" if missing else "dependency", self.run_action, invalid)
+                self.assertEqual(Engine.read(self.run), before, "rejection must preserve slots, reservations and counters")
+                self.assertIsNone(Engine.action(self.run, request["action_id"]))
+                self.assertFalse(self.effects())
+
+    def test_typed_merge_dispatch_rechecks_landing_and_executes_valid_proof_once(self):
+        request = self.typed_merge_request()
+        Engine.apply(self.run, {**request, "op": "prepare"}, "worker-a")
+        prepared = Engine.read(self.run)
+        # A changed observed landing must invalidate the already-frozen proof at dispatch.
+        changed = copy.deepcopy(prepared)
+        changed["tasks"]["B"]["merged_prs"]["415"]["merge_commit"] = "d" * 40
+        write_atomic(self.run / "state.json", changed)
+        self.assert_error("dependency", self.resume, request)
+        self.assertEqual(Engine.read(self.run), changed)
+        self.assertFalse(self.effects())
+        write_atomic(self.run / "state.json", prepared)
+        self.assertEqual(self.resume(request)["outcome"], "succeeded")
+        self.assertEqual(self.resume(request)["outcome"], "succeeded")
+        self.assertEqual(self.effects(), [request["action_id"]])
+        final = Engine.read(self.run)
+        self.assertEqual(final["tasks"]["A"]["merged_prs"]["12"]["head"], "H")
+        self.assertFalse(final["tasks"]["A"]["reservations"])
+        self.assertNotEqual(final["tasks"]["B"]["phase"], "closed")
+
     def test_prepared_launch_rechecks_pause_budget_and_revocation(self):
         request = self.start()
         Engine.apply(self.run, {**request, "op": "prepare"}, "worker-a")

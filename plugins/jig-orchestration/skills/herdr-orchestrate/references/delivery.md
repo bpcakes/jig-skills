@@ -22,6 +22,8 @@ If material target movement requires integration after review starts, settle the
 
 The task driver reconciles cross-run findings by ID and artifact reference. Each carried actionable finding needs a demonstrated fix, sourced rejection, or unresolved blocker against the candidate. Absence from newer reports does not resolve it. Reconcile after new reports and before merge; do not seed independent reviewers with old verdicts or repair narratives. Acceptance decisions must have an actual source, not an invented product exception.
 
+For an upstream landing with unchanged reviewed content, use [controller-owned applicability reconciliation](dependencies.md#preserve-applicable-review-evidence). An applicable mapped report keeps its original identity; the new convergence outcome binds the current candidate.
+
 ## Merge gate
 
 The designated executor must inspect fresh evidence for all of these:

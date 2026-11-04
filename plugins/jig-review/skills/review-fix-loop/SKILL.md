@@ -21,6 +21,8 @@ Use the handoff's researched answers, sources, and updated recommendations when 
 
 A concurrent review wave stops on source drift and settles its jobs before any repair; inspect the retained changes. Outside that barrier, source changes do not automatically end the turn. The controller preserves completed reports, records checkout changes, and sends affected findings back to local triage against the latest source without restarting discovery. When `sourceChanges` is supplied, use `needs-validation` for findings that newer edits appear to fix but which lack matching required checks. Those findings remain provisional until validation passes. For checkout changes during validation, assess the supplied `validationAssessment` and return `validationImpact` for each completed check: reuse an unaffected result with evidence, or rerun the affected check. Do not infer irrelevance from a state-file path alone. Respect unresolved application mutations, uncertain execution, and the controller's reconciliation limit; inspect the retained evidence and explain the specific remaining conflict rather than blindly restarting a run. See [source reconciliation](references/recovery.md#source-reconciliation).
 
+For an upstream landing after a settled successful review, use [upstream applicability reconciliation](references/upstream.md). Preserve original reports and their quorum; only the controller may bind them to an identical-content candidate with unchanged scope and contract. Rerun configured checks and reconcile material changes normally.
+
 ## Normal invocation
 
 ```text

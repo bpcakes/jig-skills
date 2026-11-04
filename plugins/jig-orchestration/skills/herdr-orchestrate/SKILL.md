@@ -35,6 +35,8 @@ The helper refreshes integration evidence after confirmed merges/publication, du
 
 When a review stalls or returns a recovery handoff, follow [diagnosed task recovery](references/recovery.md#diagnosed-task-recovery). Keep the original acceptance contract and cumulative budget across attempts and prerequisite tasks. Settle executions before parking or releasing slots, reconcile tracker creation before retrying it, and continue other eligible work. If all tasks are parked, report their concrete questions or waiting predicates and wait for changed evidence. Parked work is never completed acceptance.
 
+When a stable published prerequisite can unblock useful work, follow [typed dependencies and early combined candidates](references/dependencies.md). Integrate its pinned source at a settled writer boundary, publish and validate the combined candidate within existing slots and budgets, and enforce prerequisite landing before downstream merge. Keep acceptance dependencies separate. Preserve applicable review evidence only through the controller’s supported reconciliation operation.
+
 ## Controls and supervision
 
 Read [controls and budgets](references/controls.md) when configuring capacity/limits or changing run controls. These controls are distinct:

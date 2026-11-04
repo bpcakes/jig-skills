@@ -1438,5 +1438,83 @@ class EngineTests(unittest.TestCase):
         self.assert_error("dependency", self.apply, "close", "A", receipt=self.proof())
 
 
+    def dependency(self, kind="source", child="B"):
+        self.apply("dependency", "A", dependency={"task_id": child, "kind": kind,
+                   **({"pr": 415, "head": "a" * 40} if kind != "acceptance" else {})},
+                   reason="Fixture source can be used before publication acceptance",
+                   evidence={**self.proof(True), "pr": 415, "head": "a" * 40, "published": True, "focused_checks": True})
+
+    def test_source_dependency_launches_before_prerequisite_closure_but_fences_merge(self):
+        self.admit("A")
+        self.admit("B", host="remote")
+        self.assertNotIn("dependencies", Engine._closure_binding(Engine.read(self.run), Engine.read(self.run)["tasks"]["A"]))
+        self.dependency()
+        self.assertIn("dependencies", Engine._closure_binding(Engine.read(self.run), Engine.read(self.run)["tasks"]["A"]))
+        reservation = self.reserve()
+        self.settle(reservation["reservation_id"])
+        state = Engine.read(self.run)
+        parent, child = state["tasks"]["A"], state["tasks"]["B"]
+        self.assert_error("dependency", Engine._dependencies_complete, state, parent, "merge")
+        child["merged_prs"]["415"] = {"head": "b" * 40, "merge_commit": "c" * 40}
+        self.assert_error("dependency", Engine._dependencies_complete, state, parent, "merge")
+        child["merged_prs"]["415"]["head"] = "a" * 40
+        Engine._dependencies_complete(state, parent, "merge")
+        self.assertNotEqual(child["phase"], "closed")
+        from dependencies import check_incorporation
+        req = {"target": {"head": "d" * 40}, "gates": {}}
+        self.assert_error("evidence", check_incorporation, state, parent, req)
+        proof = {**self.proof(), "head": "a" * 40, "merge_commit": "c" * 40,
+                 "candidate_head": "d" * 40, "target": "main", "source_incorporated": True, "target_incorporated": True}
+        req["gates"]["dependency_incorporation"] = {"B:source": proof}
+        check_incorporation(state, parent, req)
+        proof["candidate_head"] = "e" * 40
+        self.assert_error("dependency", check_incorporation, state, parent, req)
+
+    def test_acceptance_dependency_survives_source_readiness_and_fences_closure(self):
+        self.admit("A")
+        self.admit("B", host="remote")
+        self.dependency("acceptance")
+        self.dependency("source")
+        state = Engine.read(self.run)
+        parent, child = state["tasks"]["A"], state["tasks"]["B"]
+        child["merged_prs"]["415"] = {"head": "a" * 40, "merge_commit": "c" * 40}
+        Engine._dependencies_complete(state, parent, "implement")
+        Engine._dependencies_complete(state, parent, "merge")
+        self.assert_error("dependency", Engine._dependencies_complete, state, parent, "close")
+        self.assert_error("dependency", Engine._dependencies_complete, state, parent, "deploy")
+        self.assert_error("dependency", self.apply, "close", "A", receipt=self.proof())
+
+    def test_legacy_dependencies_remain_blocking_and_mixed_cycles_are_rejected(self):
+        self.admit("A")
+        self.admit("B", host="remote")
+        state = Engine.read(self.run)
+        state["tasks"]["A"]["recovery_dependencies"] = ["B"]
+        self.assert_error("dependency", Engine._dependencies_complete, state, state["tasks"]["A"])
+        from dependencies import register_dependency
+        register_dependency(state, state["tasks"]["A"], {
+            "dependency": {"task_id": "B", "kind": "source", "pr": 415, "head": "a" * 40},
+            "reason": "Only the published fixture fix is needed to resume",
+            "evidence": {**self.proof(True), "pr": 415, "head": "a" * 40, "published": True, "focused_checks": True},
+        })
+        Engine._dependencies_complete(state, state["tasks"]["A"], "implement")
+        self.assert_error("dependency", Engine._dependencies_complete, state, state["tasks"]["A"], "merge")
+        self.dependency()
+        self.assert_error("dependency", self.apply, "dependency", "B", dependency={"task_id": "A", "kind": "acceptance"},
+                          reason="cycle", evidence=self.proof(True))
+
+    def test_dependency_pin_requires_published_checks_settlement_and_coordinator(self):
+        self.admit("A")
+        self.admit("B", host="remote")
+        dep = {"task_id": "B", "kind": "source", "pr": 415, "head": "a" * 40}
+        self.assert_error("evidence", self.apply, "dependency", "A", dependency=dep,
+                          reason="not ready", evidence=self.proof(True))
+        self.assert_error("forbidden", self.apply, "dependency", "A", caller="worker-a", dependency=dep,
+                          reason="driver cannot classify", evidence=self.proof(True))
+        reservation = self.reserve()
+        self.assert_error("unsettled", self.dependency)
+        self.settle(reservation["reservation_id"])
+        self.dependency()
+
+
 if __name__ == "__main__":
     unittest.main()

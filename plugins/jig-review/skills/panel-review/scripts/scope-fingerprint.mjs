@@ -997,6 +997,11 @@ async function branchFingerprint(
     headOid,
     baseOid,
     mergeBaseOid,
+    reviewedContent: {
+      version: 1, comparison: "fixed-merge-base-to-tip",
+      tree: await gitText(repoRoot, ["rev-parse", `${headOid}^{tree}`], deadlineAt, signal),
+      baseTree: await gitText(repoRoot, ["rev-parse", `${mergeBaseOid}^{tree}`], deadlineAt, signal),
+    },
     hasChanges: changedPaths.length > 0 || (includeWorkingTree && checkout.hasChanges),
     includeWorkingTree,
     ...(!includeWorkingTree ? { checkoutClean: !checkout.hasChanges } : {}),

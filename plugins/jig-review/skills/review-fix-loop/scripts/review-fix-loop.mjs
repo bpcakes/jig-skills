@@ -11,6 +11,7 @@ import { DEFAULT_FIX_MODE, repairPolicy } from "./repair-policy.mjs";
 import { contentHash, dictionary, hash, hasResult, json, loadRun, loadRunForRelease, locked, readJSON, resultFile, RUN_VERSION, save, storeBlob } from "./run-store.mjs";
 import { allocateWorkspace, alternateObjectDirectories, applyFile, applyTemporary, assertBackupFilesystem, backupEntry, changes, reconcileApplication, reconcileBackups, discardOverlay, entry, git, makeOverlay, overlayPath, pathsDifferFromIndex, repositoryRoot, reservedOverlays, resolveScope, safePath, sameContent, snapshot, unsupported } from "./repository.mjs";
 import { command, discoverValidation, nonempty, timeout, validateContract } from "./task-contract.mjs";
+import { reviewApplicability } from "../../panel-review/scripts/review-applicability.mjs";
 import { captureFingerprint } from "../../panel-review/scripts/scope-fingerprint.mjs";
 import { assertCompleteFingerprint } from "../../panel-review/scripts/adapter-runtime.mjs";
 import { isExcludedPath } from "../../panel-review/scripts/review-exclusions.mjs";
@@ -750,7 +751,8 @@ function reviewResult(run, result) {
       status: "unresolved", evidence: evidence.evidence, history: [...(previous?.history ?? []), { pass: run.pass, event: "requirement-unproved" }] };
   }
   const pending = run.pending;
-  const report = { ...result, provider: pending.assignment.provider, assignmentId: pending.id, pass: run.pass, contentHash: contentHash(pending.before) };
+  const report = { ...result, provider: pending.assignment.provider, assignmentId: pending.id, pass: run.pass, contentHash: contentHash(pending.before),
+    applicability: reportApplicability(run, pending.assignment.provider, pending.id) };
   run.reports.push(report);
   json(path.join(run.directory, "reports", `${pending.id}.json`), report);
   for (const finding of result.findings) {
@@ -1143,7 +1145,7 @@ async function consume(run, { sourceChanged = false } = {}) {
 }
 function matchingValidation(run, checkId, candidateHash = run.expected.contentHash) {
   if (run.validationPending?.includes(checkId)) return;
-  return run.validation.findLast(record => record.checkId === checkId &&
+  return run.validation.slice(run.landingValidationStart ?? 0).findLast(record => record.checkId === checkId &&
     (record.fingerprint === run.fingerprint.fingerprint && record.candidateHash === candidateHash ||
       (run.validationReuse ?? []).some(reuse => reuse.assignmentId === record.assignmentId && reuse.fingerprint === run.fingerprint.fingerprint && reuse.candidateHash === candidateHash)));
 }
@@ -1170,6 +1172,9 @@ function reviewValidationEvidence(run, candidateHash) {
 }
 function acceptanceSatisfied(run, report, criterion) {
   if (criterion.status === "satisfied") return true;
+  const binding = reportBinding(run, report)?.reports.find(item => item.assignmentId === report.assignmentId);
+  if (binding?.acceptedCriteria.includes(criterion.criterionId)
+      && criterion.validationIds.every(id => { const record = matchingValidation(run, id); return record && commandSucceeded(record); })) return true;
   if (run.ledger[`requirement-${criterion.criterionId}`]?.status !== "fixed") return false;
   return (run.acceptanceResolutions ?? []).some(resolution => resolution.reportAssignmentId === report.assignmentId
     && resolution.criterionId === criterion.criterionId && resolution.fingerprint === run.fingerprint.fingerprint
@@ -1192,12 +1197,24 @@ function validationsPass(run, candidateHash = run.expected.contentHash) {
     return result && commandSucceeded(result);
   });
 }
+function reportApplicability(run, provider, assignmentId) {
+  return reviewApplicability(run.fingerprint, run.contractHash, hash({ options: run.options, config: run.config, fixPolicy: run.fixPolicy }),
+    { provider, assignmentId, configuration: run.capabilities?.find(p => p.id === provider) }, "complete");
+}
+function reportBinding(run, report) {
+  return (run.upstreamLandings ?? []).findLast(binding => binding.to === run.fingerprint.fingerprint
+    && binding.contentHash === run.expected.contentHash
+    && binding.reports.some(item => item.assignmentId === report.assignmentId && item.hash === hash(report)));
+}
+function reportApplies(run, report) {
+  return report.fingerprint === run.fingerprint.fingerprint || Boolean(reportBinding(run, report));
+}
 function terminalReady(run) {
   if (run.options.commitMode === "per-round" && (run.commitJournal || !run.fingerprint.checkoutClean || run.fingerprint.includeWorkingTree)) return false;
   if (!validationsPass(run) || !validationPlanComplete(run) || run.reports.length < 2 || blockers(run) || eligible(run).length) return false;
   if (run.options.reviewPolicy === "strict" && new Set(run.reports.map(r => r.provider)).size < 2) return false;
   if (run.options.explicitReviewers && run.options.review.reviewers.some(id => !run.reports.some(r => r.provider === id))) return false;
-  return run.reports.every(r => r.fingerprint === run.fingerprint.fingerprint && r.contentHash === run.expected.contentHash && r.complete
+  return run.reports.every(r => reportApplies(run, r) && r.contentHash === run.expected.contentHash && r.complete
     && r.acceptance.every(e => acceptanceSatisfied(run, r, e)));
 }
 
@@ -1320,7 +1337,10 @@ async function validate(run) {
   if (run.preflightPending) {
     queueValidationWorkspace(run); run.validationCycle = null; run.preflightPending = false;
     if (failedChecks.length) transition(run, "VALIDATION_FAILED", "Prerequisite checks failed before discovery.", { code: "PREREQUISITE_FAILED", checks: failedChecks.map(check => check.id) });
-    else { run.preflightComplete = true; transition(run, "PREFLIGHT", "Prerequisites passed in the validation worker environment."); }
+    else if (run.landingPrerequisites) {
+      run.landingPrerequisites = false; run.preflightComplete = true;
+      save(run, "upstream-prerequisites-passed");
+    } else { run.preflightComplete = true; transition(run, "PREFLIGHT", "Prerequisites passed in the validation worker environment."); }
     return;
   }
   if (failedChecks.length) {
@@ -1415,6 +1435,63 @@ async function applyCandidate(run) {
   else if (journal.reviewedAfterValidation && run.options.commitMode === "per-round") { run.commitNeedsReview = true; save(run, "candidate-applied", { reason: "Commit the candidate and validate its exact commit before fresh review." }); }
   else if (journal.reviewedAfterValidation) { nextPass(run); transition(run, "REVIEW", "Validated repair applied; staged content preserved."); }
   else save(run, "candidate-applied", { reason: "Validate in the existing checkout environment before another review." });
+}
+
+// Reports keep their original identity. Only this operation may record a
+// relationship between successful terminal evidence and a new candidate.
+export async function reconcileUpstream(directory, receipt) {
+  directory = path.resolve(directory);
+  return locked(path.dirname(directory), async () => {
+    const run = loadRun(directory);
+    const activeFile = path.join(run.runsRoot, "active.json");
+    if (!existsSync(activeFile) || readJSON(activeFile).directory !== directory) throw new Error("Another run owns this checkout; cannot reconcile an old run.");
+    const previous = run.upstreamLandings?.at(-1);
+    if (previous?.receiptHash === hash(receipt) && previous.to === run.fingerprint.fingerprint) return run;
+    if (!["CONVERGED", "THRESHOLD_MET"].includes(run.phase) || !isSettled(run) || !terminalReady(run)) throw new Error("Upstream reconciliation requires a settled successful controller run; discovery reports cannot establish terminal quorum.");
+    if (receipt?.from !== run.fingerprint.fingerprint || !nonempty(receipt.evidence)) throw new Error("Name the original fingerprint and upstream landing evidence.");
+    for (const key of ["history", "environment", "tools", "generatedOutputs"]) {
+      if (receipt.assessment?.[key]?.applicable !== true || !nonempty(receipt.assessment[key].evidence)) throw new Error(`Explicit ${key} review applicability assessment required; changed review inputs need a successor review.`);
+    }
+    const upstream = receipt.upstream;
+    const oid = value => typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
+    if (!upstream || !Number.isInteger(upstream.pr) || upstream.pr < 1 || ![upstream.head, upstream.landing, upstream.target].every(oid)) throw new Error("Pin the upstream PR, published head, landing commit and observed target commit.");
+    try {
+      git(run.root, "merge-base", "--is-ancestor", upstream.head, run.fingerprint.headOid);
+      git(run.root, "merge-base", "--is-ancestor", upstream.landing, upstream.target);
+    } catch { throw new Error("Upstream source must be incorporated in the reviewed candidate and its landing incorporated in the observed target."); }
+    assertNoGitOperation(run.root);
+    const fingerprint = await captureFingerprint(run.args); assertCompleteFingerprint(fingerprint);
+    const current = snapshotFor(run);
+    if (!sameContent(current.files, run.expected.files) || !fingerprint.checkoutClean || fingerprint.includeWorkingTree) throw new Error("Reviewed content changed or checkout is dirty; reconcile actual changes in a successor review.");
+    const withoutHead = repositories => Object.fromEntries(Object.entries(repositories).map(([prefix, metadata]) =>
+      [prefix, prefix === "" ? { ...metadata, head: null } : metadata]));
+    if (hash(withoutHead(current.repositories)) !== hash(withoutHead(run.expected.repositories))) throw new Error("Git comparison policy, index, branch or submodule state changed; use a successor review.");
+    const candidate = { ...run, fingerprint };
+    if (!run.reports.every(report => reportApplies(run, report) && report.applicability
+        && hash(report.applicability) === hash(reportApplicability(candidate, report.provider, report.assignmentId)))) throw new Error("Review base, content, policy, coverage or reviewer identity changed; use a successor review.");
+    const binding = { from: run.fingerprint.fingerprint, to: fingerprint.fingerprint,
+      oldHead: run.fingerprint.headOid, newHead: fingerprint.headOid, contentHash: current.contentHash,
+      upstream, assessment: receipt.assessment, evidence: receipt.evidence, receiptHash: hash(receipt),
+      reports: run.reports.map(report => ({ assignmentId: report.assignmentId, hash: hash(report),
+        acceptedCriteria: report.acceptance.filter(c => acceptanceSatisfied(run, report, c)).map(c => c.criterionId) })),
+      previousOutcome: run.outcome, at: new Date().toISOString() };
+    const captured = snapshot(run.root, run.directory, { maxBytes: run.config.storage.maxSourceBytes });
+    const verified = await captureFingerprint(run.args);
+    if (verified.fingerprint !== fingerprint.fingerprint || captured.guard !== current.guard) throw new Error("Checkout changed during reconciliation; nothing rebound.");
+    (run.upstreamLandings ??= []).push(binding);
+    run.fingerprint = fingerprint; run.expected = captured;
+    run.landingValidationStart = run.validation.length;
+    run.validationPending = contractOf(run).requiredValidation.map(check => check.id);
+    run.validationReuse = []; run.validationCycle = null; run.validationFailure = null;
+    run.landingPrerequisites = Boolean(contractOf(run).prerequisites?.length);
+    run.preflightPending = run.landingPrerequisites;
+    run.phase = "VALIDATE"; run.outcome = null; run.triaged = false;
+    // Remove the settled receipt before publishing active work. A crash must
+    // not leave admission free to replace a run with outstanding validation.
+    json(activeFile, { directory });
+    save(run, "upstream-reconciled", binding);
+    return run;
+  });
 }
 
 export async function advance(directory) {
@@ -1661,6 +1738,7 @@ export function status(run) {
       range: `${run.initialFingerprint.mergeBaseOid}..${run.fingerprint.headOid}`, checkoutClean: run.fingerprint.checkoutClean },
       ...(run.commitJournal ? { commitRecovery: run.commitJournal } : {}) } : {}),
     sourceReconciliations: run.sourceReconciliations ?? [],
+    upstreamLandings: run.upstreamLandings ?? [],
     ...(run.retainedCheckout ? { retainedCheckout: retainedCheckout ?? { pending: true } } : {}),
     findings: Object.values(run.ledger).map(({ id, title, status }) => ({ id, title, status })),
     question: run.waitingForAnswer ? run.questions.at(-1) : undefined,
@@ -1719,10 +1797,10 @@ export async function prune(directory) {
 }
 async function main(argv) {
   const action = argv.shift(); const flags = {}, options = [];
-  const actionFlags = { init: ["--cwd", "--contract", "--config", "--from-review"], "plan-validation": ["--cwd"], run: ["--run"], advance: ["--run"], status: ["--run"], release: ["--run", "--cwd"], prune: ["--run"], submit: ["--run", "--assignment", "--result"], answer: ["--run", "--text"] };
-  if (!Object.hasOwn(actionFlags, action)) throw new Error("Use init, run, advance, status, submit, answer, release, prune, or plan-validation.");
+  const actionFlags = { "reconcile-upstream": ["--run", "--receipt"], init: ["--cwd", "--contract", "--config", "--from-review"], "plan-validation": ["--cwd"], run: ["--run"], advance: ["--run"], status: ["--run"], release: ["--run", "--cwd"], prune: ["--run"], submit: ["--run", "--assignment", "--result"], answer: ["--run", "--text"] };
+  if (!Object.hasOwn(actionFlags, action)) throw new Error("Use init, run, advance, status, submit, answer, reconcile-upstream, release, prune, or plan-validation.");
   for (let i = 0; i < argv.length; i++) {
-    if (["--cwd", "--contract", "--config", "--from-review", "--run", "--assignment", "--result", "--text"].includes(argv[i])) {
+    if (["--receipt", "--cwd", "--contract", "--config", "--from-review", "--run", "--assignment", "--result", "--text"].includes(argv[i])) {
       const flag = argv[i];
       if (!actionFlags[action].includes(flag)) throw new Error(`${flag} does not apply to ${action}.`);
       if (Object.hasOwn(flags, flag) || argv[i+1] === undefined || (flag !== "--text" && (!argv[i+1] || argv[i+1].startsWith("--")))) throw new Error(`Missing or duplicate ${flag}`);
@@ -1739,7 +1817,8 @@ async function main(argv) {
   else if (action === "plan-validation") { process.stdout.write(`${JSON.stringify(discoverValidation(flags["--cwd"] ?? process.cwd()), null, 2)}\n`); return; }
   else {
     const directory = path.resolve(flags["--run"]);
-    if (action === "advance") run = await advance(directory);
+    if (action === "reconcile-upstream") run = await reconcileUpstream(directory, readJSON(flags["--receipt"]));
+    else if (action === "advance") run = await advance(directory);
     else if (action === "run") run = await runUntilBoundary(directory);
     else if (action === "submit") run = await submit(directory, flags["--assignment"], readJSON(flags["--result"]));
     else if (action === "answer") run = await answer(directory, flags["--text"]);

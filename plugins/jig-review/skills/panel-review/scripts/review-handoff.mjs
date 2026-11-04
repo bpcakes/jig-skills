@@ -4,6 +4,7 @@ import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readBrief, validateBrief } from "./review-brief.mjs";
+import { reviewApplicability } from "./review-applicability.mjs";
 import { captureFingerprint } from "./scope-fingerprint.mjs";
 import { isExcludedPath, normalizeExcludePaths } from "./review-exclusions.mjs";
 
@@ -24,9 +25,9 @@ function readInput(file) {
 }
 export function validateHandoff(handoff) {
   fields(handoff, ["version", "payload", "hash"]);
-  if (handoff.version !== 1 || !hex(handoff.hash) || digest(handoff.payload) !== handoff.hash) fail("Version or content hash mismatch.");
+  if (![1, 2].includes(handoff.version) || !hex(handoff.hash) || digest(handoff.payload) !== handoff.hash) fail("Version or content hash mismatch.");
   const p = handoff.payload;
-  fields(p, ["capture", "brief", "reviewers", "findings"]);
+  fields(p, ["capture", "brief", "reviewers", "findings", ...(handoff.version === 2 ? ["applicability"] : [])]);
   const c = p.capture;
   if (!c || c.complete !== true || !Array.isArray(c.issues) || c.issues.length || !hex(c.fingerprint)
       || !text(c.repoRoot) || !path.isAbsolute(c.repoRoot) || !["working-tree", "branch"].includes(c.scope)
@@ -41,7 +42,10 @@ export function validateHandoff(handoff) {
   if (!Array.isArray(p.reviewers) || !p.reviewers.length || p.reviewers.length > 3) fail("Reviewer outcomes are required.");
   const completed = new Set(), names = new Set();
   for (const r of p.reviewers) {
-    fields(r, ["name", "status", "coverage", "limitations", "report"]);
+    fields(r, ["name", "status", "coverage", "limitations", "report", ...(handoff.version === 2 && r && Object.hasOwn(r, "identity") ? ["identity"] : [])]);
+    if (r.identity !== undefined && (!r.identity || Array.isArray(r.identity) || typeof r.identity !== "object"
+        || !Object.keys(r.identity).length || Object.entries(r.identity).some(([key, value]) =>
+          !["model", "effort", "runtime", "toolVersion", "assignmentId"].includes(key) || !text(value)))) fail("Invalid reviewer identity.");
     if (!["Claude", "Codex", "Cursor"].includes(r.name) || names.has(r.name)
         || !["completed", "failed", "timed out", "not started"].includes(r.status)
         || !["complete", "limited", "reviewer-attested", "none"].includes(r.coverage)
@@ -67,12 +71,19 @@ export function validateHandoff(handoff) {
     if (keys.has(key)) fail("Duplicate finding identity.");
     keys.add(key);
   }
+  if (handoff.version === 2 && digest(p.applicability) !== digest(applicability(p))) fail("Applicability identity mismatch.");
   if (Buffer.byteLength(JSON.stringify(handoff)) > 4 * 1024 * 1024) fail("Handoff exceeds 4 MiB.");
   return handoff;
 }
+function applicability({ capture, brief, reviewers }) {
+  if (!capture || !brief || !Array.isArray(reviewers) || reviewers.some(r => !r || typeof r !== "object")) fail("Capture, brief and reviewer outcomes are required.");
+  return reviewers.map(reviewer => reviewApplicability(capture, brief.hash, "panel-discovery-v1",
+    { name: reviewer.name, status: reviewer.status, identity: reviewer.identity ?? null }, reviewer.coverage));
+}
 export function createHandoff({ capture, brief, reviewers, findings }) {
   const payload = structuredClone({ capture, brief, reviewers, findings });
-  return validateHandoff({ version: 1, payload, hash: digest(payload) });
+  payload.applicability = applicability(payload);
+  return validateHandoff({ version: 2, payload, hash: digest(payload) });
 }
 export const readHandoff = file => validateHandoff(readInput(file));
 

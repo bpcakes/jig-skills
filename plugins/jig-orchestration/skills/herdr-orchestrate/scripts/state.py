@@ -525,7 +525,7 @@ class Engine:
                     "recovery", "resolve or route the parked recovery before launching more work")
         elif launching and not allow_closed:
             # Recheck ordinary launches; tracker reopening and ownership reconciliation remain available.
-            Engine._dependencies_complete(state, task)
+            Engine._dependencies_complete(state, task, kind)
         if launching and state["controls"]["admission"] == "finish_current":
             require(task["id"] in state["controls"]["frozen_tasks"],
                     "admission", "new work must belong to the frozen unfinished batch")
@@ -567,6 +567,7 @@ class Engine:
         # changing the candidate that was accepted and closed.
         return copy.deepcopy({
             **{key: task.get(key) for key in ("id", "driver", "host", "identity", "worktree", "branch", "acceptance_ref", "refs")},
+            **({"dependencies": task["dependencies"]} if task.get("dependencies") else {}),
             "owner": task["claim"]["owner"],
         })
 
@@ -1140,6 +1141,15 @@ class Engine:
                 "text": req["resolution"], "evidence": req["evidence"]}
             task.update(recovery_open=False, blocker=None, next_action=req["resolution"])
             return {"resolved": req["recovery_id"]}
+        if op == "dependency":
+            # Classification changes launch authority, so only the coordinator
+            # may do this, at a settled writer boundary. Legacy edges stay hard
+            # dependencies until explicitly classified with evidence.
+            require(caller == "coordinator", "forbidden", "only the coordinator classifies dependencies")
+            require(task["phase"] != "closed", "closed", "reopen a completed task before changing dependencies")
+            require(not task["reservations"] and not task["pending_intent"], "unsettled", "settle the downstream writer before pinning a dependency")
+            from dependencies import register_dependency
+            return register_dependency(state, task, req)
         if op == "candidate":
             from integration import register
             evidence(req.get("evidence"))
@@ -1447,7 +1457,7 @@ class Engine:
                 require(nonempty(task.get("acceptance_ref")) and task["acceptance_ref"] == last["evidence"].get("acceptance_ref"),
                         "closure", "driver closure requires its pinned and authorized acceptance contract")
             require(not task.get("recovery_open"), "recovery", "parked recovery is incomplete, not completed acceptance")
-            Engine._dependencies_complete(state, task)
+            Engine._dependencies_complete(state, task, "close")
             require(not task["reservations"] and not task["pending_intent"] and state["staging"]["owner"] != task["id"],
                     "unsettled", "settle executions and release staging before closure")
             receipt = req.get("receipt", {})
@@ -1520,19 +1530,20 @@ class Engine:
             visited.add(child)
             task = state["tasks"].get(child, {})
             pending.extend(task.get("recovery_dependencies", []))
+            pending.extend(d["task_id"] for d in task.get("dependencies", {}).values())
             intent = task.get("pending_intent") or {}
             if intent.get("kind") == "split":
                 pending.extend(c["existing_task"] for c in intent["target"]["children"] if "existing_task" in c)
 
     @staticmethod
-    def _dependencies_complete(state, task):
-        require(all(task_complete(state["tasks"].get(child, {})) for child in task.get("recovery_dependencies", [])),
-                "dependency", "all recorded prerequisites must complete before the parent resumes, merges or closes")
+    def _dependencies_complete(state, task, kind="implement"):
+        from dependencies import check_dependencies
+        check_dependencies(state, task, kind)
 
     @staticmethod
     def _close_gate(state, task, req):
         require(not task.get("recovery_open"), "recovery", "resolve parked recovery before closure")
-        Engine._dependencies_complete(state, task)
+        Engine._dependencies_complete(state, task, "close")
         target, proof = req["target"], req["evidence"]
         require(target.get("authority") == state["config"]["tracker"]["authority"]
                 and target.get("task_id") == task["id"] and target.get("owner") == task["claim"]["owner"],
@@ -1552,13 +1563,15 @@ class Engine:
         # Intent and dispatch already bind integration to this assignment.
         # Keep repository/PR protections separate from candidate selection.
         require(not task.get("recovery_open"), "recovery", "resolve parked recovery before merge")
-        Engine._dependencies_complete(state, task)
+        Engine._dependencies_complete(state, task, "merge")
         target = req["target"]
         gates = req.get("gates", {})
+        from dependencies import check_incorporation
         require(target.get("repository") == state["config"]["repository"]["path"]
                 and target.get("base") == state["config"]["repository"]["target"]
                 and type(target.get("pr")) is int and nonempty(target.get("head")),
                 "identity", "merge target must name this repository, target, PR and exact head")
+        check_incorporation(state, task, req)
         required = {"complete", "validation", "checks", "feedback", "findings", "target_current", "clean"}
         require(all(gates.get(key) is True for key in required), "gate", "merge gate is incomplete")
         require(all(gates.get(key) == target["head"] for key in ("review_head", "checkout_head", "pr_head")),

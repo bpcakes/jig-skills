@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -177,4 +178,28 @@ test("CLI rejects missing handoff files and does not silently use normal init", 
   const result = spawnSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--from-review", path.join(f.artifacts, "missing")], { encoding: "utf8" });
   assert.equal(result.status, 1); assert.match(result.stderr, /ENOENT/);
   assert.equal(existsSync(path.join(f.root, ".git/jig/review-fix/active.json")), false);
+});
+
+test("branch handoffs separate immutable report identity from content applicability", async t => {
+  const f = fixture(t), base = f.git("rev-parse", "HEAD").toString().trim();
+  f.git("add", "."); f.git("commit", "-qm", "candidate");
+  f.reviewers[0].identity = { model: "selected-model", runtime: "cli", toolVersion: "recorded-version" };
+  const original = await f.handoff({ scope: "branch", base });
+  f.git("commit", "--amend", "-qm", "same content, changed history");
+  const rewritten = await f.handoff({ scope: "branch", base });
+  assert.equal(original.version, 2);
+  assert.notEqual(original.payload.capture.fingerprint, rewritten.payload.capture.fingerprint);
+  assert.deepEqual(original.payload.applicability, rewritten.payload.applicability);
+  assert.deepEqual(original.payload.reviewers, f.reviewers);
+  assert.deepEqual(original.payload.applicability[0].reviewer.identity, f.reviewers[0].identity);
+  assert.equal(original.payload.applicability[0].coverage, "limited");
+  assert.equal(original.payload.applicability[0].policy, "panel-discovery-v1");
+});
+
+test("version 1 handoffs remain readable without inventing applicability", async t => {
+  const f = fixture(t), current = await f.handoff();
+  const payload = structuredClone(current.payload); delete payload.applicability;
+  const legacy = { version: 1, payload, hash: createHash("sha256").update(JSON.stringify(payload)).digest("hex") };
+  assert.equal(validateHandoff(legacy), legacy);
+  assert.equal(legacy.payload.applicability, undefined);
 });

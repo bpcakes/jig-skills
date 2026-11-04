@@ -736,6 +736,11 @@ def task_view(run_dir, task_id, caller="coordinator"):
             "host_slots": state["config"]["hosts"][host]["slots"],
             "occupied_slots": sum(t["host"] == host and t["slot"] is not None for t in state["tasks"].values()),
             "prerequisites": {key: task_complete(state["tasks"].get(key, {})) for key in task.get("recovery_dependencies", [])},
+            "typed_prerequisites": {key: {
+                "kind": d["kind"], "complete": task_complete(state["tasks"].get(d["task_id"], {})),
+                "landed": state["tasks"].get(d["task_id"], {}).get("merged_prs", {}).get(str(d.get("pr")), {}).get("head") == d.get("head")
+                    if d["kind"] != "acceptance" else None,
+            } for key, d in task.get("dependencies", {}).items()},
         }
     # Scheduler ticks/config revisions alone do not wake a waiting driver.
     from integration import view as integration_view
