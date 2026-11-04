@@ -77,6 +77,11 @@ class IntegrationTests(unittest.TestCase):
         return self.apply("reserve", task, kind=kind, unit=Engine.UNITS[kind],
                           target={"head": self.heads[task]}, **fields)
 
+    def completion_retry_time(self):
+        state = Engine.read(self.run)
+        minimum = supervise.scheduler_config(state["config"])["minimum_cadence_seconds"]
+        return datetime.fromisoformat(state["scheduler"]["integration_attempt_at"]) + timedelta(seconds=minimum)
+
     def test_conflict_detected_without_touching_busy_dirty_writer_or_frozen_refs(self):
         self.refresh()
         self.assertEqual(self.observation("B")["status"], "clean")
@@ -142,6 +147,63 @@ class IntegrationTests(unittest.TestCase):
         self.assert_error("integration", self.reserve, "B")
         self.reserve("C")
 
+    def test_ref_disappearing_during_fetch_only_blocks_that_candidate(self):
+        original = integration.Git.run
+        for warm in (False, True):
+            with self.subTest(warm=warm):
+                self.git("update-ref", "refs/heads/task/B", self.heads["B"])
+                if warm:
+                    self.refresh()
+                    self.advance()
+                fetches, listings, deadlines = [], [], []
+                def remove_during_fetch(git, *args, **kwargs):
+                    if "ls-remote" in args:
+                        listings.append(True)
+                    if "fetch" in args:
+                        fetches.append(args)
+                        deadlines.append(git.deadline)
+                        if len(fetches) == 1:
+                            self.git("update-ref", "-d", "refs/heads/task/B")
+                    return original(git, *args, **kwargs)
+                with patch.object(integration.Git, "run", remove_during_fetch):
+                    result = self.refresh()
+                self.assertEqual(len(fetches), 2)
+                self.assertEqual(len(listings), 2)
+                self.assertEqual(deadlines[0], deadlines[1])
+                self.assertEqual(result["counts"]["fetches"], 2)
+                self.assertEqual(result["counts"]["ref_retries"], 1)
+                self.assertNotIn("failed_scans", result["counts"])
+                self.assertEqual(self.observation("B")["reason"], "candidate_unavailable")
+                for task in ("A", "C"):
+                    self.assertEqual(self.observation(task)["status"], "clean")
+
+    def test_fetch_recovery_is_bounded_and_requires_a_surviving_target(self):
+        original = integration.Git.run
+        for failure in ("unchanged", "target", "continuing_churn"):
+            with self.subTest(failure=failure):
+                for ref, head in (("main", self.base_oid), ("task/B", self.heads["B"]), ("task/C", self.heads["C"])):
+                    self.git("update-ref", "refs/heads/" + ref, head)
+                fetches, listings = [], []
+                def fail_fetch(git, *args, **kwargs):
+                    if "ls-remote" in args:
+                        listings.append(True)
+                    if "fetch" in args:
+                        fetches.append(True)
+                        if failure == "unchanged":
+                            return 1, b"fixture transport failure"
+                        ref = "main" if failure == "target" else "task/" + ("B" if len(fetches) == 1 else "C")
+                        self.git("update-ref", "-d", "refs/heads/" + ref)
+                    return original(git, *args, **kwargs)
+                with patch.object(integration.Git, "run", fail_fetch):
+                    result = self.refresh()
+                expected = 2 if failure == "continuing_churn" else 1
+                self.assertEqual(len(fetches), expected)
+                self.assertEqual(len(listings), 2)
+                self.assertEqual(result["counts"]["fetches"], expected)
+                self.assertEqual(result["counts"]["failed_scans"], 1)
+                for task in self.heads:
+                    self.assertEqual(self.observation(task)["status"], "unknown")
+
     def test_missing_object_and_malformed_merge_output_are_unknown(self):
         self.refresh()
         directory = self.run / "integration"
@@ -198,9 +260,15 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.observation("C")["reason"], "custom_merge_policy")
 
     def test_probe_honors_committed_attributes_from_target(self):
+        attributes = ('# Example: *.txt merge=custom\n'
+                      '  # Disabled: *.txt merge=custom\n'
+                      'merge=filename.txt -diff\n'
+                      '"merge=quoted pattern.txt" -diff\n'
+                      '"escaped\\\" merge=pattern.txt" -diff\n'
+                      '*.txt merge=union\n')
         for task in ("A", "B"):
             self.git("checkout", "task/" + task)
-            (self.repo / ".gitattributes").write_text("*.txt merge=union\n")
+            (self.repo / ".gitattributes").write_text(attributes)
             self.git("add", ".gitattributes")
             self.git("commit", "-m", "union policy")
             self.heads[task] = self.git("rev-parse", "HEAD")
@@ -208,6 +276,15 @@ class IntegrationTests(unittest.TestCase):
         self.advance()
         self.refresh()
         self.assertEqual(self.observation("B")["status"], "clean")
+        self.git("checkout", "--force", "task/B")
+        self.assertEqual(self.git("check-attr", "merge", "--", "shared.txt"), "shared.txt: merge: union")
+        for pattern in ("*.txt", '"shared.txt"'):
+            with self.subTest(pattern=pattern):
+                (self.repo / ".gitattributes").write_text(attributes + pattern + " merge=custom\n")
+                self.git("commit", "-am", "unsupported active driver")
+                self.refresh()
+                self.assertEqual(self.observation("B")["status"], "unknown")
+                self.assertEqual(self.observation("B")["reason"], "custom_merge_attributes")
 
     def test_alternate_attribute_sources_cannot_reuse_clean_evidence_or_reserved_policy(self):
         for task in ("A", "B"):
@@ -1032,7 +1109,7 @@ print(json.dumps({"status": "succeeded", "receipt": receipt}))
                 self.assert_error("integration", self.reserve, "C")
                 self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"], {})
                 with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
-                    self.assertEqual(supervise.tick(self.run)["status"], "completed")
+                    self.assertEqual(supervise.tick(self.run, self.completion_retry_time())["status"], "completed")
                     herdr.assert_not_called()
                 self.assertEqual(Engine.read(self.run)["integration"]["target"], target)
                 self.assertTrue(integration.fresh(Engine.read(self.run)))
@@ -1137,28 +1214,70 @@ os.execv({executable!r}, [{executable!r}, *args])
                 with self.assertRaisesRegex(supervise.RuntimeErrorDetail, "pending wake"):
                     supervise.complete(self.run, "old-wake")
 
-    def test_repeated_timeouts_retain_completion_until_source_recovery(self):
-        self.refresh()
-        supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": "repeated-timeout"})
+    def test_retained_completion_throttles_failure_and_timeout_retries_across_restart(self):
         original = integration.Git.run
-        def expired(git, *args, **kwargs):
-            git.deadline = 0
-            return original(git, *args, **kwargs)
-        with patch.object(integration.Git, "run", expired):
-            first = supervise.complete(self.run, "repeated-timeout")
-            self.assertEqual(first["status"], "integration_pending")
-            self.assertIn("--bootstrap", first["integration"]["next_action"])
-            with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
-                for _ in range(2):
-                    self.assertEqual(supervise.tick(self.run)["status"], "integration_pending")
-                    self.assertEqual(Engine.read(self.run)["scheduler"]["integration_completion"], "repeated-timeout")
-                herdr.assert_not_called()
-            self.assert_error("integration", self.reserve, "C")
-        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+        for failure in ("timeout", "source"):
+            with self.subTest(failure=failure):
+                self.refresh()
+                wake = "repeated-" + failure
+                supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": wake})
+                def unavailable(git, *args, **kwargs):
+                    if failure == "timeout":
+                        git.deadline = 0
+                    elif "ls-remote" in args:
+                        return 1, b""
+                    return original(git, *args, **kwargs)
+                with patch.object(integration.Git, "run", unavailable), \
+                        patch.object(integration, "scan", wraps=integration.scan) as scanning:
+                    first = supervise.complete(self.run, wake)
+                    self.assertEqual(first["status"], "integration_pending")
+                    retry = self.completion_retry_time()
+                    before = Engine.read(self.run)["integration"]
+                    with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+                        for at in (datetime.now(timezone.utc), retry - timedelta(seconds=1)):
+                            result = supervise.tick(self.run, at)
+                            self.assertEqual(result["status"], "integration_pending")
+                            self.assertEqual(datetime.fromisoformat(result["retry_at"]), retry)
+                        herdr.assert_not_called()
+                    self.assertEqual(scanning.call_count, 1)
+                    self.assertEqual(Engine.read(self.run)["integration"], before)
+                    # A fresh scheduler process must honor the persisted deadline too.
+                    script = ('import json, sys; from datetime import datetime; '
+                              'sys.path.insert(0, sys.argv[1]); import integration, supervise; '
+                              'supervise.managed_guard = lambda settings: None; '
+                              'integration.scan = lambda *a, **k: sys.exit("unexpected retry"); '
+                              'print(json.dumps(supervise.tick(sys.argv[2], datetime.fromisoformat(sys.argv[3]))))')
+                    restarted = subprocess.run([sys.executable, "-B", "-c", script, str(fixtures.SCRIPTS),
+                                                str(self.run), (retry - timedelta(seconds=1)).isoformat()], capture_output=True)
+                    self.assertEqual(restarted.returncode, 0, restarted.stderr)
+                    self.assertEqual(json.loads(restarted.stdout)["status"], "integration_pending")
+                    with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call"):
+                        self.assertEqual(supervise.tick(self.run, retry)["status"], "integration_pending")
+                    self.assertEqual(scanning.call_count, 2)
+                    self.assert_error("integration", self.reserve, "C")
+                with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+                    self.assertEqual(supervise.tick(self.run, self.completion_retry_time())["status"], "completed")
+                    herdr.assert_not_called()
+                self.assertTrue(integration.fresh(Engine.read(self.run)))
+                schedule = Engine.read(self.run)["scheduler"]
+                for field in ("integration_completion", "integration_attempt_at", "integration_attempt_binding"):
+                    self.assertIsNone(schedule[field])
+
+    def test_new_usable_observation_completes_before_retry_without_another_scan(self):
+        supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": "recovered-observation"})
+        with patch.object(integration, "scan", side_effect=integration.ProbeTimeout("scan_timeout")):
+            self.assertEqual(supervise.complete(self.run, "recovered-observation")["status"], "integration_pending")
+        integration.refresh(self.run, bootstrap=True)
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr, \
+                patch.object(integration, "refresh", wraps=integration.refresh) as scanning:
             self.assertEqual(supervise.tick(self.run)["status"], "completed")
+            scanning.assert_not_called()
             herdr.assert_not_called()
-        self.assertTrue(integration.fresh(Engine.read(self.run)))
-        self.assertIsNone(Engine.read(self.run)["scheduler"]["integration_completion"])
+
+    def test_explicit_completion_can_recover_before_the_retry_deadline(self):
+        with patch.object(integration, "scan", side_effect=integration.ProbeTimeout("scan_timeout")):
+            self.assertEqual(supervise.complete(self.run, "manual")["status"], "integration_pending")
+        self.assertEqual(supervise.complete(self.run, "manual")["status"], "completed")
 
     def test_source_failure_retains_completion_and_recovers_with_individual_unknowns(self):
         self.advance()
@@ -1196,7 +1315,7 @@ os.execv({executable!r}, [{executable!r}, *args])
         self.assertEqual(self.observation("B")["status"], "conflicted")
         self.assertNotIn("failed_scans", recovered["integration"]["counts"])
 
-    def test_failed_manual_completion_allows_requested_and_due_wakes_with_one_scan(self):
+    def test_failed_manual_completion_allows_requested_and_due_wakes_without_repeated_scans(self):
         config = Engine.read(self.run)["config"]["integration"]
         identity = Engine.read(self.run)["config"]["scheduler"]["agent"]
         for index, requested in enumerate((True, False)):
@@ -1215,7 +1334,7 @@ os.execv({executable!r}, [{executable!r}, *args])
                     result = supervise.tick(self.run, now)
                     self.assertEqual(result["status"], "delivered")
                     self.assertEqual(herdr.call_count, 2)
-                    scan.assert_called_once()
+                    scan.assert_not_called()
                 schedule = Engine.read(self.run)["scheduler"]
                 self.assertIsNone(schedule["integration_completion"])
                 self.assertEqual(schedule["pending_action_id"], result["wake_id"])
@@ -1298,7 +1417,7 @@ os.execv({executable!r}, [{executable!r}, *args])
         self.assertTrue(integration.fresh(Engine.read(self.run)))  # Fresh failure is not a completed target observation.
         self.assertEqual(Engine.read(self.run)["scheduler"]["integration_completion"], "racing-source-failure")
         with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
-            self.assertEqual(supervise.tick(self.run)["status"], "completed")
+            self.assertEqual(supervise.tick(self.run, self.completion_retry_time())["status"], "completed")
             herdr.assert_not_called()
 
     def test_completion_rechecks_evidence_inside_the_scheduler_write_transaction(self):
@@ -1340,7 +1459,7 @@ os.execv({executable!r}, [{executable!r}, *args])
                 self.assertEqual(schedule["pending_action_id"], wake)
                 self.assertEqual(schedule.get("last_completed_at"), previous)
                 with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
-                    self.assertEqual(supervise.tick(self.run)["status"], "completed")
+                    self.assertEqual(supervise.tick(self.run, self.completion_retry_time())["status"], "completed")
                     herdr.assert_not_called()
 
     def test_reconciliation_retries_superseded_snapshots_inside_its_time_budget(self):

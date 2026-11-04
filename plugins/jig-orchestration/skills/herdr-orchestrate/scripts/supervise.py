@@ -205,6 +205,22 @@ def endpoint_failure(schedule):
     return failure if failure.get("id", "").startswith("endpoint-") else None
 
 
+def completion_observed(state):
+    from integration import completion_ready
+    attempted = parse_time(state["scheduler"].get("integration_attempt_at"))
+    observed = parse_time(state.get("integration", {}).get("checked_at"))
+    return bool(attempted and observed and observed >= attempted and completion_ready(state))
+
+
+def completion_retry_at(state, settings):
+    from integration import binding
+    attempted = parse_time(state["scheduler"].get("integration_attempt_at"))
+    if (attempted is None or state["scheduler"].get("integration_attempt_binding") != binding(state)
+            or completion_observed(state)):
+        return None
+    return scheduler_deadline(attempted, settings["minimum_cadence_seconds"])
+
+
 def tick(run_dir, now=None):
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "delivery.lock"):
@@ -216,24 +232,27 @@ def tick(run_dir, now=None):
         Engine.heartbeat(run_dir, timestamp(now))
         state = Engine.read(run_dir)
         schedule = state["scheduler"]
-        integration_attempted = False
+        skip_scan = False
         if schedule.get("integration_completion"):
             def discard_orphan(current):
                 latest = current["scheduler"]
                 marker = latest.get("integration_completion")
                 if marker and marker != "manual" and marker != latest.get("pending_action_id"):
-                    return {"integration_completion": None}
+                    return {"integration_completion": None, "integration_attempt_at": None,
+                            "integration_attempt_binding": None}
                 return None
             state = scheduler_patch(run_dir, discard_orphan)
             schedule = state["scheduler"]
             if schedule.get("integration_completion"):
                 marker = schedule["integration_completion"]
-                completion = complete(run_dir, marker, now=now, resume=True)
+                retry_at = completion_retry_at(state, settings)
+                completion = ({"status": "integration_pending", "wake_id": marker, "retry_at": timestamp(retry_at)}
+                              if retry_at and now < retry_at else complete(run_dir, marker, now=now, resume=True))
                 if marker != "manual" or completion["status"] != "integration_pending":
                     return completion
                 # A failed manual pass does not own the coordinator wake slot.
                 # Keep its retry marker until recovery or a new pass is prepared.
-                integration_attempted = True
+                skip_scan = True
                 state = Engine.read(run_dir)
                 schedule = state["scheduler"]
         if schedule.get("pending_action_id"):
@@ -252,7 +271,7 @@ def tick(run_dir, now=None):
         scheduler_patch(run_dir, lambda _: {"last_attempt_at": timestamp(now),
                         "next_due_at": timestamp(scheduler_deadline(now, settings["cadence_seconds"]))})
         from integration import refresh
-        if not integration_attempted:
+        if not skip_scan:
             refresh(run_dir)
 
         def check_binding(current):
@@ -301,7 +320,8 @@ def tick(run_dir, now=None):
             if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
                 return None  # A completed reconciliation consumed this tick.
             return {"pending_action_id": wake_id, "delivery_status": "dispatching", "failure": None,
-                    "integration_completion": None,
+                    "integration_completion": None, "integration_attempt_at": None,
+                    "integration_attempt_binding": None,
                     "wake_requested_at": None, "wake_reason": None, "busy_since_at": None,
                     "last_dispatched_action_id": wake_id, "last_dispatched_at": timestamp(now)}
         prepared = scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
@@ -370,7 +390,8 @@ def complete(run_dir, wake_id, now=None, *, resume=False):
         # during this pass; only a full manual reconciliation may consume it too.
         requested = schedule.get("wake_requested_at") if wake_id != "manual" or resume else None
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
-                "integration_completion": None,
+                "integration_completion": None, "integration_attempt_at": None,
+                "integration_attempt_binding": None,
                 "last_completed_action_id": completion_id,
                 "last_completed_wake_id": pending or schedule.get("last_completed_wake_id"),
                 "next_due_at": timestamp(scheduler_deadline(now, interval)),
@@ -378,14 +399,17 @@ def complete(run_dir, wake_id, now=None, *, resume=False):
                 "failure": endpoint_failure(schedule), "busy_since_at": None}
     # Validate before observing; replayed completion remains a no-op. Recheck
     # the wake/configuration in the final short transaction after Git settles.
-    if finish(Engine.read(run_dir)) is not None:
+    current = Engine.read(run_dir)
+    if finish(current) is not None and not (resume and completion_observed(current)):
         # A bounded wait can expire or the process can stop. The existing
         # scheduler resumes only this completion, without another model turn
         # or a second reconciliation prompt.
-        scheduler_patch(run_dir, lambda current: None if finish(current) is None
-                        or current["scheduler"].get("integration_completion") == wake_id
-                        else {"integration_completion": wake_id})
-        from integration import refresh
+        from integration import binding, refresh
+        attempted = scheduler_patch(run_dir, lambda current: None if finish(current) is None else {
+            "integration_completion": wake_id, "integration_attempt_at": timestamp(now),
+            "integration_attempt_binding": binding(current)})
+        if resume and attempted["scheduler"].get("integration_completion") != wake_id:
+            return {"status": "superseded", "wake_id": wake_id}
         check = refresh(run_dir, wait=True)
         if check["status"] in {"busy", "superseded", "timeout"}:
             return {"status": "integration_pending", "wake_id": wake_id, "integration": check}

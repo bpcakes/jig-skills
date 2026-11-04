@@ -252,6 +252,7 @@ class Engine:
         "last_alert", "busy_since_at", "last_dispatched_action_id", "last_dispatched_at",
         "last_delivered_action_id",
         "last_completed_wake_id", "health_alerts", "integration_completion",
+        "integration_attempt_at", "integration_attempt_binding",
     }
 
     @staticmethod

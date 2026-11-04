@@ -423,6 +423,24 @@ def merge_policy(git, repository):
     return options, hashlib.sha256(canonical([git.version, entries]).encode()).hexdigest()
 
 
+def merge_attribute_values(data):
+    for line in data.splitlines():
+        line = line.lstrip()
+        if not line or line.startswith(b"#"):
+            continue
+        if line.startswith(b'"'):
+            pattern = re.match(rb'"(?:[^"\\]|\\.)*"(?:\s+(.*))?$', line)
+            if pattern is None:
+                raise ProbeError("attributes_unavailable")
+            attributes = pattern.group(1) or b""
+        else:
+            fields = line.split(None, 1)
+            attributes = fields[1] if len(fields) == 2 else b""
+        for attribute in attributes.split():
+            if attribute.startswith(b"merge=") and len(attribute) > 6:
+                yield attribute[6:]
+
+
 def probe(git, cache, head, target, options):
     for oid in (head, target):
         if not OID.fullmatch(oid) or git.run("--git-dir", str(cache), "cat-file", "-e", oid + "^{commit}", isolated=True)[0]:
@@ -431,7 +449,7 @@ def probe(git, cache, head, target, options):
                               "--", ".gitattributes", ":(glob)**/.gitattributes", isolated=True)
         if code not in {0, 1}:
             raise ProbeError("attributes_unavailable")
-        if any(name not in {b"text", b"binary", b"union"} for name in re.findall(rb"\bmerge=([^\s]+)", attrs)):
+        if any(name not in {b"text", b"binary", b"union"} for name in merge_attribute_values(attrs)):
             raise ProbeError("custom_merge_attributes")
     code, data = git.run("--attr-source=" + target, *options, "--git-dir", str(cache), "merge-tree",
                          "--write-tree", "--name-only", "-z", target, head, isolated=True)
@@ -494,15 +512,36 @@ def scan(directory, state, deadline=None, *, bootstrap=False, lock_fd=None):
         if advertised is None or target_ref not in advertised:
             raise ProbeError("target_unavailable")
         advertised = {ref: oid for ref, oid in advertised.items() if ref in refs and OID.fullmatch(oid)}
-        local_refs = {ref: "refs/observed/" + hashlib.sha256(ref.encode()).hexdigest() for ref in advertised}
+        if target_ref not in advertised:
+            raise ProbeError("target_unavailable")
         prior = git.checked("--git-dir", str(cache), "for-each-ref", "--format=%(refname) %(objectname)", "refs/observed/", isolated=True)
         known = dict(line.split(" ", 1) for line in prior.decode().splitlines())
-        if any(known.get(local_refs[ref]) != oid for ref, oid in advertised.items()):
-            git.checked("-c", "core.hooksPath=" + os.devnull, "-c", "maintenance.auto=false", "-c", "gc.auto=0",
+        for attempt in range(2):
+            local_refs = {ref: "refs/observed/" + hashlib.sha256(ref.encode()).hexdigest() for ref in advertised}
+            if all(known.get(local_refs[ref]) == oid for ref, oid in advertised.items()):
+                break
+            counts["fetches"] += 1
+            code, _ = git.run("-c", "core.hooksPath=" + os.devnull, "-c", "maintenance.auto=false", "-c", "gc.auto=0",
                         "-c", "fetch.recurseSubmodules=false", "--git-dir", str(cache),
                         "fetch", "--atomic", "--no-tags", "--no-write-fetch-head", "--", source,
                         *["+" + ref + ":" + local_refs[ref] for ref in advertised])
-            counts["fetches"] += 1
+            if code == 0:
+                break
+            if attempt:
+                raise ProbeError("git_command_failed")
+            # Verify ref churn before spending a second fetch. A missing source
+            # or target and unrelated fetch failures remain whole-scan failures.
+            code, listing = git.run("ls-remote", "--refs", "--", source, *refs)
+            if code:
+                raise ProbeError("target_unavailable")
+            surviving = dict(line.split("\t", 1)[::-1] for line in listing.decode().splitlines() if "\t" in line)
+            surviving = {ref: oid for ref, oid in surviving.items() if ref in refs and OID.fullmatch(oid)}
+            if target_ref not in surviving:
+                raise ProbeError("target_unavailable")
+            if not set(advertised) - set(surviving):
+                raise ProbeError("git_command_failed")
+            advertised = surviving
+            counts["ref_retries"] = 1
         fetched = git.checked("--git-dir", str(cache), "for-each-ref", "--format=%(refname) %(objectname)", "refs/observed/", isolated=True)
         actual = dict(line.split(" ", 1) for line in fetched.decode().splitlines())
         heads = {ref: actual[local_refs[ref]] for ref in advertised}
