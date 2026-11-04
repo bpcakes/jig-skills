@@ -102,6 +102,14 @@ def register(state, task, candidate):
     return {"candidate_id": cid, **normalized}
 
 
+def relocate_branch(state, task, branch):
+    if branch == task["branch"] or not (settings(state["config"])["enabled"] or "candidates" in task):
+        return
+    candidate = candidate_records(task).get("branch", {})
+    if candidate.get("active", True) and candidate.get("ref") == "refs/heads/" + task["branch"]:
+        register(state, task, {**candidate, "id": "branch", "ref": "refs/heads/" + branch})
+
+
 def gated(config, request):
     if not settings(config)["enabled"]:
         return False
@@ -623,7 +631,7 @@ def before_stage(run_dir, request, caller):
 
 def after_transition(run_dir, request, result):
     """A durable invalidation survives a crash or a concurrently running scan."""
-    if request.get("op") in {"candidate", "observe", "outcome", "finish"}:
+    if request.get("op") in {"candidate", "handoff", "observe", "outcome", "finish"}:
         state = Engine.read(run_dir)
         pending = state.get("integration", {}).get("pending_refresh")
         # A timed-out scan is retried by explicit scans, stage admission and

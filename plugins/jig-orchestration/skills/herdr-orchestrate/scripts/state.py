@@ -1008,6 +1008,8 @@ class Engine:
                     "identity", "handoff requires exact destination identity and source branch")
             task["last_handoff"] = {"previous": {key: task[key] for key in ("host", "driver", "worktree", "branch", "identity", "refs")},
                                     "source": source, "evidence": req["evidence"]}
+            from integration import relocate_branch
+            relocate_branch(state, task, req["branch"])
             for key in ("host", "driver", "worktree", "branch", "identity"):
                 task[key] = req[key]
             task["worktree"] = worktree

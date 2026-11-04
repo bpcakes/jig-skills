@@ -1325,6 +1325,74 @@ os.execv({executable!r}, [{executable!r}, *args])
                         if stream:
                             stream.close()
 
+    def handoff_request(self, task, branch, head):
+        return self.request("handoff", task, host="local", driver="coordinator",
+            worktree=str(self.base / "worktrees" / ("moved-" + task)), branch=branch,
+            identity={"agent_id": "replacement-" + task},
+            source={**self.proof(), "published": True, "revision": head}, evidence=self.proof(True))
+
+    def test_handoff_moves_default_candidate_and_refreshes_before_new_final_work(self):
+        refs = {"run_id": "prior-review", "review_base": self.base_oid}
+        self.apply("observe", "B", fields={"refs": refs, "findings": [{"id": "carry", "status": "unresolved"}]}, evidence=self.proof())
+        reserved = self.reserve("B", "repair", refs=refs)
+        self.settle(reserved["reservation_id"], "B", refs=refs)
+        self.apply("park", "B", evidence=self.proof(True))
+        self.apply("candidate", "B", candidate={"id": "branch", "ref": "refs/heads/task/B", "pr": 42}, evidence=self.proof())
+        self.advance()
+        self.refresh()
+        self.assertEqual(self.observation("B")["status"], "conflicted")
+        before = Engine.read(self.run)["tasks"]["B"]
+        self.git("update-ref", "refs/heads/moved/B", self.heads["C"])
+        request = self.handoff_request("B", "moved/B", self.heads["C"])
+        refresh = integration.refresh
+        def invalidated(*args, **kwargs):
+            self.assertEqual(Engine.read(self.run)["integration"]["pending_refresh"], "candidate_changed")
+            return refresh(*args, **kwargs)
+        with patch.object(integration, "refresh", side_effect=invalidated) as scanning:
+            result = supervise.apply_request(self.run, request)
+            scanning.assert_called_once()
+        state = Engine.read(self.run)
+        after = state["tasks"]["B"]
+        self.assertEqual(after["candidates"]["branch"], {"ref": "refs/heads/moved/B", "pr": 42, "active": True})
+        for field in ("claim", "refs", "findings", "counters"):
+            self.assertEqual(after[field], before[field])
+        self.assertIsNone(after["delegation"])
+        self.assertEqual(after["last_handoff"]["previous"]["branch"], "task/B")
+        self.assertEqual(self.observation("B")["head"], self.heads["C"])
+        self.assertEqual(self.observation("B")["status"], "clean")
+        self.assertFalse(state["integration"]["incidents"][canonical(["B", "branch"])]["active"])
+        self.assertTrue(any(["B", "branch"] in item["owners"] for item in self.observation("C")["overlaps"]))
+        with patch.object(integration, "refresh") as scanning:
+            self.assertEqual(supervise.apply_request(self.run, request), result)
+            scanning.assert_not_called()
+        self.apply("reserve", "B", kind="review", unit="review", target={"head": self.heads["C"]}, refs=refs)
+
+    def test_handoff_moves_an_adopted_fallback_candidate(self):
+        self.legacy_state()
+        self.refresh()
+        self.git("update-ref", "refs/heads/moved/C", self.heads["A"])
+        supervise.apply_request(self.run, self.handoff_request("C", "moved/C", self.heads["A"]))
+        self.assertEqual(self.observation("C")["head"], self.heads["A"])
+        self.apply("reserve", "C", kind="review", unit="review", target={"head": self.heads["A"]})
+
+    def test_handoff_preserves_explicit_refs_retired_candidates_and_empty_maps(self):
+        self.git("update-ref", "refs/pull/42/head", self.heads["A"])
+        self.apply("candidate", "A", candidate={"id": "branch", "ref": "refs/pull/42/head", "pr": 42}, evidence=self.proof())
+        self.apply("candidate", "A", candidate={"id": "other", "ref": "refs/heads/task/A"}, evidence=self.proof())
+        self.apply("candidate", "B", candidate={"id": "branch", "ref": "refs/heads/task/B", "active": False}, evidence=self.proof())
+        saved = Engine.read(self.run)
+        saved["tasks"]["C"]["candidates"] = {}
+        write_atomic(self.run / "state.json", saved)
+        self.refresh()
+        for task in ("A", "B", "C"):
+            with self.subTest(task=task):
+                before = Engine.read(self.run)["tasks"][task]["candidates"]
+                self.git("update-ref", "refs/heads/moved/" + task, self.heads["C"])
+                with patch.object(integration, "refresh") as scanning:
+                    supervise.apply_request(self.run, self.handoff_request(task, "moved/" + task, self.heads["C"]))
+                    scanning.assert_not_called()
+                self.assertEqual(Engine.read(self.run)["tasks"][task]["candidates"], before)
+
     def legacy_state(self):
         saved = Engine.read(self.run)
         # Representative persisted pre-0.5 shape: no feature configuration,
