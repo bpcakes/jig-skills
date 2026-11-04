@@ -30,6 +30,8 @@ For scan failures or repeated timeouts, use the recovery action returned in `int
 
 Completion rechecks current integration eligibility inside the scheduler write transaction. A failure, timeout or expiry after the preliminary check keeps the completion pending. Git commands stay outside that transaction.
 
+A retained manual completion does not reserve the coordinator wake slot. If its bounded retry still fails, normal cadence, requested wakes and endpoint checks continue using that scan attempt. Preparing a new wake supersedes the old manual marker without acknowledging it. If the manual retry succeeds first, it completes without another prompt and preserves later queued wake requests. Automatic retries cannot acknowledge a newer pass after their marker has been replaced.
+
 Routine worker recordings do not retry a timed-out scan before returning. Explicit scans, final-stage admission and reconciliation retain their retry paths; a new candidate change or successful publication still triggers an immediate scan attempt.
 
 If a coordinator scheduler edit clears or replaces a pending wake, the next tick discards any completion marker belonging to the old wake and continues normal scheduling. Matching markers and explicit manual completion remain resumable; this does not acknowledge an obsolete pass.

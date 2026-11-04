@@ -216,6 +216,7 @@ def tick(run_dir, now=None):
         Engine.heartbeat(run_dir, timestamp(now))
         state = Engine.read(run_dir)
         schedule = state["scheduler"]
+        integration_attempted = False
         if schedule.get("integration_completion"):
             def discard_orphan(current):
                 latest = current["scheduler"]
@@ -226,7 +227,15 @@ def tick(run_dir, now=None):
             state = scheduler_patch(run_dir, discard_orphan)
             schedule = state["scheduler"]
             if schedule.get("integration_completion"):
-                return complete(run_dir, schedule["integration_completion"], now=now)
+                marker = schedule["integration_completion"]
+                completion = complete(run_dir, marker, now=now, resume=True)
+                if marker != "manual" or completion["status"] != "integration_pending":
+                    return completion
+                # A failed manual pass does not own the coordinator wake slot.
+                # Keep its retry marker until recovery or a new pass is prepared.
+                integration_attempted = True
+                state = Engine.read(run_dir)
+                schedule = state["scheduler"]
         if schedule.get("pending_action_id"):
             return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
                     "delivery_status": schedule.get("delivery_status")}
@@ -243,7 +252,8 @@ def tick(run_dir, now=None):
         scheduler_patch(run_dir, lambda _: {"last_attempt_at": timestamp(now),
                         "next_due_at": timestamp(scheduler_deadline(now, settings["cadence_seconds"]))})
         from integration import refresh
-        refresh(run_dir)
+        if not integration_attempted:
+            refresh(run_dir)
 
         def check_binding(current):
             if scheduler_config(current["config"], current["scheduler"]) != settings:
@@ -291,6 +301,7 @@ def tick(run_dir, now=None):
             if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
                 return None  # A completed reconciliation consumed this tick.
             return {"pending_action_id": wake_id, "delivery_status": "dispatching", "failure": None,
+                    "integration_completion": None,
                     "wake_requested_at": None, "wake_reason": None, "busy_since_at": None,
                     "last_dispatched_action_id": wake_id, "last_dispatched_at": timestamp(now)}
         prepared = scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
@@ -340,10 +351,13 @@ def request_wake(run_dir, reason="requested", now=None):
             "pending_action_id": state["scheduler"].get("pending_action_id")}
 
 
-def complete(run_dir, wake_id, now=None):
+def complete(run_dir, wake_id, now=None, *, resume=False):
     now = now or datetime.now(timezone.utc)
+    completion_id = wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex
     def finish(current):
         schedule = current["scheduler"]
+        if resume and schedule.get("integration_completion") != wake_id:
+            return None  # A new pass superseded this retained completion.
         if (schedule.get("last_completed_action_id") == wake_id
                 or wake_id != "manual" and schedule.get("last_completed_wake_id") == wake_id):
             return None
@@ -354,10 +368,10 @@ def complete(run_dir, wake_id, now=None):
         interval = max(settings["cadence_seconds"], settings["minimum_cadence_seconds"])
         # Dispatch already consumed earlier requests. Anything now queued arrived
         # during this pass; only a full manual reconciliation may consume it too.
-        requested = schedule.get("wake_requested_at") if wake_id != "manual" else None
+        requested = schedule.get("wake_requested_at") if wake_id != "manual" or resume else None
         return {"pending_action_id": None, "delivery_status": "completed", "last_completed_at": timestamp(now),
                 "integration_completion": None,
-                "last_completed_action_id": wake_id if wake_id != "manual" else "manual-" + uuid.uuid4().hex,
+                "last_completed_action_id": completion_id,
                 "last_completed_wake_id": pending or schedule.get("last_completed_wake_id"),
                 "next_due_at": timestamp(scheduler_deadline(now, interval)),
                 "wake_requested_at": requested, "wake_reason": schedule.get("wake_reason") if requested else None,
@@ -383,6 +397,9 @@ def complete(run_dir, wake_id, now=None):
                 return None  # Retain failed or superseded observations for recovery, never completion.
         return update
     state = scheduler_patch(run_dir, acknowledge, check_integration=True)
+    if (resume and state["scheduler"].get("integration_completion") != wake_id
+            and state["scheduler"].get("last_completed_action_id") != completion_id):
+        return {"status": "superseded", "wake_id": wake_id}
     if state["scheduler"].get("integration_completion"):
         result = {"status": "integration_pending", "wake_id": wake_id}
         current = state.get("integration", {})

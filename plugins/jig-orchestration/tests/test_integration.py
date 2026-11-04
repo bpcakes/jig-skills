@@ -1196,6 +1196,92 @@ os.execv({executable!r}, [{executable!r}, *args])
         self.assertEqual(self.observation("B")["status"], "conflicted")
         self.assertNotIn("failed_scans", recovered["integration"]["counts"])
 
+    def test_failed_manual_completion_allows_requested_and_due_wakes_with_one_scan(self):
+        config = Engine.read(self.run)["config"]["integration"]
+        identity = Engine.read(self.run)["config"]["scheduler"]["agent"]
+        for index, requested in enumerate((True, False)):
+            with self.subTest(requested=requested):
+                now = datetime.now(timezone.utc) + timedelta(hours=index * 2)
+                self.apply("configure", fields={"integration": {**config, "source": str(self.base / "unavailable")}}, evidence=self.proof())
+                previous = Engine.read(self.run)["scheduler"].get("last_completed_at")
+                self.assertEqual(supervise.complete(self.run, "manual", now)["status"], "integration_pending")
+                supervise.scheduler_patch(self.run, lambda _: {
+                    "next_due_at": (now + timedelta(hours=1) if requested else now - timedelta(seconds=1)).isoformat()})
+                if requested:
+                    supervise.request_wake(self.run, "driver needs reconciliation", now)
+                with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call",
+                        return_value={"agent": {**identity, "agent_status": "idle"}}) as herdr, \
+                        patch.object(integration, "refresh", wraps=integration.refresh) as scan:
+                    result = supervise.tick(self.run, now)
+                    self.assertEqual(result["status"], "delivered")
+                    self.assertEqual(herdr.call_count, 2)
+                    scan.assert_called_once()
+                schedule = Engine.read(self.run)["scheduler"]
+                self.assertIsNone(schedule["integration_completion"])
+                self.assertEqual(schedule["pending_action_id"], result["wake_id"])
+                self.assertEqual(schedule.get("last_completed_at"), previous)
+                self.apply("configure", fields={"integration": config}, evidence=self.proof())
+                self.assertEqual(supervise.complete(self.run, "manual", now, resume=True)["status"], "superseded")
+                with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+                    self.assertEqual(supervise.tick(self.run, now)["status"], "awaiting_reconciliation")
+                    herdr.assert_not_called()
+                self.assertEqual(supervise.complete(self.run, result["wake_id"], now)["status"], "completed")
+
+    def test_manual_retry_recovers_without_prompt_and_preserves_later_wake_request(self):
+        config = Engine.read(self.run)["config"]["integration"]
+        self.apply("configure", fields={"integration": {**config, "source": str(self.base / "unavailable")}}, evidence=self.proof())
+        self.assertEqual(supervise.complete(self.run, "manual")["status"], "integration_pending")
+        request = supervise.request_wake(self.run, "new work after the manual pass")
+        self.apply("configure", fields={"integration": config}, evidence=self.proof())
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+            self.assertEqual(supervise.tick(self.run)["status"], "completed")
+            herdr.assert_not_called()
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertIsNone(schedule["integration_completion"])
+        self.assertEqual(schedule["wake_requested_at"], request["wake_requested_at"])
+
+    def test_manual_retry_retains_marker_when_not_due_busy_or_endpoint_unavailable(self):
+        config = Engine.read(self.run)["config"]["integration"]
+        identity = Engine.read(self.run)["config"]["scheduler"]["agent"]
+        self.apply("configure", fields={"integration": {**config, "source": str(self.base / "unavailable")}}, evidence=self.proof())
+        self.assertEqual(supervise.complete(self.run, "manual")["status"], "integration_pending")
+        now = datetime.now(timezone.utc)
+        supervise.scheduler_patch(self.run, lambda _: {"next_due_at": (now + timedelta(hours=1)).isoformat()})
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+            self.assertEqual(supervise.tick(self.run, now)["status"], "not_due")
+            herdr.assert_not_called()
+        supervise.request_wake(self.run, "driver request", now)
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call",
+                return_value={"agent": {**identity, "agent_status": "working"}}):
+            self.assertEqual(supervise.tick(self.run, now)["status"], "busy")
+        with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call",
+                side_effect=OSError("fixture endpoint unavailable")):
+            minimum = supervise.scheduler_config(Engine.read(self.run)["config"])["minimum_cadence_seconds"]
+            self.assertEqual(supervise.tick(self.run, now + timedelta(seconds=minimum))["status"], "endpoint_unavailable")
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(schedule["integration_completion"], "manual")
+        self.assertTrue(schedule["wake_requested_at"])
+        self.assertTrue(schedule["failure"])
+
+    def test_manual_retry_cannot_acknowledge_a_newly_prepared_wake(self):
+        self.refresh()
+        supervise.scheduler_patch(self.run, lambda _: {"integration_completion": "manual"})
+        apply, injected = Engine.apply, []
+        def replace_marker(run, request, *args, **kwargs):
+            if (request.get("op") == "scheduler" and not injected
+                    and request.get("fields", {}).get("delivery_status") == "completed"):
+                injected.append(True)
+                supervise.scheduler_patch(run, lambda _: {"pending_action_id": "new-wake", "integration_completion": None,
+                    "delivery_status": "dispatching", "last_dispatched_action_id": "new-wake"})
+            return apply(run, request, *args, **kwargs)
+        with patch.object(Engine, "apply", side_effect=replace_marker):
+            self.assertEqual(supervise.complete(self.run, "manual", resume=True)["status"], "superseded")
+        schedule = Engine.read(self.run)["scheduler"]
+        self.assertEqual(injected, [True])
+        self.assertEqual(schedule["pending_action_id"], "new-wake")
+        self.assertEqual(schedule["delivery_status"], "dispatching")
+        self.assertIsNone(schedule.get("last_completed_at"))
+
     def test_completion_rechecks_whole_scan_failure_at_acknowledgement(self):
         self.refresh()
         supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": "racing-source-failure"})
