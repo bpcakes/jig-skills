@@ -408,7 +408,7 @@ class Engine:
                 return
             candidates = registrations(state).get(task["id"], {})
             expected = task["reservations"].get(request.get("reservation_id"), {}).get("integration")
-            cid = select_candidate(candidates, request, expected)
+            cid = select_candidate(task, candidates, request, expected)
             head = request.get("target", {}).get("head")
             if not isinstance(cid, str) or cid not in candidates or not isinstance(head, str) or not OID.fullmatch(head):
                 return
@@ -905,6 +905,12 @@ class Engine:
         if op == "scheduler":
             require(req.get("expected_scheduler") == state["scheduler"]["version"],
                     "stale_scheduler", "current scheduler version is required")
+            require(type(req.get("require_integration", False)) is bool, "invalid",
+                    "require_integration must be boolean")
+            if req.get("require_integration"):
+                from integration import completion_ready
+                require(completion_ready(state), "stale_integration",
+                        "integration evidence changed before reconciliation completion")
             if "expected_heartbeat" in req:
                 # Heartbeats deliberately avoid journal/version churn. Compare
                 # their separate evidence under the same lock as the claim.

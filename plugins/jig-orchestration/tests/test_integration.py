@@ -1215,6 +1215,48 @@ os.execv({executable!r}, [{executable!r}, *args])
             self.assertEqual(supervise.tick(self.run)["status"], "completed")
             herdr.assert_not_called()
 
+    def test_completion_rechecks_evidence_inside_the_scheduler_write_transaction(self):
+        original_apply, git_run = Engine.apply, integration.Git.run
+        for boundary in ("timeout", "failed_scan", "expiry"):
+            with self.subTest(boundary=boundary):
+                self.refresh()
+                wake = "after-callback-" + boundary
+                supervise.scheduler_patch(self.run, lambda _: {"pending_action_id": wake})
+                previous = Engine.read(self.run)["scheduler"].get("last_completed_at")
+                injected, clock_patches = [], []
+                def race(run, request, *args, **kwargs):
+                    if (request.get("op") == "scheduler" and not injected
+                            and request.get("fields", {}).get("delivery_status") == "completed"):
+                        injected.append(True)
+                        current = Engine.read(run)
+                        if boundary == "timeout":
+                            Engine.integration_timed_out(run, integration.binding(current), current["integration"]["checked_at"])
+                        elif boundary == "failed_scan":
+                            def unavailable(git, *arguments, **options):
+                                return (1, b"") if "ls-remote" in arguments else git_run(git, *arguments, **options)
+                            with patch.object(integration.Git, "run", unavailable):
+                                self.assertEqual(integration.refresh(run)["status"], "observed")
+                        else:
+                            clock_patch = patch.object(integration, "datetime")
+                            clock = clock_patch.start()
+                            clock.now.return_value = datetime.now(timezone.utc) + timedelta(seconds=180)
+                            clock_patches.append(clock_patch)
+                    return original_apply(run, request, *args, **kwargs)
+                try:
+                    with patch.object(Engine, "apply", side_effect=race):
+                        self.assertEqual(supervise.complete(self.run, wake)["status"], "integration_pending")
+                finally:
+                    for clock_patch in clock_patches:
+                        clock_patch.stop()
+                self.assertEqual(injected, [True])
+                schedule = Engine.read(self.run)["scheduler"]
+                self.assertEqual(schedule["integration_completion"], wake)
+                self.assertEqual(schedule["pending_action_id"], wake)
+                self.assertEqual(schedule.get("last_completed_at"), previous)
+                with patch.object(supervise, "managed_guard"), patch.object(supervise, "herdr_call") as herdr:
+                    self.assertEqual(supervise.tick(self.run)["status"], "completed")
+                    herdr.assert_not_called()
+
     def test_reconciliation_retries_superseded_snapshots_inside_its_time_budget(self):
         original = Engine.publish_integration
         publications = []
@@ -1283,6 +1325,25 @@ os.execv({executable!r}, [{executable!r}, *args])
                         if stream:
                             stream.close()
 
+    def legacy_state(self):
+        saved = Engine.read(self.run)
+        # Representative persisted pre-0.5 shape: no feature configuration,
+        # candidates, observation state or per-execution integration bindings.
+        saved["config"].pop("integration", None)
+        saved.pop("integration", None)
+        for task in saved["tasks"].values():
+            task.pop("candidates", None)
+            for reservation in task["reservations"].values():
+                reservation.pop("integration", None)
+                reservation.pop("purpose", None)
+            pending = task.get("pending_intent")
+            if pending:
+                pending.pop("integration", None)
+                pending.pop("purpose", None)
+        write_atomic(self.run / "state.json", saved)
+        self.git("remote", "add", "origin", str(self.repo))
+        return saved
+
     def legacy_execution(self, issued):
         self.adapter("review")
         self.apply("configure", fields={"integration": {"enabled": False}}, evidence=self.proof())
@@ -1300,22 +1361,7 @@ os.execv({executable!r}, [{executable!r}, *args])
                 runner.execute(self.run, request)
         else:
             Engine.apply(self.run, request)
-        saved = Engine.read(self.run)
-        # Representative persisted pre-0.5 shape: no feature configuration,
-        # candidates, observation state or per-execution integration bindings.
-        saved["config"].pop("integration", None)
-        saved.pop("integration", None)
-        for task in saved["tasks"].values():
-            task.pop("candidates", None)
-            for reservation in task["reservations"].values():
-                reservation.pop("integration", None)
-                reservation.pop("purpose", None)
-            pending = task.get("pending_intent")
-            if pending:
-                pending.pop("integration", None)
-                pending.pop("purpose", None)
-        write_atomic(self.run / "state.json", saved)
-        self.git("remote", "add", "origin", str(self.repo))
+        saved = self.legacy_state()
         return request, saved["tasks"]["C"]
 
     def test_adopt_issued_legacy_execution_inspects_without_redispatch_and_keeps_evidence(self):
@@ -1337,8 +1383,15 @@ os.execv({executable!r}, [{executable!r}, *args])
 
     def test_adopt_unissued_legacy_preparation_checks_current_target_without_recounting(self):
         request, before = self.legacy_execution(issued=False)
+        self.apply("candidate", "C", candidate={"id": "second", "ref": "refs/heads/task/A"}, evidence=self.proof())
+        resume = {"op": "execute", "action_id": request["action_id"], "task_id": "C"}
+        with patch.object(integration, "refresh", return_value={"status": "busy"}):
+            self.assert_error("integration", runner.execute, self.run, resume)
+        waiting = supervise.task_view(self.run, "C")["integration"]["candidates"]
+        self.assertEqual(waiting["branch"]["waiting"]["status"], "pending")
+        self.assertIsNone(waiting["second"]["waiting"])
         self.advance()
-        result = runner.execute(self.run, {"op": "execute", "action_id": request["action_id"], "task_id": "C"})
+        result = runner.execute(self.run, resume)
         self.assertEqual(result["outcome"], "succeeded")
         after = Engine.read(self.run)["tasks"]["C"]
         for field in ("claim", "delegation", "refs", "findings", "counters"):
@@ -1346,6 +1399,42 @@ os.execv({executable!r}, [{executable!r}, *args])
         payload = json.loads((self.base / "effects.requests").read_text())
         self.assertEqual(payload["mode"], "dispatch")
         self.assertEqual(payload["integration"]["target"], self.heads["A"])
+
+    def test_legacy_reservation_keeps_its_branch_but_honors_retirement_and_head_changes(self):
+        self.apply("configure", fields={"integration": {"enabled": False}}, evidence=self.proof())
+        refs = {"run_id": "legacy-reservation", "review_base": self.base_oid}
+        self.apply("observe", "C", fields={"refs": refs}, evidence=self.proof())
+        reserved = self.reserve("C", refs=refs)
+        before = self.legacy_state()["tasks"]["C"]
+        self.apply("candidate", "C", candidate={"id": "second", "ref": "refs/heads/task/A"}, evidence=self.proof())
+        self.apply("candidate", "C", candidate={"id": "branch", "ref": "refs/heads/task/C", "active": False}, evidence=self.proof())
+        def intent():
+            return supervise.apply_request(self.run, self.request("intent", "C", kind="review", refs=refs,
+                reservation_id=reserved["reservation_id"], target={"head": self.heads["C"]}, evidence=self.proof()))
+        self.assert_error("integration", intent)
+        self.apply("candidate", "C", candidate={"id": "branch", "ref": "refs/heads/task/C"}, evidence=self.proof())
+        self.git("update-ref", "refs/heads/task/C", self.heads["A"])
+        self.assert_error("integration", intent)
+        self.git("update-ref", "refs/heads/task/C", self.heads["C"])
+        result = intent()
+        after = Engine.read(self.run)["tasks"]["C"]
+        self.assertEqual(result["intent"]["integration"]["candidate_id"], "branch")
+        self.assertEqual(after["counters"], before["counters"])
+        self.assertEqual(after["refs"], before["refs"])
+        self.assertEqual(set(after["reservations"]), {reserved["reservation_id"]})
+
+    def test_modern_null_binding_does_not_infer_legacy_candidate_selection(self):
+        self.adapter("review")
+        self.apply("configure", fields={"integration": {"enabled": False}}, evidence=self.proof())
+        request = self.request("prepare", "C", kind="review", adapter="fixture",
+                               target={"head": self.heads["C"]}, evidence=self.proof())
+        Engine.apply(self.run, request)
+        self.apply("configure", fields={"integration": {"enabled": True, "source": str(self.repo)}}, evidence=self.proof())
+        self.apply("candidate", "C", candidate={"id": "second", "ref": "refs/heads/task/A"}, evidence=self.proof())
+        self.assert_error("integration", runner.execute, self.run,
+            {"op": "execute", "action_id": request["action_id"], "task_id": "C"})
+        self.assertFalse((self.base / "effects").exists())
+        self.assertEqual(Engine.read(self.run)["tasks"]["C"]["counters"]["review"], 1)
 
     def test_adopted_branch_survives_registration_growth_and_bound_dispatch(self):
         self.adapter("review")

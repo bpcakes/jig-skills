@@ -117,7 +117,7 @@ def scheduler_config(config, schedule=None):
             "busy_timeout_seconds": busy_timeout}
 
 
-def scheduler_patch(run_dir, build, check_heartbeat=False):
+def scheduler_patch(run_dir, build, check_heartbeat=False, check_integration=False):
     """Recompute the update on a version race; never replay an external effect."""
     for _ in range(5):
         current = Engine.read(run_dir)
@@ -131,11 +131,13 @@ def scheduler_patch(run_dir, build, check_heartbeat=False):
         }
         if check_heartbeat:
             request["expected_heartbeat"] = current["scheduler"].get("heartbeat_at")
+        if check_integration:
+            request["require_integration"] = True
         try:
             Engine.apply(run_dir, request, caller="coordinator")
             return Engine.read(run_dir)
         except StateError as exc:
-            if exc.code not in {"stale_scheduler", "stale_policy", "stale_heartbeat"}:
+            if exc.code not in {"stale_scheduler", "stale_policy", "stale_heartbeat", "stale_integration"}:
                 raise
     raise RuntimeErrorDetail("concurrent_update", "Scheduler state changed repeatedly; retry the state operation")
 
@@ -376,12 +378,11 @@ def complete(run_dir, wake_id, now=None):
     def acknowledge(current):
         update = finish(current)
         if update is not None:
-            from integration import fresh, registrations, settings
-            if (settings(current["config"])["enabled"] and any(registrations(current).values())
-                    and (not fresh(current) or current.get("integration", {}).get("counts", {}).get("failed_scans"))):
+            from integration import completion_ready
+            if not completion_ready(current):
                 return None  # Retain failed or superseded observations for recovery, never completion.
         return update
-    state = scheduler_patch(run_dir, acknowledge)
+    state = scheduler_patch(run_dir, acknowledge, check_integration=True)
     if state["scheduler"].get("integration_completion"):
         result = {"status": "integration_pending", "wake_id": wake_id}
         current = state.get("integration", {})

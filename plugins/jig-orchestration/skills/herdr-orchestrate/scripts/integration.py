@@ -121,6 +121,11 @@ def fresh(state):
             <= settings(state["config"])["max_age_seconds"])
 
 
+def completion_ready(state):
+    return (not settings(state["config"])["enabled"] or not any(registrations(state).values())
+            or fresh(state) and not state.get("integration", {}).get("counts", {}).get("failed_scans"))
+
+
 def stage_waiter(task, request, candidate_id, expected=None):
     """Keep the counted assignment's identity as well as the rejected request."""
     if expected is None:
@@ -131,11 +136,16 @@ def stage_waiter(task, request, candidate_id, expected=None):
     return waiter
 
 
-def select_candidate(candidates, request, expected=None):
+def select_candidate(task, candidates, request, expected=None):
     if request.get("candidate_id") is not None:
         return request["candidate_id"]
     if expected is not None:
         return expected.get("candidate_id")
+    reservation = task["reservations"].get(request.get("reservation_id"))
+    if reservation and "integration" not in reservation:
+        # Pre-0.5 assignments used the task branch before candidate bindings
+        # existed. A modern explicit null binding does not imply that history.
+        return "branch"
     return next(iter(candidates)) if len(candidates) == 1 else None
 
 
@@ -146,7 +156,7 @@ def gate(state, task, request, expected=None):
             require(bool(task.get("merged_prs")), "integration", "acceptance validation requires a recorded merge")
         return None
     candidates = registrations(state).get(task["id"], {})
-    cid = select_candidate(candidates, request, expected)
+    cid = select_candidate(task, candidates, request, expected)
     require(cid in candidates, "integration", "select a registered active candidate_id for this stage")
     target = request.get("target", {})
     require(isinstance(target, dict) and OID.fullmatch(str(target.get("head", ""))),
