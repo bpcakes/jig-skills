@@ -2,6 +2,13 @@
 
 Read at startup, adoption, or a host/profile change. Save capability receipts in the private run directory and record their paths in configuration; do not repeat full preflight on every tick.
 
+For an enforced run, follow [authenticated communication](communication.md):
+register the supported local Linux execution host, run `verify-host`, and use
+separate clones with private Git metadata. Host dependencies below belong to the
+trusted runtime; their installation does not grant the model access to Herdr,
+administrative state or other messaging tools. Remote SSH return routes below
+apply to explicitly legacy runs; they do not extend the enforced backend.
+
 ## Scope and installation
 
 Resolve the actual target branch, explicit task IDs or epic descendants, tracker store, worker/reviewer models, existing authority, acceptance owner, registered worktree roots, and any exclusions. An unrelated PR, pane, or checkout stays outside the run. A newly discovered prerequisite may be handled within the existing task only when it is necessary to its authorized outcome; it does not reopen general admission.
@@ -16,7 +23,7 @@ Install dependencies in the agent home/profile actually selected for each role. 
 
 Both machines need the review pair if both drive review. Installing only `SKILL.md` or only one review skill is insufficient. The orchestration state and scheduler remain on one coordinator. Read the installed review controller's requirements: current repository versions require Node 22+, Git 2.42+, Linux `flock`/`/proc` or the documented macOS Python/process support. Do not infer supported versions from a similarly named executable.
 
-The coordinator and any other agent that controls Herdr need its skill in the selected profile. A coding-only worker does not. Install the Herdr binary separately using Herdr's own setup. From a `jig-skills` checkout, direct installation exports that binary's matching skill using `herdr --skill` and installs it alongside the orchestration skill and review pair. Name the profile's host, as in these Codex and Claude Code examples:
+The trusted runtime needs the Herdr binary and matching skill for enforced runs; models receive only the gateway. In legacy runs, the coordinator and any other agent controlling Herdr need its skill in the selected profile. A coding-only worker does not. Install the Herdr binary separately using Herdr's own setup. From a `jig-skills` checkout, direct installation exports that binary's matching skill using `herdr --skill` and installs it alongside the orchestration skill and review pair. Name the profile's host, as in these Codex and Claude Code examples:
 
 ```sh
 scripts/install.sh codex --dest "$HOME/.codex-featherenvy/skills" herdr-orchestrate
@@ -64,6 +71,11 @@ Preflight also records the supported pause boundary and cancellation controls fo
 
 ## Return route and helper authority
 
+Enforced agents use the authenticated gateway from their assigned namespace.
+The SSH `serve` route rejects enforced runs. Verify actual query, message and
+required action access with the selected client; a connection flag is insufficient.
+The remaining SSH guidance in this section is for legacy runs.
+
 Coordinator-to-worker SSH does not prove worker-to-coordinator access. Verify the reverse route separately against isolated state before delegating consequential transitions. Bind caller identity outside the request payload and allow only its assigned task operations. Establish the driver's standing grant at admission so routine stages, including final helper closure, do not wait for the coordinator. The bundled `serve` command supports a restricted SSH forced-command entry point; [runtime](runtime.md) describes the protocol. Do not give workers the coordinator's unrestricted local `apply` command or arbitrary shell access as a substitute for this boundary.
 
 Without a verified return route, record coordinator-mediated transitions: workers can implement/review and leave durable evidence, while the coordinator checks current gates and performs authorized merges/resource transfers. Do not invent a new transport or claim direct progress on that host.
@@ -76,4 +88,4 @@ Record authority for implementation, review, validation, pushes, PR creation, me
 
 Retain compact current configuration and task state with external artifact references. Keep full review reports in the controller's own artifacts. The helper is the sole orchestration-state writer; no task or driver edits its JSON files directly. V1 has no automatic cross-host coordinator failover.
 
-For automated transitions, register only adapters whose dispatch and read-only inspection behavior have been verified against disposable targets. Their commands execute on the coordinator host, optionally using an explicit SSH route to the assigned host. Do not expose request-supplied shell commands or unrestricted remote execution. Verify Herdr context/identity and native approval behavior where the adapter controls Herdr. See [execution](execution.md) for the concrete protocol. Active installations are not upgraded by this skill; old grants remain conservative until renewed.
+For automated transitions, register only adapters whose dispatch and read-only inspection behavior have been verified against disposable targets. Enforced adapters use the isolated execution path or the fixed review controller described in [authenticated communication](communication.md). Legacy adapter commands execute on the coordinator host, optionally using an explicit SSH route to the assigned host. Do not expose request-supplied shell commands or unrestricted remote execution. Verify Herdr context/identity and native approval behavior where the trusted adapter controls Herdr. See [execution](execution.md) for the concrete protocol. Active installations are not upgraded by this skill; old grants remain conservative until renewed.

@@ -58,7 +58,8 @@ for (const location of ["root", "submodule", "gitfile"]) test(`snapshot rejects 
   const run = fixture(t);
   let root = run.root;
   if (location === "submodule") {
-    git(root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", root, "module");
+    execFileSync("git", ["-c", "core.hooksPath=/dev/null", "submodule", "add", "-q", root, "module"],
+      { cwd: root, env: { ...gitEnvironment(), GIT_ALLOW_PROTOCOL: "file" } });
     root = path.join(root, "module");
     git(root, "config", "user.name", "Test"); git(root, "config", "user.email", "test@example.invalid");
   }
@@ -289,7 +290,8 @@ for (const location of ["root", "submodule", "linked-worktree"]) test(`snapshot 
   let root = run.root;
   if (location === "submodule") {
     root = path.join(run.root, "module");
-    git(run.root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", run.root, "module");
+    execFileSync("git", ["-c", "core.hooksPath=/dev/null", "submodule", "add", "-q", run.root, "module"],
+      { cwd: run.root, env: { ...gitEnvironment(), GIT_ALLOW_PROTOCOL: "file" } });
   } else if (location === "linked-worktree") {
     root = path.join(run.temporary, "linked");
     git(run.root, "worktree", "add", "-q", "-b", "linked", root);
@@ -403,7 +405,14 @@ test("named diff driver configuration is read once per snapshot and never cached
   const f = fixture(t); writeFileSync(path.join(f.root, ".gitattributes"), "*.md diff=MyDriver\n");
   writeFileSync(path.join(f.root, "one.md"), "one\n");
   const original = childProcess.execFileSync, calls = [];
-  childProcess.execFileSync = (...args) => { if (args[0] === "git" && args[1][0] === "config") calls.push(args[1]); return original(...args); };
+  childProcess.execFileSync = (...args) => {
+    if (args[0] === "git") {
+      let command = 0;
+      while (args[1][command] === "-c") command += 2;
+      if (args[1][command] === "config") calls.push(args[1].slice(command));
+    }
+    return original(...args);
+  };
   syncBuiltinESMExports();
   t.after(() => { childProcess.execFileSync = original; syncBuiltinESMExports(); });
   snapshot(f.root); const initialCount = calls.length;

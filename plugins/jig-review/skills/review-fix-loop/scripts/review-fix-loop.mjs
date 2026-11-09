@@ -26,6 +26,7 @@ import { readHandoff, validateHandoff, verifyHandoffScope } from "../../panel-re
 import { assertCommitScope, assertNoGitOperation, checkoutDirty, prepareRoundCommit, publishRoundCommit } from "./round-commits.mjs";
 import { normalizeCommitMessage, roundCommitMessage } from "./commit-messages.mjs";
 import { atRoundLimit, currentAdjudication, findingAnchor, parkedRecovery, recordRecovery, recoveryContext, recoveryDecision, signalRecovery } from "./recovery-policy.mjs";
+import { withControllerLease, withControllerLeaseSync } from "./controller-lease.mjs";
 
 export const TERMINAL = new Set(["CONVERGED", "THRESHOLD_MET", "ROUND_LIMIT", "RECOVERY_REQUIRED", "BLOCKED", "VALIDATION_FAILED", "REVIEW_INCOMPLETE", "SCOPE_CHANGED"]);
 const transitions = {
@@ -240,11 +241,17 @@ function configure(options, config, cwd) {
     if (provider.command && !command(provider.command)) throw new Error("Reviewer command requires argv.");
   }
   for (const role of ["triageCommand", "repairCommand"]) if (config[role] && !command(config[role])) throw new Error(`${role} requires argv.`);
+  if (config.executionBoundary !== undefined) {
+    if (!command(config.executionBoundary) || !path.isAbsolute(config.executionBoundary[0])) throw new Error("executionBoundary requires an absolute executable argv.");
+    if (reviewers.some(provider => !provider.command) || !config.triageCommand || !config.repairCommand) throw new Error("executionBoundary requires command-backed reviewers, triage and repair; native assignments cannot bypass the boundary.");
+    if (!executableCommand({ role: "validate", cwd, command: config.executionBoundary })) throw new Error("executionBoundary executable is unavailable.");
+  }
   if (config.validationSandbox && !["bubblewrap", "seatbelt", "host"].includes(config.validationSandbox)) throw new Error("validationSandbox must be bubblewrap, seatbelt, or host.");
   const validationMode = config.validationMode ?? (config.validationSandbox && config.validationSandbox !== "host" ? "isolated" : "checkout");
   if (!["checkout", "isolated"].includes(validationMode)) throw new Error("validationMode must be checkout or isolated.");
   if (validationMode === "checkout" && config.validationSandbox && config.validationSandbox !== "host") throw new Error("Platform sandboxes require isolated validation.");
   if (validationMode === "isolated" && config.validationSandbox === "host") throw unsupported("Unsandboxed isolated validation cannot exclude original workspace source; select checkout validation explicitly or use the platform sandbox.");
+  if (config.executionBoundary && validationMode !== "checkout") throw new Error("executionBoundary requires the selected checkout; its launcher owns isolation.");
   for (const [role, names] of Object.entries(config.environmentFrom ?? {})) {
     if (!["review", "triage", "repair", "validate"].includes(role) || !Array.isArray(names) || names.some(name => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) throw new Error("environmentFrom maps command roles to inherited variable names, not secret values.");
   }
@@ -254,7 +261,18 @@ function configure(options, config, cwd) {
   return { reviewConcurrency: 2, ...config, storage: storageLimits(config.storage), reviewers, validationMode, validationSandbox: config.validationSandbox ?? (validationMode === "checkout" ? "host" : defaultValidationSandbox()) };
 }
 
-export async function createRun({ cwd = process.cwd(), contract, options = parseArgs([]), config = {}, fromReview = null }) {
+export async function createRun(args) {
+  if (!args?.config?.executionBoundary) return createRunLocked(args);
+  const root = repositoryRoot(args.cwd ?? process.cwd());
+  return withControllerLease({ root, config: args.config }, controls => {
+    if (controls.paused || controls.cancel_requested) throw new Error("Orchestration has paused or cancelled new controller work.");
+    return createRunLocked(args);
+  });
+}
+
+async function createRunLocked({ cwd = process.cwd(), contract, options = parseArgs([]), config = {}, fromReview = null,
+  id: requestedId = null, preflightOnly = false, adoptInitialization = [] }) {
+  if (requestedId !== null && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(requestedId)) throw new Error("Invalid pinned controller run ID.");
   options = { ...options, fixMode: options.fixMode ?? DEFAULT_FIX_MODE, commitMode: options.commitMode ?? "per-round" };
   if (!["per-round", "none"].includes(options.commitMode)) throw new Error("--commit-mode must be per-round or none.");
   const importedReview = fromReview === null ? null : validateHandoff(structuredClone(fromReview));
@@ -279,7 +297,7 @@ export async function createRun({ cwd = process.cwd(), contract, options = parse
   const discovery = discoverValidation(root);
   const validationEnvironment = commandEnvironment({ role: "validate", environmentFrom: config.environmentFrom?.validate });
   const missingEnvironment = [...new Set([...contract.requiredValidation, ...(contract.prerequisites ?? [])].filter(check => !check.optional).flatMap(check => check.requiredEnvironment ?? []))].filter(name => !validationEnvironment[name]);
-  if (missingEnvironment.length) throw new Error(`Required validation environment missing in the worker: ${missingEnvironment.join(", ")}. Export these names and add non-default names to config.environmentFrom.validate.`);
+  if (missingEnvironment.length && !config.executionBoundary) throw new Error(`Required validation environment missing in the worker: ${missingEnvironment.join(", ")}. Export these names and add non-default names to config.environmentFrom.validate.`);
   const scope = await resolveScope(root, options);
   // Also bind the loop's inclusive branch capture to the exact admission state.
   if (importedReview) {
@@ -303,15 +321,38 @@ export async function createRun({ cwd = process.cwd(), contract, options = parse
   const privateRoot = gitDirectory(scope.root);
   const runsRoot = path.join(privateRoot, "jig", "review-fix");
   assertBackupFilesystem(scope.root, Object.keys(inspected.files), privateRoot);
+  if (preflightOnly) return { root: scope.root, runsRoot, fingerprint: scope.fingerprint, contractHash: hash(contract) };
   return locked(runsRoot, async () => {
     assertLegacyAdmission(scope.root, runsRoot);
     const active = path.join(runsRoot, "active.json");
+    const id = requestedId ?? randomUUID(), directory = path.join(runsRoot, id);
+    const initializationFile = path.join(runsRoot, `${id}.initialization.json`);
+    const initialization = { version: 1, id, root: scope.root, contractHash: hash(contract),
+      optionsHash: hash(options), configHash: hash(config), fingerprint: scope.fingerprint.fingerprint };
+    const resuming = existsSync(initializationFile);
+    const previousConfigHashes = adoptInitialization.map(previous => hash({ ...config,
+      executionBoundary: previous.boundary, orchestrationBinding: previous.binding }));
+    const previousInitialization = resuming ? readJSON(initializationFile) : null;
+    const reboundInitialization = previousInitialization && hash(previousInitialization) !== hash(initialization);
+    if (reboundInitialization && (!config.executionBoundary || !requestedId
+        || !previousConfigHashes.includes(previousInitialization.configHash)
+        || hash({ ...previousInitialization, configHash: initialization.configHash }) !== hash(initialization))) throw new Error("Interrupted controller initialization inputs or source changed; preserve its original state for recovery.");
+    if (existsSync(directory) && (!requestedId || !resuming)) throw new Error("Pinned controller directory already exists without matching initialization evidence.");
+    let initialized;
+    if (resuming && existsSync(path.join(directory, "run.json"))) {
+      initialized = loadRun(directory);
+      if (initialized.phase !== "INIT" || initialized.id !== id || initialized.root !== scope.root
+          || initialized.contractHash !== initialization.contractHash || hash(initialized.options) !== initialization.optionsHash
+          || ![initialization.configHash, ...previousConfigHashes].includes(hash(initialized.config))
+          || initialized.initialFingerprint.fingerprint !== initialization.fingerprint) throw new Error("Existing controller has progressed or differs from its interrupted initialization; resume its journal.");
+    }
     const retained = retainedReferences(runsRoot);
     for (const receipt of retained) assertSettledReference(receipt);
     let previousReceipt;
     if (existsSync(active)) {
       const existing = readJSON(active);
-      if (settledReference(existing)) { assertSettledReference(existing); previousReceipt = existing; }
+      if (initialized && existing.directory === directory) { /* Finish the same initialization. */ }
+      else if (settledReference(existing)) { assertSettledReference(existing); previousReceipt = existing; }
       else {
         let prior;
         try { prior = loadRun(existing.directory); }
@@ -326,11 +367,21 @@ export async function createRun({ cwd = process.cwd(), contract, options = parse
     if (previousReceipt?.backups.length) {
       json(path.join(runsRoot, "retained-backups.json"), [...retained.filter(receipt => receipt.directory !== previousReceipt.directory), previousReceipt]);
     }
-    const id = randomUUID(), directory = path.join(runsRoot, id);
+    if (initialized) {
+      if (hash(initialized.config) !== initialization.configHash) {
+        const previousOwner = initialized.config.orchestrationBinding.owner_session;
+        initialized.config = config;
+        save(initialized, "orchestration-owner-adopted", { previousOwner, owner: config.orchestrationBinding.owner_session });
+      }
+      if (reboundInitialization) json(initializationFile, initialization);
+      json(active, { directory });
+      return initialized;
+    }
     const temporary = realpathSync(tmpdir());
     if (temporary === root || temporary.startsWith(`${root}${path.sep}`)) throw unsupported(`Temporary workspace parent ${temporary} is inside the source checkout; configure TMPDIR outside it.`);
     const workspaceRoot = path.join(temporary, `jig-review-fix-${id}`, "overlays");
     assertStorage({ directory, runsRoot, workspaceRoot, config }, inspected.sourceBytes + 32 * 1024 * 1024);
+    if (!resuming || reboundInitialization) json(initializationFile, initialization);
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     const initial = snapshot(scope.root, directory, { maxBytes: config.storage.maxSourceBytes });
     const run = { version: RUN_VERSION, id, directory, runsRoot, workspaceRoot, root: scope.root, options, config, fixPolicy,
@@ -664,17 +715,19 @@ function completeIssue(run) {
     assignment.instructions += " Research material open questions against source, contracts and reproducible evidence before proposing a fix. Incorporate the answers in decision evidence and recovery.nextAction. Signals in recoveryContext request investigation, not an automatic diagnosis. If unresolved signals remain and another repair is needed, return recovery with diagnosis, evidence, nextAction, findingIds and a stable strategy key for productive/local-repair/wrong-design. A strategy key identifies the causal approach, not a round: never rename an unchanged failed strategy to evade its guard. Distinguish productive progress, a local defect, wrong design, reviewer noise, a disputed finding, a missing prerequisite and unavailable evidence. For wrong-design, nextAction is a short design note incorporating prior failures and rejections; preserve existing attempts and reimplement without automatic reset or history rewriting. Below-threshold defects remain follow-ups; low severity alone is not reviewer noise. Use scope-dependency to request task splitting, disputed-finding to request an independent judge, and execution-blocked when external evidence or capabilities are unavailable. These routes preserve work for the parent. Use question only for an unresolved human decision, with options and a recommendation. Applicable adjudications bind this claim on these exact contents; material code or claim evidence changes reopen them.";
     assignment.validationRetryAvailable = validationRetryAvailable(run);
     if (assignment.validationRetryAvailable) assignment.instructions += " A completed required check failed and one validation retry remains available. Inspect its logs and use safe local diagnostics to distinguish a source defect, missing prerequisite, and plausible transient fixture or service failure. A passing isolated rerun supports a full-check retry but does not satisfy the required gate. When evidence supports a transient failure and rerunning is safe, return validationRetry: { evidence: <diagnosis and why a retry is justified> } instead of decisions. This reruns the full validation plan in this run without edits, another repair round, or user confirmation. Do not invent a source change to obtain a rerun. The original failure remains recorded; a repeated failure requires repair or a concrete blocker. Uncertain executions and missing prerequisites cannot use this path.";
-    assignment.validationPending = run.validationPending ?? [];
+    assignment.validationPending = run.validationPending ?? contractOf(run).requiredValidation
+      .filter(check => !matchingValidation(run, check.id, baseline.contentHash)).map(check => check.id);
     assignment.validationReuse = (run.validationReuse ?? []).filter(reuse => reuse.fingerprint === assignment.fingerprint
       && reuse.candidateHash === baseline.contentHash && !assignment.validationPending.includes(run.validation.find(v => v.assignmentId === reuse.assignmentId)?.checkId));
     assignment.instructions += " Match original validation records using both fingerprint and contentHash (the record calls this candidateHash), or use the supplied validationReuse binding for that record's assignmentId. validationPending lists checks still awaiting execution; old results for those checks are not current proof. Reuse does not change the original outcome: failed checks remain failed. Optional checks must still be attempted, though their failures do not block acceptance.";
+    assignment.instructions += " The controller runs outstanding validation after triage when no repair or blocker remains. Unrun checks alone are not unavailable capabilities and do not require execution-blocked recovery. When findings is empty, return an empty decisions array; do not invent a finding or recovery merely to request those scheduled checks. This does not waive validation or establish acceptance.";
     assignment.instructions += " For requirement-<criterionId> findings, inspect every current report's acceptance concern for that criterion. Mark fixed only when source, coverage, and applicable controller receipts establish the criterion; explain how those concerns are resolved in the decision evidence. Passing checks alone do not refute a coverage concern, and rejected does not satisfy a requirement. The controller records a separate acceptance resolution for each assessed report without rewriting it. Resolve evidence-only uncertainty here; do not restart discovery or a new run to seek a different verdict.";
   }
   assignment.resultSchema = resultSchema(assignment);
   run.pending = { id, role, assignment, overlay, before: baseline.files, metadata: baseline.repositories, command: argv };
   const directory = path.join(run.directory, "assignments", id);
   json(path.join(directory, "request.json"), { role, cwd: overlay, command: argv, assignment, environmentFrom: run.config.environmentFrom?.[role === "adjudicate" ? "review" : role],
-    timeoutMs });
+    timeoutMs, executionBoundary: run.config.executionBoundary });
   save(run, "assignment", { id, role });
 }
 function launch(run) {
@@ -1161,10 +1214,10 @@ function reviewValidationEvidence(run, candidateHash) {
     checks: contractOf(run).requiredValidation.map(check => {
       const record = matchingValidation(run, check.id, candidateHash);
       if (!record) return { checkId: check.id, optional: check.optional === true, receipt: null };
-      const { assignmentId, outcome, execution, exitCode, signal, error, fingerprint, candidateHash: originalHash, argv, context, log, stdoutBytes, logTruncated } = record;
+      const { assignmentId, outcome, execution, exitCode, signal, error, fingerprint, candidateHash: originalHash, argv, context, log, stdoutBytes, stdoutDecodingLoss, logTruncated, stderrBytes, stderrRetainedBytes, stderrDecodingLoss, stderrTruncated } = record;
       const stderrLog = path.join(run.directory, "assignments", assignmentId, "stderr.json");
       return { checkId: check.id, optional: check.optional === true, receipt: {
-        assignmentId, outcome, execution, exitCode, signal, error, fingerprint, candidateHash: originalHash, argv, context, log, stdoutBytes, logTruncated,
+        assignmentId, outcome, execution, exitCode, signal, error, fingerprint, candidateHash: originalHash, argv, context, log, stdoutBytes, stdoutDecodingLoss, logTruncated, stderrBytes, stderrRetainedBytes, stderrDecodingLoss, stderrTruncated,
         ...(existsSync(stderrLog) ? { stderrLog } : {}),
         reused: (run.validationReuse ?? []).some(reuse => reuse.assignmentId === assignmentId && reuse.fingerprint === run.fingerprint.fingerprint && reuse.candidateHash === candidateHash),
       } };
@@ -1198,7 +1251,13 @@ function validationsPass(run, candidateHash = run.expected.contentHash) {
   });
 }
 function reportApplicability(run, provider, assignmentId) {
-  return reviewApplicability(run.fingerprint, run.contractHash, hash({ options: run.options, config: run.config, fixPolicy: run.fixPolicy }),
+  // Only the trusted adoption path records these original authority fields.
+  // All other configuration, including reviewer and validation policy, remains
+  // part of the comparison; an owner replacement does not rewrite old reports.
+  const authority = run.orchestrationReviewAuthority;
+  const config = authority ? { ...run.config, executionBoundary: authority.executionBoundary,
+    orchestrationBinding: authority.orchestrationBinding } : run.config;
+  return reviewApplicability(run.fingerprint, run.contractHash, hash({ options: run.options, config, fixPolicy: run.fixPolicy }),
     { provider, assignmentId, configuration: run.capabilities?.find(p => p.id === provider) }, "complete");
 }
 function reportBinding(run, report) {
@@ -1302,7 +1361,8 @@ async function validate(run) {
       cycle.job = id;
       json(path.join(run.directory, "assignments", id, "request.json"), { role: "validate", command: sandbox.argv, environment: sandbox.environment,
         environmentFrom: run.config.environmentFrom?.validate, requiredEnvironment: check.requiredEnvironment, cwd,
-        timeoutMs: check.timeoutMs ?? run.config.timeoutMs ?? 300000, assignment: { id, role: "validate", check } });
+        timeoutMs: check.timeoutMs ?? run.config.timeoutMs ?? 300000, assignment: { id, role: "validate", check },
+        executionBoundary: run.config.executionBoundary });
       save(run, "validation-command", { id, checkId: check.id });
     }
     const directory = path.join(run.directory, "assignments", cycle.job);
@@ -1439,7 +1499,15 @@ async function applyCandidate(run) {
 
 // Reports keep their original identity. Only this operation may record a
 // relationship between successful terminal evidence and a new candidate.
-export async function reconcileUpstream(directory, receipt) {
+export async function reconcileUpstream(directory, receipt, { preflightOnly = false } = {}) {
+  const initial = loadRun(path.resolve(directory));
+  return withControllerLease(initial, controls => {
+    if (controls.paused || controls.cancel_requested) throw new Error("Orchestration stopped source reconciliation.");
+    return reconcileUpstreamLocked(directory, receipt, preflightOnly);
+  });
+}
+
+async function reconcileUpstreamLocked(directory, receipt, preflightOnly) {
   directory = path.resolve(directory);
   return locked(path.dirname(directory), async () => {
     const run = loadRun(directory);
@@ -1475,6 +1543,7 @@ export async function reconcileUpstream(directory, receipt) {
       reports: run.reports.map(report => ({ assignmentId: report.assignmentId, hash: hash(report),
         acceptedCriteria: report.acceptance.filter(c => acceptanceSatisfied(run, report, c)).map(c => c.criterionId) })),
       previousOutcome: run.outcome, at: new Date().toISOString() };
+    if (preflightOnly) return run;
     const captured = snapshot(run.root, run.directory, { maxBytes: run.config.storage.maxSourceBytes });
     const verified = await captureFingerprint(run.args);
     if (verified.fingerprint !== fingerprint.fingerprint || captured.guard !== current.guard) throw new Error("Checkout changed during reconciliation; nothing rebound.");
@@ -1495,15 +1564,24 @@ export async function reconcileUpstream(directory, receipt) {
 }
 
 export async function advance(directory) {
-  return locked(path.dirname(directory), async () => {
+  const initial = loadRun(directory);
+  return withControllerLease(initial, controls => locked(path.dirname(directory), async () => {
     // An unreadable/invalid journal cannot be safely rewritten as a new verdict.
     const run = loadRun(directory);
     try {
-      await advanceLocked(run);
+      if (controls.paused && !controls.cancel_requested && !TERMINAL.has(run.phase)) {
+        run.boundaryWaiting = true;
+        return run;
+      }
+      if (controls.cancel_requested && !TERMINAL.has(run.phase)) {
+        transition(run, "BLOCKED", "Orchestration cancelled controller work; preserve issued effects and publication journals.",
+          { code: "ORCHESTRATION_CANCELLED" });
+      }
+      await advanceLocked(run, { stopPublication: controls.paused || controls.cancel_requested });
       settleActive(run);
       return run;
     } catch (error) { return failedAdvance(directory, error); }
-  });
+  }), () => Object.assign(initial, { boundaryWaiting: true }));
 }
 function failedAdvance(directory, error) {
   // Discard partial in-memory interpretation, but preserve every durable job,
@@ -1549,9 +1627,9 @@ async function commitRound(run) {
   if (run.reports.length) nextPass(run);
   save(run, "round-committed", { oid: journal.oid, parent: journal.parent, round: journal.round });
 }
-async function advanceLocked(run) {
+async function advanceLocked(run, { stopPublication = false } = {}) {
     const directory = run.directory;
-    if (run.commitJournal) {
+    if (run.commitJournal && !stopPublication) {
       try { await commitRound(run); }
       catch (error) {
         if (!TERMINAL.has(run.phase)) transition(run, "BLOCKED", `Round commit recovery stopped: ${error.message}`, { code: "COMMIT_RECOVERY" });
@@ -1699,7 +1777,7 @@ export async function runUntilBoundary(directory) {
     const run = await advance(directory);
     if ((TERMINAL.has(run.phase) && (!run.cleanup?.length && !run.cleanupOverlays?.length || run.cleanupBlocked)) || run.waitingForAnswer
         || assignments(run).some(p => !p.preparing && !p.command && !hasResult(run, p.id))) return run;
-    if (run.pending?.command || run.validationCycle?.job || run.cleanup?.length) await new Promise(resolve => setTimeout(resolve, 200));
+    if (run.boundaryWaiting || run.pending?.command || run.validationCycle?.job || run.cleanup?.length) await new Promise(resolve => setTimeout(resolve, 200));
   }
 }
 export async function answer(directory, value) {
@@ -1712,15 +1790,21 @@ export async function answer(directory, value) {
   });
 }
 export function status(run) {
-  const recovery = applicationRecovery(run);
+  return withControllerLeaseSync(run, () => statusSnapshot(run),
+    () => ({ ...statusSnapshot(run, false), waiting: true, sourceInspectionPending: true }));
+}
+
+function statusSnapshot(run, inspect = true) {
+  const recovery = inspect ? applicationRecovery(run)
+    : { resolved: false, retainedTemporaries: [], unresolvedPaths: [], inspectionPending: true };
   const retainedCheckout = run.retainedCheckout?.observation;
   // Keep this summary independent of source inventories during job polling.
   // Reconciliation records all changed paths before assignment-context limits.
   const filesChanged = [...new Set([...run.mutations.flatMap(m => m.paths), ...(run.reconciledPaths ?? []), ...(run.outcome?.changedPaths ?? []), ...(retainedCheckout?.changedPaths ?? [])])];
-  let restagingInspectionError = retainedCheckout?.checkoutInspectionError;
+  let restagingInspectionError = inspect ? retainedCheckout?.checkoutInspectionError : "Source lease is held by another execution.";
   let indexNeedsRestaging = Boolean(restagingInspectionError) || retainedCheckout?.indexChanged === true || run.fingerprint.workingTreePathsDifferingFromIndexCount > 0
     || run.fingerprint.workingTreePathsAbsentFromIndexCount > 0 || run.fingerprint.dirtySubmodulePathsCount > 0;
-  try { indexNeedsRestaging ||= pathsDifferFromIndex(run.root, filesChanged, run.expected.repositories); }
+  try { if (inspect) indexNeedsRestaging ||= pathsDifferFromIndex(run.root, filesChanged, run.expected.repositories); }
   catch (error) {
     // Retained work may have an unsupported shape or change again after capture.
     // Staging advice must not hide the durable outcome or recovery evidence.
@@ -1747,7 +1831,7 @@ export function status(run) {
     assignments: assignments(run).map(p => ({ id: p.id, role: p.role, provider: p.assignment?.provider ?? p.extra?.provider, native: !p.command, resultReceived: hasResult(run, p.id),
       request: path.join(run.directory, "assignments", p.id, "request.json") })),
     assignment: run.pending ? path.join(run.directory, "assignments", run.pending.id, "request.json") : undefined,
-    waiting: Boolean(assignments(run).some(p => p.command) || (!TERMINAL.has(run.phase) && run.validationCycle?.job) || run.cleanup?.length || run.cleanupOverlays?.length || retainedCheckoutPending(run)),
+    waiting: Boolean(run.boundaryWaiting || assignments(run).some(p => p.command) || (!TERMINAL.has(run.phase) && run.validationCycle?.job) || run.cleanup?.length || run.cleanupOverlays?.length || retainedCheckoutPending(run)),
     indexNeedsRestaging, ...(restagingInspectionError ? { restagingInspectionError } : {}) };
 }
 export async function release(directory, cwd = process.cwd()) {
@@ -1779,7 +1863,8 @@ export async function prune(directory) {
     if (!isSettled(run)) throw new Error("Run has active or unresolved recovery obligations; resume it before pruning.");
     const workspaceParent = path.dirname(run.workspaceRoot);
     if (path.basename(workspaceParent) !== `jig-review-fix-${run.id}` || path.basename(run.workspaceRoot) !== "overlays" || lstatSync(directory).isSymbolicLink()) throw new Error("Invalid workspace ownership; nothing pruned.");
-    const bytes = storedBytes(directory) + storedBytes(workspaceParent);
+    const initialization = path.join(run.runsRoot, `${run.id}.initialization.json`);
+    const bytes = storedBytes(directory) + storedBytes(workspaceParent) + storedBytes(initialization);
     if (!isSettled(run)) throw new Error("Run has active or unresolved recovery obligations; nothing pruned.");
     // Explicit pruning removes this named settled run, including its audit and
     // settled backups. It is never invoked automatically on capacity failure.
@@ -1792,6 +1877,7 @@ export async function prune(directory) {
     const active = path.join(run.runsRoot, "active.json");
     if (existsSync(active) && readJSON(active).directory === directory) rmSync(active);
     rmSync(directory, { recursive: true });
+    rmSync(initialization, { force: true });
     return { phase: "PRUNED", run: directory, removedBytes: bytes };
   });
 }

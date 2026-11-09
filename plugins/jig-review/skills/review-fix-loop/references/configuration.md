@@ -1,5 +1,17 @@
 # Provider and validation configuration
 
+For Herdr's enforced communication mode, the trusted host may configure
+`executionBoundary` as an absolute executable argv. Every review, adjudication,
+triage, repair, prerequisite and validation command then runs through that
+boundary. It receives `--request <private-request.json>` with the original
+command and assignment. Boundary failures do not fall back to host execution.
+This mode requires command-backed reviewers, triage and repair, and checkout
+validation; native assignments and copied validation workspaces are rejected.
+The boundary owns isolation and must preserve the selected model and command.
+Runs use version 17 so an older controller cannot silently ignore this field.
+See the Herdr orchestration skill's `references/communication.md` for its launcher
+and pinned profile policy. Existing runs still need their original controller.
+
 Read when selecting external providers, configuring role environment variables, or opting into isolated validation. The default reviewer with checkout validation needs no configuration file. At initialization, compatible Jig automatically selects the CLI bridge and automatic account selection for omitted launchers. A configured native runtime or custom command takes precedence; explicit launcher choices retain their existing validation. Detection and fallback rules are documented in the sibling panel-review reviewer controls.
 
 `init` also accepts the loop options and `--config /absolute/config.json`. Configuration is explicit JSON:

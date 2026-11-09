@@ -13,9 +13,13 @@ Run the coordinator and review drivers in Codex or Claude Code; implementation w
 
 Read [setup and host contracts](references/setup.md) before first admission or adding a host. Resolve repository/target, task scope, tracker authority, host/profile paths, models, review policy, per-host execution slots, optional unfinished-task cap, completion criteria, and existing push/merge/deployment/scheduling authority. Reuse established choices. Block only actions missing a necessary capability or authorization; continue independent authorized work.
 
-Herdr control requires the installed Herdr skill and a genuine managed pane. Check `test "${HERDR_ENV:-}" = 1`; if false, report that Herdr control cannot proceed here. Never manufacture that environment or target a focused fallback. Register explicit endpoints and returned agent/pane/native identities. Main checkout files, panes, and agents are excluded unless specifically authorized; use allowed linked worktrees and supported shared Git operations.
+Herdr control requires the installed Herdr skill and a genuine managed pane. Check `test "${HERDR_ENV:-}" = 1`; if false, report that Herdr control cannot proceed here. Never manufacture that environment or target a focused fallback. Register explicit endpoints and returned agent/pane/native identities. Main checkout files, panes, and agents are excluded unless specifically authorized. Enforced tasks require separate clones with private Git metadata; legacy runs may use their allowed linked worktrees and supported shared Git operations.
 
 Create one private run directory outside source control using the [runtime interface](references/runtime.md). The coordinator helper is its sole state writer. Read the selected [tracker binding](references/trackers.md) before claims or closure. Adoption requires matching existing ownership, scope, checkout, review run, and surviving jobs; discovery alone never adopts a task.
+
+New CLI-initialized runs default to enforced communication. Read [authenticated communication](references/communication.md) before starting their agents. A trusted host runtime owns administration, launches and Herdr delivery; every model, including the coordinator, uses `communicate.py` inside its assigned boundary. Do not use direct Herdr prompts, mail, native cross-agent messaging, SSH helpers or host state commands as an alternate agent route. Existing legacy runs retain their explicit legacy contract and are never relabeled as enforced.
+
+Before enforced admission, register the supported local execution host and run the host-only `verify-host` probe. Admission and launch reject missing or stale capability verification. The probe verifies OS isolation and endpoint access; actual selected build and model/reviewer commands must also succeed. Unsupported hosts are not silently treated as local or unconfined.
 
 ## Deliver
 
@@ -26,6 +30,8 @@ Create one private run directory outside source control using the [runtime inter
 5. The authorized driver closes and publishes the tracker transition only after all required PRs, combined acceptance, and cleanup, then records helper closure from that exact successful action. Recheck parent criteria separately. Fresh contradictory evidence can require reopening; preserve the history.
 
 Before an external side effect, persist its action ID and expected target through the helper. After uncertainty, inspect the actual result before retrying. A recorded request is not evidence that an operation happened. Drivers with a verified, restricted helper return route may execute delegated transitions after checking current authority and live gates. Other hosts leave durable handoffs for the coordinator.
+
+In enforced runs, request configured external actions through authenticated `execute`; the runtime validates the launch profile and source lease before reserving the attempt. The fixed review controller records certified references and findings itself; do not submit them through `observe` or manually reserve/settle a review. Merge and closure require its settled result bound to the reviewed commit. Keep control drivers in a private workspace when they wait on task executors. Reviewers receive read-only access to the selected checkout and a pinned independent brief. An unavailable supported action is a capability gap, not permission to execute it outside the boundary.
 
 Standing grants survive unrelated configuration changes, admission freezes, and pause/resume. Each action still checks current authority, holds, ownership, dependencies, capacity and budgets. Revoked actions require an explicit new grant; identity changes require rebinding. Older saved grants retain their revision fence until the coordinator renews them. Do not repeatedly ask for task authorization.
 

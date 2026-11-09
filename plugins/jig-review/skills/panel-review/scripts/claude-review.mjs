@@ -9,6 +9,7 @@ import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
+import { verifiedReadOnlyChannel } from "./orchestration-channel.mjs";
 
 import {
   buildReviewPrompt,
@@ -169,7 +170,7 @@ function buildClaudeArgs(options, evidenceDirectory = null) {
     "--permission-mode",
     "dontAsk",
     "--tools",
-    "Read,Glob,Grep",
+    options.orchestrationChannel ? "Read,Glob,Grep,Bash" : "Read,Glob,Grep",
     "--allowedTools",
     "Read",
     "--allowedTools",
@@ -177,6 +178,10 @@ function buildClaudeArgs(options, evidenceDirectory = null) {
     "--allowedTools",
     "Grep",
   ];
+  if (options.orchestrationChannel) args.push(
+    "--allowedTools", "Bash(/usr/bin/python3 -B /opt/orchestration/communicate.py)",
+    "--allowedTools", "Bash(/usr/bin/python3 -B /opt/orchestration/communicate.py *)",
+  );
   if (fileAccess === "restricted") args.push("--restricted");
   if (evidenceDirectory) args.push("--add-dir", evidenceDirectory);
   args.push("--model", options.model);
@@ -244,10 +249,13 @@ async function runClaudeReview(options, dependencies = {}) {
   );
   const scope = await resolveScope(options, { deadlineAt, signal });
   assertScopeMatchesFingerprint(scope, initialFingerprint);
+  options.orchestrationChannel = await verifiedReadOnlyChannel(scope.repoRoot, { deadlineAt, signal });
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context, { taskBrief }) + (dependencies.promptSuffix ?? "");
+    if (dependencies.parseReport) evidence.requireComplete(context);
+    const prompt = buildReviewPrompt(scope, context, { taskBrief, orchestrationChannel: options.orchestrationChannel,
+      orchestrationTask: process.env.ORCHESTRATION_TASK }) + (dependencies.promptSuffix ?? "");
     const claudeBin = dependencies.claudeBin ?? process.env.JIG_CLAUDE_BIN ?? "claude";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     const launch = resolveProviderLaunch({

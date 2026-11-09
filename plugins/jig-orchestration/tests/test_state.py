@@ -11,7 +11,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SCRIPTS = Path(__file__).resolve().parents[1] / "skills" / "herdr-orchestrate" / "scripts"
+SCRIPTS = Path(os.environ.get("JIG_ORCHESTRATION_TEST_SCRIPTS",
+                              Path(__file__).resolve().parents[1] / "skills/herdr-orchestrate/scripts")).resolve()
 sys.path.insert(0, str(SCRIPTS))
 import state as state_module
 from state import Engine, StateError
@@ -263,10 +264,10 @@ class EngineTests(unittest.TestCase):
         req = self.request("reserve", "A", kind="implement", unit="implementation", refs={})
         real_write = state_module.write_atomic
 
-        def crash_action_write(path, value):
+        def crash_action_write(path, value, **options):
             if path.parent.name == "actions":
                 raise OSError("simulated process interruption")
-            return real_write(path, value)
+            return real_write(path, value, **options)
 
         with patch.object(state_module, "write_atomic", side_effect=crash_action_write):
             with self.assertRaises(OSError):
@@ -1153,6 +1154,33 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(task["phase"], "validate")
         self.assertEqual(task["merged_prs"]["10"]["head"], "H2")
         self.assertEqual(task["merged_prs"]["10"]["merge_commit"], "M3")
+
+    def test_enforced_completion_rejects_late_or_unknown_findings_despite_clean_claim(self):
+        self.admit()
+        with state_module.locked(self.run) as path:
+            state = state_module.read_json(path / "state.json")
+            state["config"]["communication"] = {"mode": "enforced"}
+            state_module.write_atomic(path / "state.json", state)
+            from storage import initialize
+            initialize(path, state["config"])
+        refs = {"controller_id": "controller", "run_id": "review-run", "review_base": "B0", "review_head": "H2"}
+        self.apply("observe", "A", fields={"refs": refs}, evidence=self.proof())
+        reservation = self.reserve(kind="review", refs=refs)
+        self.settle(reservation["reservation_id"], refs=refs)
+        gates = {**{key: True for key in ("complete", "validation", "checks", "feedback", "findings", "target_current", "clean")},
+                 **refs, "checkout_head": "H2", "pr_head": "H2", "commit_mode": "per-round"}
+        merge_target = {"repository": str(self.repo), "base": "main", "pr": 10, "head": "H2"}
+        close_target = {"authority": "canonical-ref", "task_id": "A", "owner": "tracker-actor"}
+        for findings in ([{"status": "fixed"}] * 128 + [{"status": "open"}], [{"status": None}], {"unknown": True}):
+            self.apply("observe", "A", fields={"findings": findings}, evidence=self.proof())
+            self.assert_error("review_evidence", self.apply, "intent", "A", kind="merge", target=merge_target,
+                              gates=gates, evidence=self.proof())
+            self.assert_error("review_evidence", self.apply, "intent", "A", kind="close", target=close_target,
+                              evidence={**self.proof(True), "criteria_met": True, "acceptance_ref": "/proof"})
+        self.assertIsNone(Engine.read(self.run)["tasks"]["A"]["pending_intent"])
+        self.apply("observe", "A", fields={"findings": [{"status": "resolved"}]}, evidence=self.proof())
+        self.assert_error("review_evidence", self.apply, "intent", "A", kind="merge", target=merge_target,
+                          gates=gates, evidence=self.proof())
 
 
     def recovery(self, route="park", recovery_id="recovery-1"):

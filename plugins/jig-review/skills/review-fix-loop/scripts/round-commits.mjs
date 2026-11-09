@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { gitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
+import { localGitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
+import { activeGitLease, gitStdio } from "../../panel-review/scripts/git-lease.mjs";
+import { nonExecutingGitArgs } from "../../panel-review/scripts/git-no-exec.mjs";
 import { isExcludedPath } from "../../panel-review/scripts/review-exclusions.mjs";
 import { git, snapshot, sameContent, unsupported } from "./repository.mjs";
 import { hash, readBlob, save, storeBlob } from "./run-store.mjs";
@@ -45,8 +47,9 @@ export function assertCommitScope(root, current, exclusions) {
 }
 
 function privateGit(run, index, args, input) {
-  return execFileSync("git", args, { cwd: run.root, env: { ...gitEnvironment(), GIT_INDEX_FILE: index },
-    input, maxBuffer: 64 * 1024 * 1024, timeout: 30000, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
+  const options = { cwd: run.root, env: { ...localGitEnvironment(), GIT_INDEX_FILE: index },
+    input, maxBuffer: 64 * 1024 * 1024, timeout: 30000, stdio: gitStdio([input === undefined ? "ignore" : "pipe", "pipe", "pipe"]) };
+  return execFileSync("git", nonExecutingGitArgs(args, options), options);
 }
 
 export function prepareRoundCommit(run, message) {
@@ -78,6 +81,7 @@ export function prepareRoundCommit(run, message) {
     if (tree !== oldTree) {
       let signing = false;
       try { signing = textGit(run.root, "config", "--bool", "commit.gpgsign") === "true"; } catch {}
+      if (signing && activeGitLease()) throw unsupported("Enforced publication requires a separately supported signing capability; no signing program ran on the host.");
       oid = privateGit(run, index, ["commit-tree", tree, "-p", parent, ...(signing ? ["-S"] : [])], `${message}\n`).toString().trim();
     }
     const after = snapshot(run.root, undefined, { maxBytes: run.config.storage.maxSourceBytes });

@@ -1,9 +1,9 @@
 // Faults in real worker/supervisor I/O, without hooks in production code.
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
-const open = fs.openSync, write = fs.writeSync, close = fs.closeSync;
+const open = fs.openSync, write = fs.writeSync, close = fs.closeSync, truncate = fs.ftruncateSync;
 const fault = process.env.JIG_TEST_LOG_FAULT;
-let logFd;
+let logFd, writes = 0;
 fs.openSync = function(file, ...args) {
   if (!String(file).endsWith("/stdout.log")) return open(file, ...args);
   if (fault === "open") {
@@ -18,11 +18,19 @@ fs.openSync = function(file, ...args) {
 };
 fs.writeSync = function(fd, buffer, ...args) {
   if (fd === logFd && Buffer.isBuffer(buffer)) {
+    if (["short-then-error", "short-then-error-truncate-fails"].includes(fault)) {
+      if (writes++ === 0) return write(fd, buffer.subarray(0, 2));
+      throw Object.assign(new Error("ENOSPC: after short validation log write"), { code: "ENOSPC" });
+    }
     if (fault === "short") return write(fd, buffer.subarray(0, Math.max(1, Math.floor(buffer.length / 2))));
     if (fault === "zero") return 0;
     if (fault === "write") throw Object.assign(new Error("ENOSPC: injected validation log write failure"), { code: "ENOSPC" });
   }
   return write(fd, buffer, ...args);
+};
+fs.ftruncateSync = function(fd, ...args) {
+  if (fd === logFd && fault === "short-then-error-truncate-fails") throw new Error("EIO: prefix recovery failed");
+  return truncate(fd, ...args);
 };
 fs.closeSync = function(fd) {
   const result = close(fd);

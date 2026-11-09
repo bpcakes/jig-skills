@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installAdapterCancellation, remainingAdapterTime } from "./adapter-runtime.mjs";
 import { runCommand } from "./review-context.mjs";
+import { CHANNEL_PERMISSION } from "./orchestration-channel.mjs";
 
 const RENDER_TIMEOUT_MS = 60 * 1000;
 const MAX_RENDER_BYTES = 64 * 1024 * 1024;
@@ -24,25 +25,29 @@ const CONFIG_FILE = "config.toml";
 // lines is the only reliable form: a -c override merges into the projects
 // table instead of replacing it. Other additions (MCP servers, hooks, apps,
 // plugins, notify, developer instructions) are switched off on the command line.
-function reviewerConfig(text) {
+function reviewerConfig(text, { orchestrationChannel = false } = {}) {
   const kept = [];
-  let inProjects = false;
+  let inProjects = false, inPermissions = false;
   for (const line of text.split("\n")) {
     const header = /^\s*\[\[?\s*([^\]]*?)\s*\]\]?\s*(?:#.*)?\r?$/.exec(line);
-    if (header) inProjects = /^projects(?:\s*$|\s*\.)/.test(header[1]);
-    if (inProjects) continue;
+    if (header) {
+      inProjects = /^projects(?:\s*$|\s*\.)/.test(header[1]);
+      inPermissions = orchestrationChannel && /^(?:permissions|sandbox_workspace_write)(?:\s*$|\s*\.)/.test(header[1]);
+    }
+    if (inProjects || inPermissions) continue;
     if (/^\s*projects\s*[.=]/.test(line)) continue;
     if (/^\s*(?:model|experimental)_instructions_file\s*=/.test(line)) continue;
+    if (orchestrationChannel && /^\s*(?:permissions|default_permissions|sandbox_mode|sandbox_workspace_write)\s*[.=]/.test(line)) continue;
     kept.push(line);
   }
   return kept.join("\n");
 }
 
-function prepareHome(sourceHome, privateHome) {
+function prepareHome(sourceHome, privateHome, options) {
   if (!sourceHome) throw new Error("the shim did not name the selected Codex home.");
   const source = path.join(sourceHome, CONFIG_FILE);
   if (!existsSync(source)) return false;
-  writeFileSync(path.join(privateHome, CONFIG_FILE), reviewerConfig(readFileSync(source, "utf8")), { mode: 0o600 });
+  writeFileSync(path.join(privateHome, CONFIG_FILE), reviewerConfig(readFileSync(source, "utf8"), options), { mode: 0o600 });
   return true;
 }
 
@@ -228,7 +233,7 @@ async function main() {
   const [codexBin, subcommand, ...rest] = process.argv.slice(2);
   if (subcommand !== "exec") throw new Error("codex-session only starts review sessions.");
   const privateHome = process.env.CODEX_HOME;
-  prepareHome(process.env.JIG_REVIEW_SOURCE_HOME, privateHome);
+  prepareHome(process.env.JIG_REVIEW_SOURCE_HOME, privateHome, { orchestrationChannel: pinnedOverrides(rest).includes(CHANNEL_PERMISSION) });
   const cancellation = installAdapterCancellation();
   let overrides;
   try {

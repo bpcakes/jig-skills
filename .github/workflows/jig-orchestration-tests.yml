@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "plugins/jig-orchestration/**"
+      - "plugins/jig-review/skills/review-fix-loop/**"
+      - "plugins/jig-review/skills/panel-review/**"
+      - "plugins/jig-review/tests/fixtures/loop-provider.mjs"
       - "scripts/install.sh"
       - "plugins/jig-review/tests/install.test.mjs"
       - "evals/**"
@@ -11,6 +14,9 @@ on:
   push:
     paths:
       - "plugins/jig-orchestration/**"
+      - "plugins/jig-review/skills/review-fix-loop/**"
+      - "plugins/jig-review/skills/panel-review/**"
+      - "plugins/jig-review/tests/fixtures/loop-provider.mjs"
       - "scripts/install.sh"
       - "plugins/jig-review/tests/install.test.mjs"
       - "evals/**"
@@ -35,7 +41,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install Linux isolation runtime
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          # This disposable runner must support the user namespaces exercised
+          # by the enforced launch tests. Never silently skip Linux isolation.
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Isolated orchestration state and runtime checks
+        env:
+          JIG_ORCHESTRATION_REQUIRE_ISOLATION: ${{ runner.os == 'Linux' && '1' || '0' }}
         run: python3 -B -m unittest discover -s plugins/jig-orchestration/tests -v
       - name: Direct installation and evaluation fixture checks
         run: node --test plugins/jig-review/tests/install.test.mjs evals/orchestration-fixtures.test.mjs

@@ -167,8 +167,15 @@ class ReviewEvidence {
     };
   }
 
+  requireComplete(context) {
+    if (context.incomplete) throw Object.assign(
+      new Error("Incomplete review evidence cannot produce a complete structured review."),
+      { code: "INCOMPLETE_REVIEW_EVIDENCE" },
+    );
+  }
+
   structuredReport(report, context) {
-    if (context.incomplete) throw new Error("Incomplete review evidence cannot produce a complete structured review.");
+    this.requireComplete(context);
     if (!context.evidence) return report;
     this.annotateReport(report, context, { requireComplete: true });
     return report.replace(/<review-coverage>\s*[\s\S]*?<\/review-coverage>\s*$/, "").trim();

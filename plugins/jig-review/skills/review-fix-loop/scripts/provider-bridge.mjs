@@ -54,6 +54,9 @@ export async function reviewAssignment(assignment, dependencies = {}) {
   return runner(options, { ...dependencies, promptSuffix, parseReport: report => parseReport(assignment, report) });
 }
 export function failureResult(error) {
+  // Capture cannot improve on a retry of the same frozen source. Stop before
+  // spending further provider attempts; preserve the incomplete evidence.
+  if (error.code === "INCOMPLETE_REVIEW_EVIDENCE") return { error: error.message, retryable: false };
   // Only known stable configuration/authentication failures disable a provider.
   // Transient capacity errors retain the controller's bounded retry policy.
   // A Jig launcher that cannot find the selected home or any home with headroom,

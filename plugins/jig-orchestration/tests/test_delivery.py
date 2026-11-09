@@ -444,8 +444,8 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
     def test_closure_receipt_cannot_change_authorized_contract(self):
         request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
         original = runner.invoke
-        def changed(*args):
-            result = original(*args)
+        def changed(*args, **kwargs):
+            result = original(*args, **kwargs)
             result["receipt"]["acceptance_ref"] = "/other"
             return result
         with patch.object(runner, "invoke", side_effect=changed):
@@ -504,8 +504,8 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         changes = {"owner": "wrong", "authority": "wrong", "task_id": "B", "status": "open",
                    "unpublished": True, "criteria_met": False}
         for index, (field, value) in enumerate(changes.items()):
-            def invalid(*args):
-                result = original(*args)
+            def invalid(*args, **kwargs):
+                result = original(*args, **kwargs)
                 result["receipt"][field] = value
                 return result
             with self.subTest(field=field), patch.object(runner, "invoke", side_effect=invalid):
@@ -533,8 +533,8 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         original = runner.invoke
         for index, (child, edges, rejection) in enumerate((
                 ("B", [], "dependency"), ("B", ["B"], "duplicate"), ("C", ["C"], None))):
-            def observed(*args):
-                result = original(*args)
+            def observed(*args, **kwargs):
+                result = original(*args, **kwargs)
                 result["receipt"].update(children={"prerequisite": child}, blocked_by=edges)
                 return result
             with patch.object(runner, "invoke", side_effect=observed):
@@ -555,8 +555,8 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
     def test_closure_pending_preserves_success_and_reconciles_without_repeating_effect(self):
         request = self.start("close", authority="canonical-ref", task_id="A", owner="tracker-actor")
         original = runner.invoke
-        def held(*args):
-            result = original(*args)
+        def held(*args, **kwargs):
+            result = original(*args, **kwargs)
             self.apply("control", "A", control="hold", hold_id="acceptance", reason="inspect", actions=["close"])
             return result
         with patch.object(runner, "invoke", side_effect=held):
@@ -580,8 +580,8 @@ print(json.dumps({"status": "succeeded" if done else "not_started", "receipt": r
         ]}, evidence=self.proof())
         request["expected_task"] = Engine.read(self.run)["tasks"]["A"]["version"]
         original = runner.invoke
-        def held(*args):
-            result = original(*args)
+        def held(*args, **kwargs):
+            result = original(*args, **kwargs)
             self.apply("control", "A", control="hold", hold_id="acceptance", reason="inspect", actions=["close"])
             return result
         with patch.object(runner, "invoke", side_effect=held):
