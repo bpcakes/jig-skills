@@ -15,7 +15,9 @@ import {
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { gitEnvironment } from "./git-environment.mjs";
+import { localGitEnvironment } from "./git-environment.mjs";
+import { gitStdio } from "./git-lease.mjs";
+import { filterConfigArgs, gitSafetyArgs } from "./git-no-exec.mjs";
 import {
   exclusionsForSubtree,
   gitPathspec,
@@ -127,8 +129,16 @@ function signalProcessTree(child, signal) {
   }
 }
 
-function runGit(cwd, args, deadlineAt, signal = null) {
-  const environment = gitEnvironment();
+async function runGit(cwd, args, deadlineAt, signal = null) {
+  let names = "";
+  try {
+    names = (await runGitProcess(cwd, filterConfigArgs, deadlineAt, signal)).toString("utf8");
+  } catch (error) { if (error.exitCode !== 1) throw error; }
+  return runGitProcess(cwd, args, deadlineAt, signal, names);
+}
+
+function runGitProcess(cwd, args, deadlineAt, signal = null, filterNames = "") {
+  const environment = localGitEnvironment();
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(signal.reason instanceof Error
@@ -222,14 +232,15 @@ function runGit(cwd, args, deadlineAt, signal = null) {
         }
         directoryFd = openSync(cwd, "r");
       }
-      child = spawn("git", args, {
+      const options = {
         cwd: directoryFd === null ? cwd : `${FD_DIRECTORY}/3`,
         env: environment,
         detached: process.platform !== "win32",
-        stdio: directoryFd === null
+        stdio: gitStdio(directoryFd === null
           ? ["ignore", "pipe", "pipe"]
-          : ["ignore", "pipe", "pipe", directoryFd],
-      });
+          : ["ignore", "pipe", "pipe", directoryFd]),
+      };
+      child = spawn("git", gitSafetyArgs(args, filterNames), options);
       timeoutTimer = setTimeout(
         () => terminate(Object.assign(
           new Error(`git ${args[0]} timed out after ${timeoutMs} ms`),

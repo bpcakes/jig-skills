@@ -47,6 +47,11 @@ class RuntimeTests(unittest.TestCase):
     def response(self, status="idle", identity=None):
         return {"agent": {**(identity or self.identity), "agent_status": status}}
 
+    def test_response_disconnect_supports_redirected_output(self):
+        with (self.root / "response.json").open("wb") as output:
+            with runtime.response_disconnect(output.fileno()) as disconnected:
+                self.assertFalse(disconnected())
+
     def schedule(self, **fields):
         return runtime.scheduler_patch(self.run, lambda _: fields)
 
@@ -528,10 +533,10 @@ class RuntimeTests(unittest.TestCase):
         Engine.heartbeat(self.run, runtime.timestamp(self.now))
         runtime.health(self.run, self.now)
         real_write = state_module.write_atomic
-        def fail_transaction(path, value):
+        def fail_transaction(path, value, **options):
             if path.name == "transaction.json":
                 raise OSError(28, "No space for transaction")
-            return real_write(path, value)
+            return real_write(path, value, **options)
         incident = None
         with patch.object(state_module, "write_atomic", side_effect=fail_transaction):
             for seconds in (65, 195, 600):
@@ -560,10 +565,10 @@ class RuntimeTests(unittest.TestCase):
         Engine.heartbeat(self.run, runtime.timestamp(self.now))
         runtime.health(self.run, self.now)
         real_write = state_module.write_atomic
-        def fail_transaction(path, value):
+        def fail_transaction(path, value, **options):
             if path.name == "transaction.json":
                 raise OSError(28, "No space for alert claim")
-            return real_write(path, value)
+            return real_write(path, value, **options)
         at = self.now + timedelta(seconds=195)
         Engine.heartbeat(self.run, runtime.timestamp(at))
         with patch.object(state_module, "write_atomic", side_effect=fail_transaction), \
@@ -582,11 +587,11 @@ class RuntimeTests(unittest.TestCase):
                                   "notification_authorized": True})
         real_write = state_module.write_atomic
         failures = []
-        def fail_state_once(path, value):
+        def fail_state_once(path, value, **options):
             if path.name == "state.json" and not failures:
                 failures.append(path)
                 raise OSError(28, "No space for alert state")
-            return real_write(path, value)
+            return real_write(path, value, **options)
         with patch.object(state_module, "write_atomic", side_effect=fail_state_once), \
                 patch.object(runtime.subprocess, "run") as notify:
             result = runtime.health(self.run, self.now)
@@ -606,10 +611,10 @@ class RuntimeTests(unittest.TestCase):
         self.configure_scheduler({**self.config["scheduler"], "notifier_argv": ["/bin/true"],
                                   "notification_authorized": True})
         real_write = state_module.write_atomic
-        def fail_state(path, value):
+        def fail_state(path, value, **options):
             if path.name == "state.json":
                 raise OSError(28, "No space for alert state")
-            return real_write(path, value)
+            return real_write(path, value, **options)
         with patch.object(state_module, "write_atomic", side_effect=fail_state), \
                 patch.object(runtime.subprocess, "run") as notify:
             result = runtime.health(self.run, self.now)

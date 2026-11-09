@@ -72,7 +72,7 @@ for (const rewrite of [false, true]) test(`upstream landing preserves immutable 
   assert.equal((await reconcileUpstream(run.directory, proof)).phase, "CONVERGED");
   assert.equal(run.fingerprint.headOid, f.git("rev-parse", "HEAD"));
 });
-for (const change of ["code", "excluded", "assessment", "upstream", "active", "contract", "comparison"]) test(`upstream reconciliation rejects ${change} drift without altering the run`, async t => {
+for (const change of ["code", "excluded", "assessment", "upstream", "active", "contract", "comparison", "review-policy"]) test(`upstream reconciliation rejects ${change} drift without altering the run`, async t => {
   const f = await fixture(t); const run = await finish(f.run), proof = receipt(f, run);
   if (change === "code") { writeFileSync(path.join(f.root, "value"), "different"); f.git("add", "."); f.git("commit", "-qm", "changed code"); }
   if (change === "excluded") { writeFileSync(path.join(f.root, ".reviewignore"), "value\n"); f.git("add", "."); f.git("commit", "-qm", "changed coverage"); }
@@ -81,6 +81,12 @@ for (const change of ["code", "excluded", "assessment", "upstream", "active", "c
   if (change === "active") writeFileSync(path.join(run.runsRoot, "active.json"), JSON.stringify({ directory: "/another/run" }));
   if (change === "comparison") f.git("config", "diff.renames", "false");
   if (change === "contract") writeFileSync(path.join(run.directory, "task-contract.json"), "{}");
+  if (change === "review-policy") {
+    run.orchestrationReviewAuthority = { executionBoundary: run.config.executionBoundary,
+      orchestrationBinding: run.config.orchestrationBinding };
+    run.config.reviewConcurrency += 1;
+    writeFileSync(path.join(run.directory, "run.json"), JSON.stringify(run));
+  }
   const before = readFileSync(path.join(run.directory, "run.json"), "utf8");
   await assert.rejects(reconcileUpstream(run.directory, proof));
   assert.equal(readFileSync(path.join(run.directory, "run.json"), "utf8"), before);

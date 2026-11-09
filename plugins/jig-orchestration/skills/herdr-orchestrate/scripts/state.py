@@ -16,9 +16,45 @@ import os
 from pathlib import Path
 import posixpath
 import stat
-import tempfile
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
+import time
+
+
+def runtime_fingerprint():
+    digest = hashlib.sha256()
+    for source in sorted(Path(__file__).parent.glob("*.py")):
+        digest.update(source.name.encode() + b"\0" + source.read_bytes())
+    return digest.hexdigest()
+
+
+# State is imported by every trusted execution entry point. Remember its
+# startup tree so a long-lived process cannot certify newly edited disk code
+# while still executing old modules. Restart from the pinned runtime instead.
+LOADED_RUNTIME_SHA256 = runtime_fingerprint()
+LOCK_TIMEOUT = ContextVar("orchestration_lock_timeout", default=5.0)
+
+
+@contextmanager
+def lock_timeout(seconds):
+    token = LOCK_TIMEOUT.set(seconds)
+    try:
+        yield
+    finally:
+        LOCK_TIMEOUT.reset(token)
+
+
+def lock_file(fd):
+    deadline = time.monotonic() + LOCK_TIMEOUT.get()
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            require(time.monotonic() < deadline, "state_busy",
+                    "state is busy; no success is implied, retry the same action ID or cursor")
+            time.sleep(min(.01, max(0, deadline - time.monotonic())))
 
 
 class StateError(ValueError):
@@ -51,6 +87,10 @@ def canonical(value):
 
 def nonempty(value):
     return isinstance(value, str) and bool(value.strip())
+
+
+def unresolved_finding(item):
+    return not isinstance(item, dict) or item.get("status") not in ("resolved", "fixed", "rejected")
 
 
 def host_roles(info):
@@ -153,18 +193,38 @@ def sync_directory(path):
         os.close(fd)
 
 
-def write_atomic(path, value):
-    fd, name = tempfile.mkstemp(prefix=".write-", dir=path.parent)
+def write_atomic(path, value, *, recovery=False, control=False):
+    write_bytes_atomic(path, (canonical(value) + "\n").encode(), recovery=recovery, control=control)
+
+
+def write_bytes_atomic(path, encoded, *, recovery=False, control=False):
+    # The ledger itself is deliberately outside this hook. Its reservations
+    # commit first, so a crash can overcount but cannot undercount a write.
+    if path.name in {"state.json", "transaction.json", "heartbeat.json"} or path.parent.name in {
+            "actions", "execution-actions", "artifacts", "view-snapshots", "review-contracts"}:
+        from storage import locate, reserve
+        root = locate(path)
+        if root is not None:
+            reserve(root, {str(path.relative_to(root)): len(encoded)},
+                    recovery=recovery or path.name in {"state.json", "heartbeat.json"}, control=control)
+    # Fixed per-target temporary names prevent repeated crashes from leaving
+    # an unbounded collection of random temporary files. Locks remain named
+    # so waiting writers cannot accidentally lock different inodes.
+    key = hashlib.sha256(path.name.encode()).hexdigest()
+    lock = path.parent / (".write-lock-" + key)
+    name = path.parent / (".write-pending-" + key)
+    guard = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write(canonical(value) + "\n")
+        lock_file(guard)
+        fd = os.open(name, os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(encoded)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, path)
         sync_directory(path.parent)
     finally:
-        if os.path.exists(name):
-            os.unlink(name)
+        os.close(guard)
 
 
 def read_json(path):
@@ -220,13 +280,13 @@ def locked(run_dir, create=False):
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         private(lock)
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        lock_file(fd)
         if (path / "transaction.json").exists():
             transaction = read_json(path / "transaction.json")
             write_atomic(path / "state.json", transaction["state"])
             record_directory = transaction.get("record_directory", "actions")
             require(record_directory in {"actions", "execution-actions"}, "invalid", "invalid journal record directory")
-            write_atomic(path / record_directory / transaction["filename"], transaction["record"])
+            write_atomic(path / record_directory / transaction["filename"], transaction["record"], recovery=True)
             (path / "transaction.json").unlink()
             sync_directory(path)
         yield path
@@ -253,6 +313,7 @@ class Engine:
         "last_delivered_action_id",
         "last_completed_wake_id", "health_alerts", "integration_completion",
         "integration_attempt_at", "integration_attempt_binding",
+        "channel_scan_attempt_at", "channel_scan_completed_at", "channel_scan_status",
     }
 
     @staticmethod
@@ -269,6 +330,9 @@ class Engine:
                                   "cancel_requested": False, "holds": {}},
                      "counters": {}, "claims": {}, "staging": {"owner": None, "generation": 0},
                      "scheduler": {"version": 0, "enabled": config.get("scheduler", {}).get("enabled", False)}}
+            from storage import initialize, reserve
+            initialize(path, config)
+            reserve(path, {"state.json": len(canonical(state).encode()) + 1})
             write_atomic(path / "state.json", state)
             return state
 
@@ -304,6 +368,9 @@ class Engine:
             require(isinstance(info.get("endpoint"), dict) and info["endpoint"],
                     "invalid", "each host needs a registered endpoint")
             host_roles(info)
+            if "execution" in info:
+                require(info["execution"] == {"kind": "local"}, "unsupported_host",
+                        "the supported enforced execution backend is execution.kind=local")
             if "repository_path" in info:
                 require(nonempty(info["repository_path"]) and Path(info["repository_path"]).is_absolute(),
                         "invalid", "host repository_path must be absolute")
@@ -316,17 +383,33 @@ class Engine:
         require(isinstance(authority, list) and set(authority) <= Engine.ACTIONS,
                 "invalid", "unsupported authority")
         adapters = config.get("adapters", {})
+        communication = config.get("communication", {"mode": "legacy"})
+        require(isinstance(communication, dict) and communication.get("mode") in {"legacy", "enforced"},
+                "invalid", "communication.mode must be legacy or enforced")
+        from storage import settings
+        settings(config)
+        from runtime_storage import settings as runtime_storage_settings
+        runtime_storage_settings(config)
         require(isinstance(adapters, dict), "invalid", "adapters must be an object")
         for name, adapter in adapters.items():
             require(nonempty(name) and isinstance(adapter, dict) and adapter.get("kind") in Engine.ACTIONS
                     and adapter.get("host") in hosts, "invalid", "adapter requires an action kind and registered host")
-            for key in ("argv", "inspect_argv"):
-                argv = adapter.get(key)
-                require(isinstance(argv, list) and argv and all(nonempty(arg) and "\0" not in arg for arg in argv)
-                        and Path(argv[0]).is_absolute(), "invalid", "adapter commands require absolute executable argv arrays")
+            if "controller" in adapter:
+                from review_controller import validate_adapter
+                require(communication["mode"] == "enforced", "controller", "controller adapters require enforced communication")
+                value = validate_adapter(adapter)
+                require(value["task_id"] in ids, "scope", "controller task is outside run scope")
+            else:
+                for key in ("argv", "inspect_argv"):
+                    argv = adapter.get(key)
+                    require(isinstance(argv, list) and argv and all(nonempty(arg) and "\0" not in arg for arg in argv)
+                            and Path(argv[0]).is_absolute(), "invalid", "adapter commands require absolute executable argv arrays")
             seconds = adapter.get("timeout_seconds", 60)
             require(type(seconds) in {int, float} and 0 < seconds <= 86400,
                     "invalid", "adapter timeout must be positive and at most one day")
+            if "controller" not in adapter and (communication["mode"] == "enforced" or "profile" in adapter):
+                from profiles import validate
+                validate(adapter.get("profile"))
         for actor, binding in config.get("actors", {}).items():
             require(actor != "coordinator" and nonempty(actor) and binding.get("role") == "driver"
                     and binding.get("host") in hosts and isinstance(binding.get("task_ids"), list)
@@ -378,11 +461,14 @@ class Engine:
     @staticmethod
     def publish_integration(run_dir, snapshot, report):
         from integration import publish
+        from protocol import integration_changed
         with locked(run_dir) as path:
             state = read_json(path / "state.json")
+            before = copy.deepcopy(state)
             if not publish(state, snapshot, copy.deepcopy(report)):
                 return False
             # Observations do not rebind grants, task versions or review refs.
+            integration_changed(state, before)
             write_atomic(path / "state.json", state)
             return True
 
@@ -430,9 +516,12 @@ class Engine:
             return read_json(record) if record.exists() else None
 
     @staticmethod
-    def apply(run_dir, request, caller="coordinator", *, execution=None):
+    def apply(run_dir, request, caller="coordinator", *, execution=None, session=None, workspace_lease=None):
+        from protocol import MUTATIONS, state_changed, transition as communication_transition
         require(isinstance(request, dict) and "caller" not in request, "invalid", "caller is transport identity, not request data")
         require(nonempty(request.get("action_id")) and nonempty(request.get("op")), "invalid", "action_id and op are required")
+        communication_operation = request["op"] in MUTATIONS
+        require(not communication_operation or session is not None, "unauthenticated", "communication requires a launch session")
         internal = execution is not None
         if internal:
             require(isinstance(execution, ExecutionGuard) and execution.active
@@ -442,7 +531,38 @@ class Engine:
                     "execution", "runner transitions require their live process-local execution guard")
         digest = hashlib.sha256(canonical({"caller": caller, "request": request}).encode()).hexdigest()
         filename = hashlib.sha256(request["action_id"].encode()).hexdigest() + ".json"
-        with locked(run_dir) as path:
+        from capabilities import admission_check
+        from closure import ClosureSource, closure_check, requires_source
+        with (admission_check(run_dir, request, caller, session) as prepared,
+              closure_check(run_dir, request, caller, session, workspace_lease) as closure_source,
+              locked(run_dir) as path):
+            if session is not None:
+                from channel import check
+                authenticated = check(read_json(path / "state.json"), session,
+                                      operation=request["op"], task_id=request.get("task_id"))
+                require(authenticated["actor"] == caller, "forbidden", "session caller mismatch")
+                if request["op"] == "observe":
+                    require(isinstance(request.get("fields"), dict), "invalid", "observation fields must be an object")
+                    require("identity" not in request["fields"],
+                            "forbidden", "session identity changes require trusted host recovery")
+                current = read_json(path / "state.json")
+                if current["config"].get("communication", {}).get("mode") == "enforced":
+                    if request["op"] == "observe":
+                        fields = request.get("fields", {})
+                        require(isinstance(fields, dict) and isinstance(fields.get("refs", {}), dict),
+                                "invalid", "observation fields and references must be objects")
+                        require("findings" not in fields and not
+                                ({"controller_id", "run_id", "review_base", "review_head"} & fields.get("refs", {}).keys()),
+                                "forbidden", "review findings and certified references come from the fixed controller")
+                    selected = current["tasks"].get(request.get("task_id"), {})
+                    reservation = selected.get("reservations", {}).get(request.get("reservation_id"), {})
+                    require(not (request["op"] in {"reserve", "intent"} and request.get("kind") == "review")
+                            and not (request["op"] == "settle" and reservation.get("kind") == "review"),
+                            "forbidden", "review execution and settlement require the fixed controller through execute")
+                if request["op"] == "prepare":
+                    adapter = read_json(path / "state.json")["config"].get("adapters", {}).get(request.get("adapter"), {})
+                    require("profile" in adapter or "controller" in adapter, "isolation",
+                            "enforced execution requires a launch profile or the fixed controller adapter")
             record_directory = "execution-actions" if internal else "actions"
             if internal:
                 (path / record_directory).mkdir(mode=0o700, exist_ok=True)
@@ -453,16 +573,25 @@ class Engine:
                 require(record["digest"] == digest, "duplicate", "action ID was already used with different input or caller")
                 return record["result"]
             state = read_json(path / "state.json")
+            # Existing receipts retain their identity and replay semantics.
+            # Internal dispatch/finish IDs append suffixes to a validated
+            # external ID and are authorized by their live execution guard.
+            if state["config"].get("communication", {}).get("mode") == "enforced" and not internal:
+                require(len(request["action_id"].encode()) <= 256,
+                        "invalid", "action_id exceeds 256 UTF-8 bytes")
+            from storage import ensure
+            ensure(path, state["config"])
             task = state["tasks"].get(request.get("task_id"))
             if task is not None and "closure_outcome" not in task:
                 task["closure_outcome"] = Engine._legacy_closure(path, state, task)
-            expected = request.get("expected_policy")
-            task_operation = task is not None and request["op"] in Engine.TASK_OPERATIONS
-            require(type(expected) is int and (1 <= expected <= state["policy_version"] if task_operation
-                    else expected == state["policy_version"]), "stale_policy", "valid policy revision is required")
-            if task is not None:
-                require(request.get("expected_task") == task["version"], "stale_task", "current task version is required")
-            Engine._authorize(state, request, caller, task)
+            if not communication_operation:
+                expected = request.get("expected_policy")
+                task_operation = task is not None and request["op"] in Engine.TASK_OPERATIONS
+                require(type(expected) is int and (1 <= expected <= state["policy_version"] if task_operation
+                        else expected == state["policy_version"]), "stale_policy", "valid policy revision is required")
+                if task is not None:
+                    require(request.get("expected_task") == task["version"], "stale_task", "current task version is required")
+                Engine._authorize(state, request, caller, task)
             pending = task.get("pending_intent") if task else None
             if pending and pending.get("execution"):
                 if request["op"] == "dispatch":
@@ -471,7 +600,15 @@ class Engine:
                 if request["op"] == "outcome" or (request["op"] == "finish" and pending["execution"]["dispatched_at"]):
                     require(internal, "execution", "issued runner outcomes require lock-held execution or inspection")
             try:
-                details = Engine._transition(state, request, caller, task, path)
+                if requires_source(state, task, request):
+                    require(isinstance(closure_source, ClosureSource), "review_evidence",
+                            "new closure authorization requires a retained current-source check")
+                if closure_source is not None:
+                    closure_source.validate(path, state)
+                details = (communication_transition(state, request, authenticated, session, path) if communication_operation
+                           else Engine._transition(state, request, caller, task, path, prepared=prepared))
+                if internal and request["op"] == "finish" and pending:
+                    Engine._record_review(state, task, pending, request)
             except StateError as exc:
                 waiter = getattr(exc, "integration_waiter", None)
                 if waiter:
@@ -489,18 +626,26 @@ class Engine:
             state["version"] += 1
             state["updated_at"] = timestamp()
             task = state["tasks"].get(request.get("task_id"))
-            if task is not None:
+            if task is not None and not communication_operation:
                 task["version"] += 1
+            state_changed(state, request)
             result = {"action_id": request["action_id"], "version": state["version"],
                       "policy_version": state["policy_version"], "task_version": task["version"] if task else None,
                       **(details or {})}
             record = {"digest": digest, "caller": caller, "request": request, "result": result,
                       "recorded_at": state["updated_at"]}
+            transaction = {"state": state, "record": record, "filename": filename, "record_directory": record_directory}
+            from storage import reserve
+            recovery = (request["op"] in {"control", "settle", "park", "outcome", "finish", "recover_session", "ack", "scheduler"}
+                        or request["op"] == "message" and request.get("kind") == "reply")
+            reserve(path, {"state.json": len(canonical(state).encode()) + 1,
+                           str(record_path.relative_to(path)): len(canonical(record).encode()) + 1,
+                           "transaction.json": len(canonical(transaction).encode()) + 1}, recovery=recovery,
+                    control=request["op"] == "control" and request.get("control") in {"pause", "cancel"})
             # Recovery completes both durable writes; a crash never makes the action replayable.
-            write_atomic(path / "transaction.json", {"state": state, "record": record, "filename": filename,
-                                                    "record_directory": record_directory})
+            write_atomic(path / "transaction.json", transaction, recovery=recovery)
             write_atomic(path / "state.json", state)
-            write_atomic(record_path, record)
+            write_atomic(record_path, record, recovery=recovery)
             (path / "transaction.json").unlink()
             sync_directory(path)
             return result
@@ -644,13 +789,77 @@ class Engine:
         task["delegation"] = None
 
     @staticmethod
-    def _slot(state, task):
+    def _slot_available(state, task):
         if task["slot"] is not None:
             return
         occupied = sum(t["host"] == task["host"] and t["slot"] is not None for t in state["tasks"].values())
         require(occupied < state["config"]["hosts"][task["host"]]["slots"], "capacity", "host execution slots are occupied")
+
+    @staticmethod
+    def _slot(state, task):
+        Engine._slot_available(state, task)
+        if task["slot"] is not None:
+            return
         task["slot"] = {"host": task["host"], "reserved_at": timestamp()}
         task["parked"] = False
+
+    @staticmethod
+    def _reservation_gate(state, req, caller, task):
+        """Read-only admission, shared by pre-provisioning and locked reserve.
+
+        Integration evidence is refreshed separately before the transaction;
+        this check must not reject a stage merely because that scan is due.
+        """
+        kind = req.get("kind")
+        Engine._active(state, task, kind, launching=True)
+        Engine._delegated(state, task, caller, kind)
+        require(not task["reservations"] and not task["pending_intent"], "unsettled", "settle the previous task execution before another assignment")
+        require(nonempty(req.get("unit")), "invalid", "counted assignment unit is required")
+        require(req["unit"] == Engine.UNITS.get(kind), "budget", "assignment kind requires its canonical counted unit")
+        refs = req.get("refs", {})
+        require(isinstance(refs, dict), "invalid", "refs must be an object")
+        for key, value in refs.items():
+            require(nonempty(value) and (key not in task["refs"] or task["refs"][key] == value),
+                    "identity", "reservation references do not match the registered run")
+        for limit in state["config"].get("limits", []):
+            if limit["unit"] == req["unit"]:
+                counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
+                require(counters.get(req["unit"], 0) < limit["max"], "budget", "cumulative attempt limit exhausted")
+        Engine._slot_available(state, task)
+
+    @staticmethod
+    def _prepare_adapter(state, req, task):
+        adapter = state["config"].get("adapters", {}).get(req.get("adapter"))
+        require(adapter is not None and adapter["kind"] == req.get("kind") and adapter["host"] == task["host"],
+                "adapter", "select a configured adapter for this action and host")
+        require(req.get("adapter_hash", hashlib.sha256(canonical(adapter).encode()).hexdigest())
+                == hashlib.sha256(canonical(adapter).encode()).hexdigest(),
+                "adapter", "selected adapter changed after launch preflight")
+        return adapter
+
+    @staticmethod
+    def _dispatch_gate(state, req, caller, task):
+        """Read-only authority for a reserved but not yet issued operation."""
+        pending = task["pending_intent"]
+        require(pending and pending["id"] == req.get("operation_id") and pending.get("execution"),
+                "identity", "dispatch requires the exact prepared operation")
+        require(caller == pending["executor"], "forbidden", "only the prepared executor may issue this operation")
+        execution, kind = pending["execution"], pending["kind"]
+        require(execution["dispatched_at"] is None, "uncertain", "already issued; inspect the original operation")
+        Engine._active(state, task, kind, launching=True)
+        Engine._delegated(state, task, caller, kind)
+        require(execution["binding"] == Engine._grant_binding(state, task)
+                and execution.get("task_refs", execution["refs"]) == task["refs"], "identity", "prepared ownership or source binding changed")
+        require(execution["adapter_binding"] == state["config"].get("adapters", {}).get(execution["adapter"]),
+                "adapter", "prepared adapter changed; reconcile before preparing another operation")
+        if caller != "coordinator":
+            require(execution["grant_id"] == (task.get("delegation") or {}).get("id"),
+                    "authority", "prepared grant was replaced")
+        for limit in state["config"].get("limits", []):
+            if limit["unit"] == Engine.UNITS[kind]:
+                counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
+                require(counters.get(limit["unit"], 0) <= limit["max"], "budget", "current limit prevents dispatch")
+        return pending
 
     @staticmethod
     def _worktree(state, host, value, excluding=None):
@@ -677,7 +886,7 @@ class Engine:
         return str(worktree)
 
     @staticmethod
-    def _transition(state, req, caller, task, run_dir):
+    def _transition(state, req, caller, task, run_dir, *, prepared=None):
         op = req["op"]
         config = state["config"]
         if op == "configure":
@@ -827,6 +1036,10 @@ class Engine:
             host = req.get("host")
             require(host in config["hosts"], "invalid", "unregistered host")
             worktree = Engine._worktree(state, host, req.get("worktree", ""))
+            from capabilities import PreparedCheck, enforced
+            if enforced(state):
+                require(isinstance(prepared, PreparedCheck), "host_unverified", "admission requires prepared filesystem checks")
+                worktree = prepared.validate(run_dir, state, host, worktree)
             claim = req.get("claim", {})
             evidence(claim)
             require(claim.get("authority") == config["tracker"]["authority"]
@@ -884,12 +1097,18 @@ class Engine:
             elif control in {"pause", "cancel"}:
                 target["paused"] = True
                 if control == "cancel":
+                    target["stop_generation"] = target.get("stop_generation", 0) + 1
                     target["cancel_requested"] = True
             elif control == "resume":
                 affected = [task] if task else list(state["tasks"].values())
                 if target["cancel_requested"]:
                     require(all(not t["reservations"] and not t["pending_intent"] for t in affected),
                             "unsettled", "reconcile cancelled executions and uncertain outcomes before resume")
+                    affected_ids = {t["id"] for t in affected}
+                    require(all(job.get("local_settled") or job["role"] == "coordinator"
+                                or job["task_id"] not in affected_ids
+                                for job in state.get("communication", {}).get("jobs", {}).values()),
+                            "unsettled", "wait for cancelled isolated processes to settle before resume")
                 target["paused"] = False
                 target["cancel_requested"] = False
             elif control == "hold":
@@ -986,7 +1205,8 @@ class Engine:
             require(proof.get("previous_session_stopped") is True and proof.get("replacement_verified") is True
                     and proof.get("host") == task["host"] and proof.get("worktree") == task["worktree"],
                     "identity", "verify the stopped model and replacement at the existing host and worktree")
-            task["last_session_recovery"] = {"previous_identity": task["identity"], "evidence": proof}
+            task["last_session_recovery"] = {"previous_identity": task["identity"], "evidence": proof,
+                                             "previous_delegation": copy.deepcopy(task["delegation"])}
             task["identity"] = copy.deepcopy(identity)
             task["delegation"] = None
             return {"recovered_session": identity}
@@ -1002,6 +1222,10 @@ class Engine:
             host, driver = req.get("host"), req.get("driver")
             require(host in config["hosts"], "identity", "handoff host is not registered")
             worktree = Engine._worktree(state, host, req.get("worktree", ""), excluding=task["id"])
+            from capabilities import PreparedCheck, enforced
+            if enforced(state):
+                require(isinstance(prepared, PreparedCheck), "host_unverified", "handoff requires prepared filesystem checks")
+                worktree = prepared.validate(run_dir, state, host, worktree, excluding=task["id"])
             if driver != "coordinator":
                 actor = config.get("actors", {}).get(driver, {})
                 require(actor.get("host") == host and task["id"] in actor.get("task_ids", []),
@@ -1055,22 +1279,10 @@ class Engine:
             return {"reopen_outcome": status}
         if op == "reserve":
             kind = req.get("kind")
-            Engine._active(state, task, kind, launching=True)
-            Engine._delegated(state, task, caller, kind)
-            require(not task["reservations"] and not task["pending_intent"], "unsettled", "settle the previous task execution before another assignment")
-            require(nonempty(req.get("unit")), "invalid", "counted assignment unit is required")
-            require(req["unit"] == Engine.UNITS.get(kind), "budget", "assignment kind requires its canonical counted unit")
+            Engine._reservation_gate(state, req, caller, task)
             refs = req.get("refs", {})
-            require(isinstance(refs, dict), "invalid", "refs must be an object")
-            for key, value in refs.items():
-                require(nonempty(value) and (key not in task["refs"] or task["refs"][key] == value),
-                        "identity", "reservation references do not match the registered run")
             from integration import gate
             integration = gate(state, task, req)
-            for limit in config.get("limits", []):
-                if limit["unit"] == req["unit"]:
-                    counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
-                    require(counters.get(req["unit"], 0) < limit["max"], "budget", "cumulative attempt limit exhausted")
             Engine._slot(state, task)
             for counters in (task["counters"], state["counters"]):
                 counters[req["unit"]] = counters.get(req["unit"], 0) + 1
@@ -1207,15 +1419,26 @@ class Engine:
             prior = task.get("delegation") or {}
             narrowing = (executor == prior.get("executor") and set(actions) <= set(prior.get("actions", []))
                          and prior.get("binding") == Engine._grant_binding(state, task))
-            require(task["pending_intent"] is None or narrowing, "uncertain", "reconcile pending work before expanding or replacing delegation")
+            pending = task["pending_intent"] or {}
+            recovery = task.get("last_session_recovery", {})
+            previous = recovery.get("previous_delegation") or {}
+            binding = previous.get("binding") or {}
+            current_binding = Engine._grant_binding(state, task)
+            recovering = (not task.get("delegation") and bool(pending.get("execution", {}).get("dispatched_at"))
+                          and req.get("recover_operation") == pending.get("id")
+                          and executor == pending.get("executor") == previous.get("executor")
+                          and set(actions) <= set(previous.get("actions", []))
+                          and binding == pending.get("execution", {}).get("binding")
+                          and recovery.get("previous_identity") == binding.get("identity")
+                          and {key: value for key, value in binding.items() if key != "identity"}
+                          == {key: value for key, value in current_binding.items() if key != "identity"})
+            require(not pending or narrowing or recovering, "uncertain", "reconcile pending work before expanding or replacing delegation")
             task["delegation"] = {"executor": executor, "actions": actions, "policy_version": state["policy_version"],
-                                  "id": prior["id"] if task["pending_intent"] else req["action_id"],
-                                  "binding": Engine._grant_binding(state, task)}
+                                  "id": prior["id"] if pending and narrowing else req["action_id"],
+                                  "binding": current_binding}
             return {"delegation": task["delegation"]}
         if op == "prepare":
-            adapter = config.get("adapters", {}).get(req.get("adapter"))
-            require(adapter is not None and adapter["kind"] == req.get("kind") and adapter["host"] == task["host"],
-                    "adapter", "select a configured adapter for this action and host")
+            adapter = Engine._prepare_adapter(state, req, task)
             # Both transitions live in this one journaled transaction. A failed
             # gate cannot leak a reservation or consume an attempt.
             reserve = {**req, "op": "reserve", "unit": Engine.UNITS[req["kind"]]}
@@ -1231,25 +1454,8 @@ class Engine:
             }
             return {"prepared": req["action_id"], "intent": task["pending_intent"]}
         if op == "dispatch":
-            pending = task["pending_intent"]
-            require(pending and pending["id"] == req.get("operation_id") and pending.get("execution"),
-                    "identity", "dispatch requires the exact prepared operation")
-            require(caller == pending["executor"], "forbidden", "only the prepared executor may issue this operation")
+            pending = Engine._dispatch_gate(state, req, caller, task)
             execution, kind = pending["execution"], pending["kind"]
-            require(execution["dispatched_at"] is None, "uncertain", "already issued; inspect the original operation")
-            Engine._active(state, task, kind, launching=True)
-            Engine._delegated(state, task, caller, kind)
-            require(execution["binding"] == Engine._grant_binding(state, task)
-                    and execution.get("task_refs", execution["refs"]) == task["refs"], "identity", "prepared ownership or source binding changed")
-            require(execution["adapter_binding"] == config.get("adapters", {}).get(execution["adapter"]),
-                    "adapter", "prepared adapter changed; reconcile before preparing another operation")
-            if caller != "coordinator":
-                require(execution["grant_id"] == (task.get("delegation") or {}).get("id"),
-                        "authority", "prepared grant was replaced")
-            for limit in config.get("limits", []):
-                if limit["unit"] == Engine.UNITS[kind]:
-                    counters = Engine._family_counters(state, task) if limit["scope"] == "task" else state["counters"]
-                    require(counters.get(limit["unit"], 0) <= limit["max"], "budget", "current limit prevents dispatch")
             original = execution["request"]
             from integration import gate
             pending["integration"] = gate(state, task, original, expected=pending.get("integration"))
@@ -1446,9 +1652,9 @@ class Engine:
             return {"outcome": status}
         if op == "close":
             last = task.get("closure_outcome") or {}
-            reconciled_close = (last.get("kind") == "close" and last.get("status") == "succeeded"
-                                and req.get("receipt") == last.get("receipt")
-                                and last.get("closure_binding") == Engine._closure_binding(state, task))
+            reconciled_close = Engine._reconciled_close(state, task, req)
+            Engine._review_gate(state, task)
+            Engine._findings_gate(state, task)
             Engine._active(state, task, "close", reconciling=reconciled_close)
             if caller != "coordinator":
                 Engine._delegated(state, task, caller, "close")
@@ -1541,7 +1747,70 @@ class Engine:
         check_dependencies(state, task, kind)
 
     @staticmethod
+    def _record_review(state, task, pending, request):
+        """Only the process-local execution guard can reach this publication."""
+        if state["config"].get("communication", {}).get("mode") != "enforced":
+            return
+        if "controller" not in pending.get("execution", {}).get("adapter_binding", {}):
+            return
+        from channel import task_binding
+        receipt = request.get("receipt", {})
+        controller = receipt.get("controller") or {}
+        original = pending["execution"].get("request", {}).get("reconcile_upstream") or {}
+        task["certified_review"] = {
+            "operation_id": pending["id"], "binding": task_binding(task),
+            "controller_operation_id": original.get("operation_id", pending["id"]),
+            "status": request.get("status"), "all_jobs_settled": receipt.get("all_jobs_settled") is True,
+            "controller_id": receipt.get("controller_id"), "run_id": controller.get("id"),
+            "phase": controller.get("phase"), "fingerprint": controller.get("fingerprint"),
+            "runtime_sha256": receipt.get("runtime_sha256"),
+            "candidate": copy.deepcopy(controller.get("candidate")),
+            "findings": copy.deepcopy(controller.get("findings")),
+        }
+        if isinstance(controller.get("findings"), list):
+            task["findings"] = copy.deepcopy(controller["findings"])
+        candidate = controller.get("candidate") or {}
+        for key, value in {"controller_id": receipt.get("controller_id"), "run_id": controller.get("id"),
+                           "review_base": candidate.get("base"), "review_head": candidate.get("head")}.items():
+            if nonempty(value):
+                task["refs"][key] = value
+
+    @staticmethod
+    def _reconciled_close(state, task, request):
+        last = task.get("closure_outcome") or {}
+        return (last.get("kind") == "close" and last.get("status") == "succeeded"
+                and request.get("receipt") == last.get("receipt")
+                and last.get("closure_binding") == Engine._closure_binding(state, task))
+
+    @staticmethod
+    def _review_gate(state, task, head=None):
+        if state["config"].get("communication", {}).get("mode") != "enforced":
+            return
+        from channel import task_binding
+        proof = task.get("certified_review") or {}
+        candidate = proof.get("candidate") or {}
+        require(proof.get("binding") == task_binding(task) and proof.get("status") == "succeeded"
+                and proof.get("phase") == "CONVERGED" and proof.get("all_jobs_settled") is True,
+                "review_evidence", "a settled successful fixed-controller review is required")
+        require(candidate.get("clean") is True and nonempty(candidate.get("head"))
+                and candidate["head"] == (head or task["refs"].get("review_head")),
+                "review_evidence", "the candidate needs a runtime-verified reviewed commit binding")
+        findings = proof.get("findings")
+        require(isinstance(findings, list) and all(not unresolved_finding(item) for item in findings),
+                "review_evidence", "certified review findings remain unresolved or unknown")
+
+    @staticmethod
+    def _findings_gate(state, task):
+        if state["config"].get("communication", {}).get("mode") != "enforced":
+            return
+        findings = task.get("findings")
+        require(isinstance(findings, list) and all(not unresolved_finding(item) for item in findings),
+                "findings", "resolve every finding and unknown finding status before merge or closure")
+
+    @staticmethod
     def _close_gate(state, task, req):
+        Engine._review_gate(state, task)
+        Engine._findings_gate(state, task)
         require(not task.get("recovery_open"), "recovery", "resolve parked recovery before closure")
         Engine._dependencies_complete(state, task, "close")
         target, proof = req["target"], req["evidence"]
@@ -1560,6 +1829,8 @@ class Engine:
 
     @staticmethod
     def _merge_gate(state, task, req):
+        Engine._review_gate(state, task, req.get("target", {}).get("head"))
+        Engine._findings_gate(state, task)
         # Intent and dispatch already bind integration to this assignment.
         # Keep repository/PR protections separate from candidate selection.
         require(not task.get("recovery_open"), "recovery", "resolve parked recovery before merge")

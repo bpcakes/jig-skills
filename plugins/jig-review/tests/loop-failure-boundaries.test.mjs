@@ -602,14 +602,84 @@ test("validation receives EOF while provider commands retain their JSON stdin pr
 });
 
 const logFault = fileURLToPath(new URL("./fixtures/validation-log-fault.mjs", import.meta.url));
-for (const fault of ["open", "existing", "short", "zero", "write", "close"]) test(`validation log ${fault} follows the command execution boundary`, t => {
+for (const [name, chunks, loss] of [
+  ["invalid byte", [[255]], true],
+  ["unfinished sequence", [[226, 130]], true],
+  ["literal replacement character", [[239, 191, 189]], false],
+  ["split UTF-8 sequence", [[240, 159], [152, 128]], false],
+]) test(`validation retains honest byte and decoding facts for ${name}`, t => {
+  const f = fixture(t), job = path.join(f.directory, "decoding-job"); mkdirSync(job);
+  const code = `const chunks=${JSON.stringify(chunks)};for(const c of chunks){process.stdout.write(Buffer.from(c));process.stderr.write(Buffer.from(c));await new Promise(r=>setTimeout(r,50));}`;
+  json(path.join(job, "request.json"), { role: "validate", cwd: f.root, assignment: {}, timeoutMs: 10000,
+    command: [process.execPath, "--input-type=module", "-e", code] });
+  execFileSync(process.execPath, [worker, job], { timeout: 15000 });
+  const result = readJSON(path.join(job, "result.json")), retained = readJSON(path.join(job, "stderr.json"));
+  const raw = Buffer.from(chunks.flat()), text = raw.toString("utf8");
+  assert.equal(result.outcome, "succeeded"); assert.equal(result.execution, "completed");
+  assert.equal(result.stdoutBytes, raw.length); assert.equal(result.stderrBytes, raw.length);
+  assert.equal(result.stdoutDecodingLoss, loss); assert.equal(result.stderrDecodingLoss, loss);
+  assert.equal(result.logTruncated, false); assert.equal(result.stderrTruncated, false);
+  assert.equal(readFileSync(result.log, "utf8"), text); assert.equal(retained.stderr, text);
+  assert.equal(result.stderrRetainedBytes, Buffer.byteLength(text));
+  assert.equal(retained.stderrDecodingLoss, loss);
+});
+
+for (const payload of ["short 😀 stderr\n", "x".repeat(20000) + "😀" + "y".repeat(16383)]) test(`stderr retention reports ${payload.length > 16384 ? "truncated" : "complete"} Unicode evidence`, t => {
+  const f = fixture(t), job = path.join(f.directory, "stderr-job"); mkdirSync(job);
+  json(path.join(job, "request.json"), { role: "validate", cwd: f.root, assignment: {}, timeoutMs: 10000,
+    command: [process.execPath, "-e", `process.stderr.write(${JSON.stringify(payload)})`] });
+  execFileSync(process.execPath, [worker, job], { timeout: 15000 });
+  const result = readJSON(path.join(job, "result.json")), retained = readJSON(path.join(job, "stderr.json"));
+  assert.equal(result.outcome, "succeeded");
+  assert.equal(result.stderrBytes, Buffer.byteLength(payload));
+  assert.equal(result.stderrTruncated, payload.length > 16384);
+  assert.equal(result.stderrRetainedBytes, Buffer.byteLength(retained.stderr));
+  assert.equal(retained.stderrTruncated, result.stderrTruncated);
+  assert.equal(retained.stderrBytes, result.stderrBytes);
+  assert.equal(retained.stderr, payload.length > 16384 ? "y".repeat(16383) : payload);
+  assert.ok(retained.stderr.isWellFormed());
+});
+
+test("validation byte cap retains a decodable UTF-8 prefix across later chunks", t => {
+  const f = fixture(t), job = path.join(f.directory, "utf8-log-job"); mkdirSync(job);
+  const limit = 8 * 1024 * 1024;
+  json(path.join(job, "request.json"), { role: "validate", cwd: f.root, assignment: {}, timeoutMs: 10000,
+    command: [process.execPath, "-e", `process.stdout.write('x'.repeat(${limit - 1}) + '😀');setTimeout(()=>process.stdout.write('later'),50)`] });
+  execFileSync(process.execPath, [worker, job], { timeout: 15000 });
+  const result = readJSON(path.join(job, "result.json"));
+  assert.equal(result.outcome, "succeeded"); assert.equal(result.logTruncated, true);
+  assert.equal(result.stdoutBytes, limit - 1 + 4 + 5);
+  const retained = readFileSync(result.log);
+  assert.equal(retained.length, limit - 1);
+  assert.equal(new TextDecoder("utf-8", { fatal: true }).decode(retained), 'x'.repeat(limit - 1));
+});
+
+for (const truncateFails of [false, true]) test(`partial validation log write followed by error ${truncateFails ? "retains failure when prefix recovery fails" : "keeps a valid UTF-8 prefix"}`, t => {
+  const f = fixture(t), job = path.join(f.directory, "partial-log-job"); mkdirSync(job);
+  json(path.join(job, "request.json"), { role: "validate", cwd: f.root, assignment: {}, timeoutMs: 5000,
+    command: [process.execPath, "-e", "process.stdout.write('A😀Z')"] });
+  const execution = spawnSync(process.execPath, [worker, job], { encoding: "utf8", timeout: 15000,
+    env: { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(logFault).href}`,
+      JIG_TEST_LOG_FAULT: truncateFails ? "short-then-error-truncate-fails" : "short-then-error" } });
+  assert.equal(execution.status, 0, execution.stderr);
+  const result = readJSON(path.join(job, "result.json")), retained = readFileSync(result.log);
+  assert.equal(result.outcome, "infrastructure_failed"); assert.equal(result.execution, "uncertain");
+  assert.equal(result.stdoutBytes, 6); assert.equal(result.stdoutDecodingLoss, false);
+  assert.equal(result.logTruncated, true); assert.match(result.error, /ENOSPC/);
+  if (truncateFails) {
+    assert.match(result.error, /UTF-8 log recovery failed/);
+    assert.equal(retained.toString("hex"), "41f0");
+  } else assert.equal(new TextDecoder("utf-8", { fatal: true }).decode(retained), "A");
+});
+
+for (const fault of ["open", "existing", "short", "zero", "write", "write-at-eof", "close"]) test(`validation log ${fault} follows the command execution boundary`, t => {
   const f = fixture(t), job = path.join(f.directory, "log-job"), marker = path.join(f.directory, "executed"); mkdirSync(job);
   const payload = "BEGIN-0123456789-END\n";
   json(path.join(job, "request.json"), { role: "validate", cwd: f.root, assignment: {}, timeoutMs: 5000,
-    command: [process.execPath, "-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)},'yes');process.stdout.write(${JSON.stringify(payload)})`] });
+    command: [process.execPath, "-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)},'yes');process.stdout.write(${fault === "write-at-eof" ? "Buffer.from([226])" : JSON.stringify(payload)})`] });
   if (fault === "existing") writeFileSync(path.join(job, "stdout.log"), "retained evidence");
   const execution = spawnSync(process.execPath, [worker, job], { encoding: "utf8", timeout: 15000,
-    env: { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(logFault).href}`, JIG_TEST_LOG_FAULT: fault } });
+    env: { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(logFault).href}`, JIG_TEST_LOG_FAULT: fault === "write-at-eof" ? "write" : fault } });
   assert.equal(execution.status, 0, execution.stderr);
   const result = readJSON(path.join(job, "result.json"));
   if (["open", "existing"].includes(fault)) {

@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "measured_at": "2026-11-08T14:37:56.694564+00:00",
+  "runtime_sha256": "7180326552d9c7f8c8865e48e81d3147e80028c5abc0c8b8c4c264f84bd66a6e",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "scope": "deterministic finding retrieval through the real gateway, including follow-up reads",
+  "tokenizer": {
+    "library": "tiktoken",
+    "version": "0.12.0",
+    "encoding": "o200k_base"
+  },
+  "provider_model": null,
+  "provider_usage": null,
+  "limitations": [
+    "Payload counts exclude model context, tool schemas, hidden reasoning and provider billing.",
+    "The retrieval policy is deterministic; model decision quality and end-to-end task success are not measured.",
+    "Paths and session/snapshot IDs vary between runs; timings are single local samples, not tail-latency estimates."
+  ],
+  "cases": [
+    {
+      "findings": 0,
+      "unresolved": 0,
+      "variants": {
+        "full": {
+          "payload_tokens": 426,
+          "serialized_bytes": 1399,
+          "requests": 1,
+          "wall_seconds": 0.015789255034178495,
+          "complete_correct_retrieval": true,
+          "selected_view": "full",
+          "transcript_sha256": "51c512383548dab9702fdb5a4dc4ce930d6892aa9f21e5823f93202d0323559a"
+        },
+        "auto": {
+          "payload_tokens": 426,
+          "serialized_bytes": 1399,
+          "requests": 1,
+          "wall_seconds": 0.0022327988408505917,
+          "complete_correct_retrieval": true,
+          "selected_view": "full",
+          "transcript_sha256": "b52839bc659fb920d0f5408096d6e1a9544762f073387b22c819c7cbf743297f"
+        }
+      },
+      "payload_token_reduction_fraction": 0.0
+    },
+    {
+      "findings": 16,
+      "unresolved": 1,
+      "variants": {
+        "full": {
+          "payload_tokens": 2441,
+          "serialized_bytes": 14374,
+          "requests": 1,
+          "wall_seconds": 0.0040293470956385136,
+          "complete_correct_retrieval": true,
+          "selected_view": "full",
+          "transcript_sha256": "f2697ab28cba844f336d5286155d95dbb037da58a871dfcb29c90f3bac4a4d48"
+        },
+        "auto": {
+          "payload_tokens": 1207,
+          "serialized_bytes": 4910,
+          "requests": 2,
+          "wall_seconds": 0.030695113819092512,
+          "complete_correct_retrieval": true,
+          "selected_view": "compact",
+          "transcript_sha256": "e2386710f5dc11ec0871e032ec6512efacb57c5cb126ecb1bd86d92331c056cc"
+        }
+      },
+      "payload_token_reduction_fraction": 0.5055305202785744
+    },
+    {
+      "findings": 128,
+      "unresolved": 1,
+      "variants": {
+        "full": {
+          "payload_tokens": 17340,
+          "serialized_bytes": 110611,
+          "requests": 1,
+          "wall_seconds": 0.017234204802662134,
+          "complete_correct_retrieval": true,
+          "selected_view": "full",
+          "transcript_sha256": "05a87150da1a1beb8bfc6973a3cd0a724aabf4ee0b82794f05bf713768d68fed"
+        },
+        "auto": {
+          "payload_tokens": 1216,
+          "serialized_bytes": 4916,
+          "requests": 2,
+          "wall_seconds": 0.03240163205191493,
+          "complete_correct_retrieval": true,
+          "selected_view": "compact",
+          "transcript_sha256": "7db39ea9454fe084a9a4745dca27cc09b23b9f3e4d9c8d71723073ff035ad5fa"
+        }
+      },
+      "payload_token_reduction_fraction": 0.9298731257208765
+    },
+    {
+      "findings": 128,
+      "unresolved": 32,
+      "variants": {
+        "full": {
+          "payload_tokens": 13966,
+          "serialized_bytes": 87140,
+          "requests": 1,
+          "wall_seconds": 0.01383185526356101,
+          "complete_correct_retrieval": true,
+          "selected_view": "full",
+          "transcript_sha256": "43fbe79fc1cc546959c469893e693e860f718a9c2c880084cbdacf92354a2726"
+        },
+        "auto": {
+          "payload_tokens": 2259,
+          "serialized_bytes": 9466,
+          "requests": 2,
+          "wall_seconds": 0.041260397993028164,
+          "complete_correct_retrieval": true,
+          "selected_view": "compact",
+          "transcript_sha256": "6d0d79ca3cc9734f79df5b6e44db96533bb28a62b24af71fc2378f8ffb1719d8"
+        }
+      },
+      "payload_token_reduction_fraction": 0.8382500358012316
+    }
+  ]
+}

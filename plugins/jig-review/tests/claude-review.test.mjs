@@ -159,6 +159,17 @@ test("Claude receives only read-only repository tools", () => {
   assert.equal(hostArgs.includes("--restricted"), false);
 });
 
+test("verified orchestration adds only the fixed client command to Claude's restricted tools", () => {
+  const args = buildClaudeArgs({ model: "opus", effort: "xhigh", orchestrationChannel: true });
+  assert.ok(args.includes("Read,Glob,Grep,Bash"));
+  for (const flag of ["--restricted", "--safe-mode", "dontAsk"]) assert.ok(args.includes(flag));
+  const allowed = args.filter((arg, index) => args[index - 1] === "--allowedTools");
+  assert.deepEqual(allowed, ["Read", "Glob", "Grep",
+    "Bash(/usr/bin/python3 -B /opt/orchestration/communicate.py)",
+    "Bash(/usr/bin/python3 -B /opt/orchestration/communicate.py *)"]);
+  assert.ok(!args.includes("--dangerously-skip-permissions"));
+});
+
 test("Claude file-access parsing is explicit and normalized", () => {
   assert.equal(
     parseArgs([
@@ -287,7 +298,7 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
   await assert.rejects(runClaudeReview(options, { claudeBin: fakeClaude }), /TASK_BRIEF_CHANGED/);
   assert.equal(existsSync(capturePath), false, 'provider must not launch with a changed brief');
   writeFileSync(taskBrief, originalBrief);
-  const report = await runClaudeReview(options, { claudeBin: fakeClaude });
+  const report = await runClaudeReview({ ...options, orchestrationChannel: true }, { claudeBin: fakeClaude });
   const captured = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.ok(captured.prompt.includes(reviewGuidance(pinnedBrief)));
 

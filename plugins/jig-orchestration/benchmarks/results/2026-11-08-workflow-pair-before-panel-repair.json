@@ -1,0 +1,384 @@
+{
+  "measured_at": "2026-11-08T18:37:55.702334+00:00",
+  "kind": "retained paired development run before panel repairs",
+  "pair_success": false,
+  "raw_result_sha256": "027599926bf2bb4bb219f9ef7a4d48425eebeb2e9f3d6974e558f3c7c1d316af",
+  "harness_sha256": "ea5bf09e4ac81eb6d21b19578d62f62c1e7050f181af5129dba007572e7922d4",
+  "runner_sha256": "0978473d6047f0995bfed0cb28ea4a8dc5d202c5acaff9231463cc4ec606b930",
+  "runtime_manifest_sha256": "0d9e2d2d0c6f5767a04818d11c7170da9d0b4518ecaec0bf0756934cbc0eac2f",
+  "variants": [
+    {
+      "mode": "full",
+      "seconds": 539.4476837459952,
+      "workflow_success": false,
+      "source_acceptance": {
+        "before_review": true
+      },
+      "joint_source_acceptance": false,
+      "provider_usage": {
+        "claude": {
+          "model_invocations": 3,
+          "successful_exits": 3,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 30916,
+              "known_subtotal": 30916,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 263013,
+              "known_subtotal": 263013,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 48,
+              "known_subtotal": 48,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 12245,
+              "known_subtotal": 12245,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.5450226,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        },
+        "codex": {
+          "model_invocations": 6,
+          "successful_exits": 6,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 426368,
+              "known_subtotal": 426368,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 520530,
+              "known_subtotal": 520530,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 14043,
+              "known_subtotal": 14043,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 5809,
+              "known_subtotal": 5809,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        }
+      },
+      "gateway_payload_tokens": 79330,
+      "model_gateway_requests": 37,
+      "review_completed": false,
+      "validation_log_reads": {
+        "A": {
+          "claude": 0,
+          "codex": 0
+        },
+        "B": {
+          "claude": 0,
+          "codex": 0
+        }
+      },
+      "validation_evidence": {
+        "by_task": {
+          "A": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          },
+          "B": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          }
+        },
+        "assignments": [
+          {
+            "task": "A",
+            "provider": "claude",
+            "assignment_id": "00001-review",
+            "session_id": "32e0455a93f8cb286192dac6f9906ead",
+            "logs": []
+          },
+          {
+            "task": "A",
+            "provider": "codex",
+            "assignment_id": "00002-review",
+            "session_id": "55cd925d3299388602ec28dc95a6fce1",
+            "logs": []
+          },
+          {
+            "task": "B",
+            "provider": "claude",
+            "assignment_id": "00001-review",
+            "session_id": "99aef56872502968a301bec59399ee92",
+            "logs": []
+          },
+          {
+            "task": "B",
+            "provider": "codex",
+            "assignment_id": "00002-review",
+            "session_id": "e751dbf78aca0d802eda2252cd0e70d4",
+            "logs": []
+          }
+        ],
+        "all_selected_reviewers_present": true,
+        "all_supplied_logs_retrieved": true,
+        "all_selected_providers_exercised": false
+      },
+      "synthetic_roles": [
+        "coordinator"
+      ],
+      "live_roles": [
+        "driver",
+        "review-provider",
+        "triage"
+      ],
+      "configured_model_roles": [
+        "implementation",
+        "replacement verification",
+        "review",
+        "triage",
+        "repair if requested"
+      ],
+      "error": {
+        "message": "Live controller did not converge: B; triage requested clarification about unsized iterable compatibility."
+      }
+    },
+    {
+      "mode": "auto",
+      "seconds": 397.1332622328773,
+      "workflow_success": true,
+      "source_acceptance": {
+        "before_review": true,
+        "after_review": true
+      },
+      "joint_source_acceptance": true,
+      "provider_usage": {
+        "codex": {
+          "model_invocations": 6,
+          "successful_exits": 6,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 411264,
+              "known_subtotal": 411264,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 464848,
+              "known_subtotal": 464848,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 10355,
+              "known_subtotal": 10355,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 3543,
+              "known_subtotal": 3543,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        },
+        "claude": {
+          "model_invocations": 3,
+          "successful_exits": 3,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 26042,
+              "known_subtotal": 26042,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 231165,
+              "known_subtotal": 231165,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 44,
+              "known_subtotal": 44,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 10231,
+              "known_subtotal": 10231,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.459365,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        }
+      },
+      "gateway_payload_tokens": 13050,
+      "model_gateway_requests": 35,
+      "review_completed": true,
+      "validation_log_reads": {
+        "A": {
+          "claude": 0,
+          "codex": 0
+        },
+        "B": {
+          "claude": 0,
+          "codex": 0
+        }
+      },
+      "validation_evidence": {
+        "by_task": {
+          "A": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          },
+          "B": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          }
+        },
+        "assignments": [
+          {
+            "task": "B",
+            "provider": "claude",
+            "assignment_id": "00001-review",
+            "session_id": "01995c335552273492651c2f9362fff2",
+            "logs": []
+          },
+          {
+            "task": "A",
+            "provider": "codex",
+            "assignment_id": "00002-review",
+            "session_id": "20b25daeb9c5bbaa5b2692055f96d534",
+            "logs": []
+          },
+          {
+            "task": "A",
+            "provider": "claude",
+            "assignment_id": "00001-review",
+            "session_id": "7224d6df8229dc48f8ffaac34931d2af",
+            "logs": []
+          },
+          {
+            "task": "B",
+            "provider": "codex",
+            "assignment_id": "00002-review",
+            "session_id": "c9e1129801b3fa3be4c795823c19df46",
+            "logs": []
+          }
+        ],
+        "all_selected_reviewers_present": true,
+        "all_supplied_logs_retrieved": true,
+        "all_selected_providers_exercised": false
+      },
+      "synthetic_roles": [
+        "coordinator"
+      ],
+      "live_roles": [
+        "driver",
+        "review-provider",
+        "triage"
+      ],
+      "configured_model_roles": [
+        "implementation",
+        "replacement verification",
+        "review",
+        "triage",
+        "repair if requested"
+      ],
+      "error": null
+    }
+  ],
+  "limitations": [
+    "The full variant failed; the automatic variant passed. This is not a successful acceptance pair or a savings estimate.",
+    "Both variants used the same frozen installation and harness. The benchmark contract was subsequently clarified to preserve all finite integer iterables.",
+    "The coordinator was deterministic and cancellation pressure used idle connections only. Later startup and authenticated-load requirements are not proven by this historical run.",
+    "Native provider counters remain separate; missing cost and model metadata remain unknown."
+  ]
+}

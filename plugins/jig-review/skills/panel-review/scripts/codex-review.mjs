@@ -10,6 +10,7 @@ import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
 import { CODEX_CLI_EFFORTS } from "./review-options.mjs";
+import { CHANNEL_SETTINGS, verifiedReadOnlyChannel } from "./orchestration-channel.mjs";
 import {
   ambientSkills,
   instructionsLoaded,
@@ -306,8 +307,7 @@ function buildCodexArgs(options, scope, lastMessagePath) {
     "--json",
     "--ephemeral",
     "--ignore-rules",
-    "--sandbox",
-    "read-only",
+    ...(options.orchestrationChannel ? CHANNEL_SETTINGS.flatMap(setting => ["-c", setting]) : ["--sandbox", "read-only"]),
     "--color",
     "never",
     ...PINNED_SETTINGS.flatMap((setting) => ["-c", setting]),
@@ -353,10 +353,13 @@ async function runCodexReview(options, dependencies = {}) {
   );
   const scope = await resolveScope(options, { deadlineAt, signal });
   assertScopeMatchesFingerprint(scope, initialFingerprint);
+  options.orchestrationChannel = await verifiedReadOnlyChannel(scope.repoRoot, { deadlineAt, signal });
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
-    const prompt = buildReviewPrompt(scope, context, { taskBrief, tooling: "codex" }) + (dependencies.promptSuffix ?? "");
+    if (dependencies.parseReport) evidence.requireComplete(context);
+    const prompt = buildReviewPrompt(scope, context, { taskBrief, tooling: "codex", orchestrationChannel: options.orchestrationChannel,
+      orchestrationTask: process.env.ORCHESTRATION_TASK }) + (dependencies.promptSuffix ?? "");
     const codexBin = dependencies.codexBin ?? process.env.JIG_CODEX_BIN ?? "codex";
     const lastMessagePath = path.join(evidence.directory, LAST_MESSAGE_FILE);
     const { shim, privateHome } = writeShim(evidence.directory);

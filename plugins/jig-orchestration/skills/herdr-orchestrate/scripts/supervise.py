@@ -7,7 +7,7 @@ records authority and evidence; adapters and drivers perform external gates.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -19,6 +19,7 @@ import select
 import shutil
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -231,6 +232,8 @@ def tick(run_dir, now=None):
         managed_guard(settings)
         Engine.heartbeat(run_dir, timestamp(now))
         state = Engine.read(run_dir)
+        if state["config"].get("communication", {}).get("mode") == "enforced":
+            return channel_tick(run_dir, state, settings, now)
         schedule = state["scheduler"]
         skip_scan = False
         if schedule.get("integration_completion"):
@@ -435,6 +438,61 @@ def complete(run_dir, wake_id, now=None, *, resume=False):
             "next_due_at": state["scheduler"].get("next_due_at")}
 
 
+def channel_tick(run_dir, state, settings, now):
+    """Observe integration on cadence, independently of generic wake delivery.
+
+    Persist the attempt before I/O. A crash cannot create a rapid rescan loop,
+    and a failed scan must not prevent another recipient's pending hint.
+    """
+    from integration import refresh
+    from notify import deliver
+    last = parse_time(state["scheduler"].get("channel_scan_attempt_at"))
+    interval = max(settings["minimum_cadence_seconds"], settings["cadence_seconds"])
+    if last is None or now >= scheduler_deadline(last, interval):
+        scheduler_patch(run_dir, lambda _: {"channel_scan_attempt_at": timestamp(now)})
+        try:
+            observed = refresh(run_dir)
+            status = observed["status"]
+        except (OSError, StateError, RuntimeErrorDetail):
+            status = "failed"
+        fields = {"channel_scan_status": status}
+        if status in {"observed", "disabled", "idle"}:
+            fields["channel_scan_completed_at"] = timestamp(now)
+        scheduler_patch(run_dir, lambda _: fields)
+    # A host stop issued during the scan still suppresses delivery.
+    current = Engine.read(run_dir)
+    if not enabled(current, scheduler_config(current["config"], current["scheduler"])):
+        return {"status": "scheduler_stopped"}
+    return deliver(run_dir, now=now)
+
+
+def channel_health_failures(state, settings, now):
+    """Transport/observation health is not proof that an agent applied a message."""
+    schedule = state["scheduler"]
+    interval = max(settings["cadence_seconds"], settings["minimum_cadence_seconds"])
+    failures = []
+    heartbeat = parse_time(schedule.get("heartbeat_at"))
+    if not heartbeat or now > scheduler_deadline(heartbeat, max(90, interval * 2)):
+        failures.append({"id": "heartbeat-" + str(schedule.get("heartbeat_at")),
+                         "reason": "Scheduler heartbeat missing or overdue"})
+    completed = parse_time(schedule.get("channel_scan_completed_at") or state["created_at"])
+    if now > scheduler_deadline(completed, interval * 3):
+        failures.append({"id": "channel-scan-" + timestamp(completed),
+                         "reason": "Integration observation is overdue despite scheduler liveness"})
+    communication = state.get("communication", {})
+    for actor, wake in sorted(communication.get("wakes", {}).items()):
+        if wake["delivered"]:
+            continue
+        session = communication.get("sessions", {}).get(communication.get("active", {}).get(actor), {})
+        if not session or session.get("revoked"):
+            continue
+        since = parse_time(wake.get("pending_since") or session["issued_at"])
+        if now > scheduler_deadline(since, interval * 3):
+            failures.append({"id": "channel-delivery-" + actor + "-" + timestamp(since),
+                             "reason": "Pending channel hint cannot be delivered to " + actor})
+    return failures
+
+
 def health_failures(schedule, settings, now, created_at=None):
     """Return active incidents in reporting order, including temporarily hidden ones."""
     failures = []
@@ -495,7 +553,9 @@ def health(run_dir, now=None):
             if not enabled(current, settings):
                 decision["result"] = {"status": "scheduler_stopped", "alert": "suppressed"}
                 return None
-            failures = health_failures(schedule, settings, now, current["created_at"])
+            failures = (channel_health_failures(current, settings, now)
+                        if current["config"].get("communication", {}).get("mode") == "enforced"
+                        else health_failures(schedule, settings, now, current["created_at"]))
             active_ids = {failure["id"] for failure in failures}
             previous = schedule.get("health_alerts", {})
             if "health_alerts" not in schedule and schedule.get("alerted_failure_id"):
@@ -712,8 +772,8 @@ def preflight(config, host_id):
             "note": "Inventory only on the current machine; this does not admit a host or prove authentication"}
 
 
-def task_view(run_dir, task_id, caller="coordinator"):
-    state = Engine.read(run_dir)
+def task_view(run_dir, task_id, caller="coordinator", *, state=None):
+    state = Engine.read(run_dir) if state is None else state
     task = state["tasks"].get(task_id)
     if caller != "coordinator":
         actor = state["config"].get("actors", {}).get(caller, {})
@@ -749,14 +809,34 @@ def task_view(run_dir, task_id, caller="coordinator"):
     return {**view, "integration": observations, "policy_version": state["policy_version"], "change_token": token}
 
 
-def apply_request(run_dir, request, caller="coordinator"):
+def apply_request(run_dir, request, caller="coordinator", *, session=None):
     from integration import before_stage, after_transition
     recorded = Engine.action(run_dir, request["action_id"]) if isinstance(request.get("action_id"), str) and request["action_id"] else None
     if recorded is None and request.get("op") in {"reserve", "prepare", "intent"}:
         before_stage(run_dir, request, caller)
-    result = Engine.apply(run_dir, request, caller)
+    result = Engine.apply(run_dir, request, caller, session=session)
     after_transition(run_dir, request, result)
     return result
+
+
+@contextmanager
+def response_disconnect(response_fd):
+    """Observe the response reader without mistaking request EOF for closure."""
+    if response_fd is None:
+        yield lambda: False
+    elif (hasattr(select, "kqueue")
+          and stat.S_IFMT(os.fstat(response_fd).st_mode) in {stat.S_IFIFO, stat.S_IFSOCK}):
+        # macOS poll reports socket HUP for a request-side half-close. The
+        # kqueue write filter reports EOF only when the response reader leaves.
+        with closing(select.kqueue()) as queue:
+            queue.control([select.kevent(response_fd, filter=select.KQ_FILTER_WRITE,
+                                         flags=select.KQ_EV_ADD)], 0, 0)
+            yield lambda: any(event.flags & (select.KQ_EV_EOF | select.KQ_EV_ERROR)
+                              for event in queue.control([], 1, 0))
+    else:
+        response = select.poll()
+        response.register(response_fd, select.POLLERR | select.POLLHUP | select.POLLNVAL)
+        yield lambda: bool(response.poll(0))
 
 
 def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator", until_change=False, response_fd=None):
@@ -764,25 +844,21 @@ def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator"
             or not 0 <= timeout_seconds <= 30 or type(until_change) is not bool):
         raise RuntimeErrorDetail("invalid_input", "watch requires a change token and a timeout between zero and 30 seconds")
     deadline = time.monotonic() + timeout_seconds
-    response = None
-    if until_change and response_fd is not None:
-        # Request EOF is the JSON delimiter, not a disconnect. Watch the
-        # response side: pipe readers and SSH's no-PTY socket can disappear
-        # without sending this process a signal or changing task state.
-        response = select.poll()
-        response.register(response_fd, select.POLLERR | select.POLLHUP | select.POLLNVAL)
-    while True:
-        if response is not None and response.poll(0):
-            raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
-        view = task_view(run_dir, task_id, caller)
-        changed = view["change_token"] != after
-        remaining = deadline - time.monotonic()
-        if changed or remaining <= 0 and not until_change:
-            return {**view, "changed": changed}
-        time.sleep(0.25 if until_change else min(0.25, remaining))
+    with response_disconnect(response_fd if until_change else None) as disconnected:
+        while True:
+            if disconnected():
+                raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
+            view = task_view(run_dir, task_id, caller)
+            changed = view["change_token"] != after
+            remaining = deadline - time.monotonic()
+            if changed or remaining <= 0 and not until_change:
+                return {**view, "changed": changed}
+            time.sleep(0.25 if until_change else min(0.25, remaining))
 
 
 def serve(run_dir, caller, request, response_fd=None):
+    if Engine.read(run_dir)["config"].get("communication", {}).get("mode") == "enforced":
+        raise RuntimeErrorDetail("authenticated_channel_required", "Enforced agents must use the authenticated gateway")
     # Pin caller and run-dir in an authorized_keys forced command, with restrict.
     if os.environ.get("SSH_ORIGINAL_COMMAND", ""):
         raise RuntimeErrorDetail("remote_command_rejected", "Send JSON on stdin without a remote command")
@@ -822,6 +898,7 @@ def main(argv=None):
         child.add_argument("--run-dir", required=True)
         if name == "init":
             child.add_argument("--config", required=True)
+            child.add_argument("--communication-mode", choices=("enforced", "legacy"))
         elif name in {"status", "integration"}:
             child.add_argument("--task")
             if name == "integration":
@@ -844,17 +921,25 @@ def main(argv=None):
     probe = sub.add_parser("preflight")
     probe.add_argument("--config", required=True)
     probe.add_argument("--host", required=True)
+    verify = sub.add_parser("verify-host")
+    verify.add_argument("--run-dir", required=True)
+    verify.add_argument("--host", required=True)
     args = parser.parse_args(argv)
     if args.command != "serve" and os.environ.get("SSH_ORIGINAL_COMMAND"):
         raise RuntimeErrorDetail("remote_command_rejected", "Restricted routes may only use serve")
     if args.command == "init":
         config = read_json(args.config)
+        if args.communication_mode:
+            config["communication"] = {"mode": args.communication_mode}
+        elif "communication" not in config:
+            config["communication"] = {"mode": "enforced"}
         settings = scheduler_config(config)
         next_due = timestamp(scheduler_deadline(datetime.now(timezone.utc), settings["cadence_seconds"]))
         result = Engine.initialize(args.run_dir, config)
         scheduler_patch(args.run_dir, lambda _: {"enabled": settings.get("enabled", False),
                         "next_due_at": next_due})
         return {"status": "initialized", "policy_version": result["policy_version"],
+                "communication_mode": config["communication"]["mode"],
                 "scheduler_started": False, "notifications": "authorized" if settings.get("notifier_argv") else "local_evidence_only"}
     if args.command == "status":
         state = Engine.read(args.run_dir)
@@ -883,6 +968,9 @@ def main(argv=None):
         return serve(args.run_dir, args.caller, read_json("-"), response_fd=sys.stdout.fileno())
     if args.command == "preflight":
         return preflight(read_json(args.config), args.host)
+    if args.command == "verify-host":
+        from capabilities import verify
+        return verify(args.run_dir, args.host)
     if args.command == "wake":
         return request_wake(args.run_dir, args.reason)
     if args.command == "complete":

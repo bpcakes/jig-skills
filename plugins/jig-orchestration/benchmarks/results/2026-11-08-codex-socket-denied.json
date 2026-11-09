@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "measured_at": "2026-11-08T14:35:39.574930+00:00",
+  "provider": "codex",
+  "requested_model": "gpt-6-astra",
+  "effort": "xhigh",
+  "cli_version": "0.167.0",
+  "profile_sha256": "eb6cbefa941754b6ebc153e919f8973e8a7bad5ee14db4e702b2617fdc47eacb",
+  "runtime_sha256": "7c904eb5252b399827b6ce398ac592de94b57730a3a2d9cdee3ada177dfbc540",
+  "prompt": "You are driver-A for task A in a disposable orchestration acceptance probe.\nRetrieve every unresolved finding (status other than resolved, fixed or rejected) for task A.\nUse the authenticated client: Python import communicate from /opt/orchestration; communicate.request accepts a dict.\nFirst query with {\"op\":\"query\",\"task_id\":\"A\",\"mode\":os.environ[\"BENCH_QUERY_MODE\"]}.\nFor compact results, detail_request identifies an immutable snapshot. Add path:[\"task\",\"findings\"] and\nselect:\"unresolved_findings\" to fetch unresolved entries as {index,finding}; content is JSON text and complete/next_offset\nindicate pagination. You may process all responses locally in Python; do not print the full historical findings.\nPublish exactly one artifact with op:artifact_put, task_id:A, action_id:benchmark-answer, and content containing\nJSON {\"findings\":[{\"id\":original_id,\"text\":complete_original_text}, ...]} in original order.\nThen respond DONE. Do not change source, call other services, or communicate through another route.\n",
+  "tokenizer": {
+    "library": "tiktoken",
+    "version": "0.12.0",
+    "encoding": "o200k_base"
+  },
+  "limitations": [
+    "One paired retrieval probe per provider; not a statistical or end-to-end task comparison.",
+    "Order and provider cache state can affect usage. Private homes do not imply cold provider caches.",
+    "Requested model/effort and CLI version are invocation metadata; observed model IDs are reported separately.",
+    "Provider-reported cost is not a verified invoice. Gateway token counts are separate from model input usage."
+  ],
+  "variants": [
+    {
+      "mode": "full",
+      "returncode": 0,
+      "error": null,
+      "wall_seconds": 24.475559500046074,
+      "complete_correct_retrieval": false,
+      "published_reports": [],
+      "gateway_requests": 0,
+      "gateway_payload_tokens": 0,
+      "usage": [
+        {
+          "input_tokens": 23115,
+          "cached_input_tokens": 15872,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 405,
+          "reasoning_output_tokens": 243
+        }
+      ],
+      "observed_models": []
+    },
+    {
+      "mode": "auto",
+      "returncode": 0,
+      "error": null,
+      "wall_seconds": 22.86997410003096,
+      "complete_correct_retrieval": false,
+      "published_reports": [],
+      "gateway_requests": 0,
+      "gateway_payload_tokens": 0,
+      "usage": [
+        {
+          "input_tokens": 37679,
+          "cached_input_tokens": 32640,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 307,
+          "reasoning_output_tokens": 116
+        }
+      ],
+      "observed_models": []
+    }
+  ]
+}

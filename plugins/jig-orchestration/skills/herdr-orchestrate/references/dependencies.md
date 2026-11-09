@@ -36,6 +36,8 @@ Before merging B, record `gates.dependency_incorporation`, keyed by dependency I
 
 When A lands, first check whether B's candidate actually changed. Preserve the exact-head review if it did not. For a different commit with identical reviewed content and unchanged scope/contract, use the review controller's [upstream reconciliation operation](../../../../jig-review/skills/review-fix-loop/references/upstream.md). The controller records applicability and reruns checks; never rewrite report fingerprints or certify old reports as new reviews. A standalone discovery report remains discovery evidence.
 
+In an enforced run, request this through the authenticated [controller recovery interface](communication.md): a new validation `execute` action with `reconcile_upstream` naming the original review operation and applicability receipt. Do not invoke the controller CLI or its private state directly from a model session. The new validation receipt and the historical review receipt retain distinct action IDs.
+
 If source, generated output, exclusions, comparison base or review policy changed, use the existing source/successor reconciliation workflow and review the change and its interactions. Carry findings and cumulative budgets. Preserve a user-pinned fixed base. An unsupported reconciliation is a concrete limitation, not authorization to bypass the controller.
 
 ## Bind CI to the combined candidate

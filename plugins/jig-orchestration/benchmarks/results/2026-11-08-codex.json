@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "measured_at": "2026-11-08T14:37:46.387034+00:00",
+  "provider": "codex",
+  "requested_model": "gpt-6-astra",
+  "effort": "xhigh",
+  "cli_version": "0.167.0",
+  "profile_sha256": "b5b5427ecfa858d0eafc6a7f130780840c5565689981928d86d55db0a4754ebc",
+  "runtime_sha256": "7180326552d9c7f8c8865e48e81d3147e80028c5abc0c8b8c4c264f84bd66a6e",
+  "prompt": "You are driver-A for task A in a disposable orchestration acceptance probe.\nRetrieve every unresolved finding (status other than resolved, fixed or rejected) for task A.\nUse the authenticated client: Python import communicate from /opt/orchestration; communicate.request accepts a dict.\nFirst query with {\"op\":\"query\",\"task_id\":\"A\",\"mode\":os.environ[\"BENCH_QUERY_MODE\"]}.\nFor compact results, detail_request identifies an immutable snapshot. Add path:[\"task\",\"findings\"] and\nselect:\"unresolved_findings\" to fetch unresolved entries as {index,finding}; content is JSON text and complete/next_offset\nindicate pagination. You may process all responses locally in Python; do not print the full historical findings.\nPublish exactly one artifact with op:artifact_put, task_id:A, action_id:benchmark-answer, and content containing\nJSON {\"findings\":[{\"id\":original_id,\"text\":complete_original_text}, ...]} in original order.\nThen respond DONE. Do not change source, call other services, or communicate through another route.\n",
+  "tokenizer": {
+    "library": "tiktoken",
+    "version": "0.12.0",
+    "encoding": "o200k_base"
+  },
+  "limitations": [
+    "One paired retrieval probe per provider; not a statistical or end-to-end task comparison.",
+    "Order and provider cache state can affect usage. Private homes do not imply cold provider caches.",
+    "Requested model/effort and CLI version are invocation metadata; observed model IDs are reported separately.",
+    "Provider-reported cost is not a verified invoice. Gateway token counts are separate from model input usage."
+  ],
+  "variants": [
+    {
+      "mode": "full",
+      "returncode": 0,
+      "error": null,
+      "wall_seconds": 22.522470435593277,
+      "complete_correct_retrieval": true,
+      "published_reports": [
+        {
+          "findings": [
+            {
+              "id": "F95",
+              "text": "R95: preserve the immutable operation identity after retry; inspect before redispatch."
+            },
+            {
+              "id": "F127",
+              "text": "R127: preserve the immutable operation identity after retry; inspect before redispatch."
+            }
+          ]
+        }
+      ],
+      "gateway_requests": 3,
+      "gateway_payload_tokens": 34667,
+      "usage": [
+        {
+          "input_tokens": 46416,
+          "cached_input_tokens": 33408,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 640,
+          "reasoning_output_tokens": 93
+        }
+      ],
+      "observed_models": []
+    },
+    {
+      "mode": "auto",
+      "returncode": 0,
+      "error": null,
+      "wall_seconds": 36.575510416179895,
+      "complete_correct_retrieval": true,
+      "published_reports": [
+        {
+          "findings": [
+            {
+              "id": "F95",
+              "text": "R95: preserve the immutable operation identity after retry; inspect before redispatch."
+            },
+            {
+              "id": "F127",
+              "text": "R127: preserve the immutable operation identity after retry; inspect before redispatch."
+            }
+          ]
+        }
+      ],
+      "gateway_requests": 3,
+      "gateway_payload_tokens": 1518,
+      "usage": [
+        {
+          "input_tokens": 37325,
+          "cached_input_tokens": 34304,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1164,
+          "reasoning_output_tokens": 301
+        }
+      ],
+      "observed_models": []
+    }
+  ]
+}

@@ -187,6 +187,7 @@ async function runCursorReview(options, dependencies = {}) {
 
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
+    if (dependencies.parseReport) evidence.requireComplete(context);
     const prompt = buildReviewPrompt(scope, context, { taskBrief }) + (dependencies.promptSuffix ?? "");
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
     const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";

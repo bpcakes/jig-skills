@@ -1,0 +1,493 @@
+{
+  "measured_at": "2026-11-08T20:31:20.196103+00:00",
+  "harness_sha256": "155371b6ec2533a09913274483dff7284d737bcaae6fdec3c43afb7791b17e4e",
+  "runner_sha256": "2f9f28acd007166065ed706e8565eee2c985090d3e611ccc0abdcea419249729",
+  "usage_aggregator_sha256": "09f4e7859afc87768a5a2cc4660fdeaa02e3b326e140b377d57efb66dd87d206",
+  "evidence_verifier_sha256": "4c3e48f21ac9908bea150705fe2bbcee12ac6877895f5370a251534d059abd8d",
+  "runtime_sha256": {
+    "herdr-orchestrate/scripts/bounded_output.py": "3b82f9a6200e3d9bd1e0ba55ed774b428cf7b24017e4bc17ff32259080758a15",
+    "herdr-orchestrate/scripts/capabilities.py": "cb6b64fc4af2f31fb2ebadab1f06d7446da6fb76f2add98485cfa34fbb3a98c5",
+    "herdr-orchestrate/scripts/channel.py": "41a88038acc7e6498b74af566f5e5423873da62d08be3c1d245458c496e49c93",
+    "herdr-orchestrate/scripts/communicate.py": "11bcac04c8ecb5a7ae1878af755bc100064cb90084d7edc4179be5e808e5bf32",
+    "herdr-orchestrate/scripts/dependencies.py": "5953754cde4c94749853f88f385d75e4b147146490f68acf7d37590ffadcc006",
+    "herdr-orchestrate/scripts/egress.py": "748882ed34b0299c66fc20ceb6d5223652f739ea393d423f2cc7d17420b0b36d",
+    "herdr-orchestrate/scripts/execute.py": "8ffdc16e7fe26ff38986cdde536046cf2ec7d2e73b894fbd3d87d04871692cdd",
+    "herdr-orchestrate/scripts/gateway.py": "256a3a79be1c11ed20e35b08564f1020beb44f8aface78362a92dc241450c5d4",
+    "herdr-orchestrate/scripts/integration.py": "bd928ad959c11cc57ed9fd10c940a09e7821d18e76daefd30ddeeb8f8e2f08f4",
+    "herdr-orchestrate/scripts/isolation.py": "2871e0af36873e0297eeac11be3ec6457b9e4bfaacf260b55c362909a659190d",
+    "herdr-orchestrate/scripts/jobs.py": "ae28a70df9baa125969d84b681a2b2e601b477ba80649e75838708b47b83b434",
+    "herdr-orchestrate/scripts/notify.py": "4a49f8d8028d092d0caf77c22fb0d1ce93f5272f0dcaa3ce6311fa6dbc845cfa",
+    "herdr-orchestrate/scripts/profiles.py": "1b996f047579d2fa0b8416db2630d90185b0760eec7a31ebb24df882aa3d6927",
+    "herdr-orchestrate/scripts/protocol.py": "8b28d3261c9e1b0ea121c5eaa6eb9ea6dd1aa3286cb24c677296ceb4875d58c2",
+    "herdr-orchestrate/scripts/review_boundary.py": "5fc6c1e6a9bfa5c53c5f3cd3d6b425145bf0f4c38b22aea80dfd2e67a18bd4f1",
+    "herdr-orchestrate/scripts/review_controller.py": "a7c8ddd1dccf2724184cf5cf5e87522e8bb9b69069b7f81cfadb1fd210cfd1bb",
+    "herdr-orchestrate/scripts/runtime_storage.py": "66094037d48351657cced6e9d54825edfddd9fc57d778c571b9ad872450d2d52",
+    "herdr-orchestrate/scripts/startup.py": "bae30bb317a9dca40369470c35601c110446c965f69b97ea7348e4f4c4a05cc0",
+    "herdr-orchestrate/scripts/state.py": "3fac487721164e25646e75ec14f64034be50e245490c6043dcbf67bd8c41e22c",
+    "herdr-orchestrate/scripts/storage.py": "50d0f73dcc64a4166a13bbbfd30f242dd6b193b23d06e58fb290774b797905a3",
+    "herdr-orchestrate/scripts/supervise.py": "5d5eb386497f00af6fd5e923f24fbe341d82d1545ffb6d1b23db1050615f8e45",
+    "herdr-orchestrate/scripts/views.py": "d391d6d6df4b52ac85b7c68426bfbc8ef1657374ed417c6737771b1c09f48c5d",
+    "review-fix-loop/scripts/assignment-schema.mjs": "878cde1817f4ef41bde963a0fbfe862b80bff49b3be4901c3af11ab8b9db6be5",
+    "review-fix-loop/scripts/assignment-worker.mjs": "caa4e5b586c57a701b6c2c85591db4d53d0030661340661c87fef1aa7a492d57",
+    "review-fix-loop/scripts/command-runner.mjs": "838c146341e114e55a21f421c99588c94eded279d24b55c8438148fff817b094",
+    "review-fix-loop/scripts/commit-messages.mjs": "ee390b04d0179bebb9aac17c9374cea403a32903d9c472e1779de19ca5f67247",
+    "review-fix-loop/scripts/controller-lease.mjs": "bb10a864c9d03369a4dbf8f876a0fa2aa982dca0ed0e7dc7be7520bc7057bf17",
+    "review-fix-loop/scripts/evidence-outputs.mjs": "df7ac21f78d1598f86d2467556ec729af2937c409082fd7827fa95e33a9197a9",
+    "review-fix-loop/scripts/file-content.mjs": "0825e6cf69c6b025c414708269acd22be55dbea8182ff46ebeef40524c301386",
+    "review-fix-loop/scripts/job-runtime.mjs": "a2baf3dc0bb6a8759218c29e4473b10ec53bce39345be526676c1cf96a2f8b18",
+    "review-fix-loop/scripts/loop-options.mjs": "7a759dfbeb4ef45184956600ceaf99fc6897d8a981772ad4622a17d51baddaa3",
+    "review-fix-loop/scripts/macos-runtime.py": "f8e5ac64fd2b7c938e7765df643db727c2df5ed5a2b32282c7a121c717012cc6",
+    "review-fix-loop/scripts/macos-validation.sb": "7228fa33ef22a3f1095d9b2d0a2171cb275b6b33bb6e6f5e9576bdb495df6a1e",
+    "review-fix-loop/scripts/orchestration-adapter.mjs": "4196fe45167ce7bd729e1f2b41af7a574bdf032378a6b29dbc11bb79418ebb6b",
+    "review-fix-loop/scripts/process-ownership.mjs": "9e0ba72178e43e5057397b809259ea53fae9a12205793e46548443fd46356e95",
+    "review-fix-loop/scripts/provider-bridge.mjs": "769c18e23491af939c22be950e64e83e6fa0c9fac9f58fbaeb990663e0e2d2f9",
+    "review-fix-loop/scripts/recovery-policy.mjs": "eac56082c3a9a613bd3dfdfafcdc72b68db77fe0a8c2fdf5f370cad340d52b58",
+    "review-fix-loop/scripts/repair-policy.mjs": "d083b7af52f9fe9ec705ff67d866c6275782fa0dc348a4b3c29216be87066d6c",
+    "review-fix-loop/scripts/repository.mjs": "0e6daa9e739557fa0ecda59ae488db529f62ed34dccb666da08f36a9833eecab",
+    "review-fix-loop/scripts/review-fix-loop.mjs": "0a06928c8219eca084e096e6280ffd1d7785f642cea239f60e2762fa24552de4",
+    "review-fix-loop/scripts/review-timeouts.mjs": "1aedd93fd27ad50ba53592300b598c065b966e08e1cb7be136922da293b9af8c",
+    "review-fix-loop/scripts/round-commits.mjs": "e2c013a11ad338b713003661a6b45687d3600e60b9fa0704cb82c27d01c1547a",
+    "review-fix-loop/scripts/run-store.mjs": "ae72a8b7ad73668c9d77e61bbb1e24fbc483b250f44e5e93e13e50277b919423",
+    "review-fix-loop/scripts/storage-budget.mjs": "0a8f172126f3b708c43c25fd1749bcb527a3501ca0f84eaddc4fcc26e2f295f7",
+    "review-fix-loop/scripts/task-contract.mjs": "20bbcae10074bfa699d0c0371cb20f5c7191dced7bd6e62798159f2a990325ed",
+    "review-fix-loop/scripts/validation-sandbox.mjs": "b1e01023fc5cc0b013f1c4e69905e6c4f839cacff9360687370cf692c7395504",
+    "panel-review/scripts/adapter-runtime.mjs": "2a8b09c4e51ed58f16fd8c3ed6e9c17e89f2099733d55402da2dc8cf62d5a71b",
+    "panel-review/scripts/beads-findings.mjs": "cb735759e23ad7149a1917edddaf5b7d80287c8d57f7962d6b14058079ebbe3c",
+    "panel-review/scripts/claude-config.mjs": "a9fa8a0ee6069e0fa31892815ab2177b1795a70206e437355236e3d4a9b60532",
+    "panel-review/scripts/claude-review.mjs": "e0ed20b40a6cd3160526f3802b8d49c9e9bbf040ab10068741a22dd68fcb6d89",
+    "panel-review/scripts/codex-review.mjs": "92a5c82cd3f6c09275c90df833ce05b977cb478421a3ed59518b918977dbf20e",
+    "panel-review/scripts/codex-session.mjs": "cbcc2c749e7ebb9b1711e17bdd6fde09ec93bb17222ece13c57eefa61fadee69",
+    "panel-review/scripts/cursor-review.mjs": "a26fe0e84ab844052d782a27b407b5eac1f24a49420e96e84971ef74eb44ffe0",
+    "panel-review/scripts/diff-evidence.mjs": "33e8a61ae18f8e3773573e62f13af8819bf3a6b170605e0f05efff22d3efbdc0",
+    "panel-review/scripts/git-environment.mjs": "7b43801b3c16896c53bd61ceae81fc572e9d612aa8580c3942ceeee065045c79",
+    "panel-review/scripts/git-lease.mjs": "efd36aaceff570258f2abe0331b7b7e0a69e2284c0d7f336f23ddaa7713c483e",
+    "panel-review/scripts/git-no-exec.mjs": "916d199bdc9b5ffdd5ad5b9eddc053e92bb61d5cff32d9b62f3a24c502ef1787",
+    "panel-review/scripts/gitlink-capture.mjs": "475baf2fab6229cafdb2107711708a005573cf33ca3435624d567077512b601e",
+    "panel-review/scripts/orchestration-channel.mjs": "ae3b8c7264a1cad955ec0e44161d006d72aa48f5ae558b24d7dab445e7730c29",
+    "panel-review/scripts/provider-launch.mjs": "06d12cd463047b023415603d35243b3c6aeb33afc071c0c3a5b05b5de29ec6b6",
+    "panel-review/scripts/review-applicability.mjs": "a32514c7273bc7e8773142446aa5d1fdb17fb537f114354df4ac279c27d0dcdb",
+    "panel-review/scripts/review-brief.mjs": "165a546298e6790967f98bff34c71d442994d639a96daa99436c19319a820ca8",
+    "panel-review/scripts/review-context.mjs": "9d2440ac87e70eab97bdcbd679a3bdb9e46145d21767361f3e13a0c8241b128b",
+    "panel-review/scripts/review-evidence.mjs": "af8a0739ef938a7cf321abc511b7a7be71d3008566ff8e6304f837a9fed8ade8",
+    "panel-review/scripts/review-exclusions.mjs": "bce2de784fb4caa3b515b9bfa3c4d26807819eb592faebe5d9f8f6ead72fdc94",
+    "panel-review/scripts/review-handoff.mjs": "5df6a08c21d2f895c03354b499cfe6ce7f773e0178049a971e37418606564893",
+    "panel-review/scripts/review-options.mjs": "abc7b14e0f515f4c259961fda2bd0f50a155050b07ab3edfee8c134af0753e96",
+    "panel-review/scripts/scope-fingerprint.mjs": "836d24c3f55cdd29a095135149f7671280c10c1d21e8b1fcc608460be1bf8256"
+  },
+  "tokenizer": {
+    "library": "tiktoken",
+    "version": "0.12.0",
+    "encoding": "o200k_base"
+  },
+  "requested_variants": [
+    "full",
+    "auto"
+  ],
+  "kind": "retained successful paired development run after panel repair round 1, before capacity recovery repair",
+  "pair_success": true,
+  "raw_result_sha256": "b03598a61590a646d9220d0681c48b6bf569a10e9dac3d5dd9fd3a28457ed7fa",
+  "controller_validation_assignment": "00005-validate",
+  "source_fingerprint": "a7b54be55f1227a404a9f166aed27911254aa4b8771f2037bb60a310eebb9a82",
+  "variants": [
+    {
+      "mode": "full",
+      "seconds": 423.46502857794985,
+      "workflow_success": true,
+      "source_acceptance": {
+        "before_review": true,
+        "after_review": true
+      },
+      "joint_source_acceptance": true,
+      "provider_usage": {
+        "claude": {
+          "model_invocations": 4,
+          "successful_exits": 4,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 34660,
+              "known_subtotal": 34660,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 282355,
+              "known_subtotal": 282355,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 56,
+              "known_subtotal": 56,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 11268,
+              "known_subtotal": 11268,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.5652542,
+          "observed_models": [
+            "claude-opus-5",
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        },
+        "codex": {
+          "model_invocations": 7,
+          "successful_exits": 7,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 499200,
+              "known_subtotal": 499200,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 591287,
+              "known_subtotal": 591287,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 10954,
+              "known_subtotal": 10954,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 3041,
+              "known_subtotal": 3041,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        }
+      },
+      "gateway_payload_tokens": 79480,
+      "model_gateway_requests": 40,
+      "review_completed": true,
+      "synthetic_roles": [
+        "coordinator"
+      ],
+      "live_roles": [
+        "coordinator-smoke",
+        "driver",
+        "review-provider",
+        "triage"
+      ],
+      "configured_model_roles": [
+        "coordinator startup probe",
+        "implementation",
+        "replacement verification",
+        "review",
+        "triage",
+        "repair if requested"
+      ],
+      "error": null,
+      "controls": [
+        {
+          "coordinator_smoke_provider": "claude",
+          "before_admission": true,
+          "gateway_query": true
+        },
+        {
+          "coordinator_smoke_provider": "codex",
+          "before_admission": true,
+          "gateway_query": true
+        },
+        {
+          "alternate_route_probe": "passed"
+        },
+        {
+          "task": "A",
+          "action": "cancel",
+          "policy_version": 2
+        },
+        {
+          "task": "B",
+          "action": "cancel",
+          "policy_version": 3
+        },
+        {
+          "idle_connections": 64,
+          "authenticated_clients": 8,
+          "authenticated_requests": 50,
+          "load_failures": [],
+          "maximum_query_seconds": 0.5292213330976665,
+          "cancel_seconds": 0.18379866890609264,
+          "cancel_deadline_seconds": 20
+        },
+        {
+          "task": "A",
+          "action": "resume",
+          "policy_version": 4
+        },
+        {
+          "task": "B",
+          "action": "resume",
+          "policy_version": 5
+        },
+        {
+          "surviving_session_reconnected": true,
+          "replacement_overlap_denied": true,
+          "stale_credential_denied": true
+        }
+      ],
+      "validation_evidence": {
+        "by_task": {
+          "A": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          },
+          "B": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          }
+        },
+        "all_selected_reviewers_present": true,
+        "all_supplied_logs_retrieved": true,
+        "all_selected_providers_exercised": false
+      }
+    },
+    {
+      "mode": "auto",
+      "seconds": 456.97359719127417,
+      "workflow_success": true,
+      "source_acceptance": {
+        "before_review": true,
+        "after_review": true
+      },
+      "joint_source_acceptance": true,
+      "provider_usage": {
+        "claude": {
+          "model_invocations": 4,
+          "successful_exits": 4,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 32171,
+              "known_subtotal": 32171,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 289893,
+              "known_subtotal": 289893,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 54,
+              "known_subtotal": 54,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 12653,
+              "known_subtotal": 12653,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.5686226,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        },
+        "codex": {
+          "model_invocations": 7,
+          "successful_exits": 7,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 440832,
+              "known_subtotal": 440832,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 525700,
+              "known_subtotal": 525700,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 11012,
+              "known_subtotal": 11012,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 3367,
+              "known_subtotal": 3367,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        }
+      },
+      "gateway_payload_tokens": 14387,
+      "model_gateway_requests": 40,
+      "review_completed": true,
+      "synthetic_roles": [
+        "coordinator"
+      ],
+      "live_roles": [
+        "coordinator-smoke",
+        "driver",
+        "review-provider",
+        "triage"
+      ],
+      "configured_model_roles": [
+        "coordinator startup probe",
+        "implementation",
+        "replacement verification",
+        "review",
+        "triage",
+        "repair if requested"
+      ],
+      "error": null,
+      "controls": [
+        {
+          "coordinator_smoke_provider": "claude",
+          "before_admission": true,
+          "gateway_query": true
+        },
+        {
+          "coordinator_smoke_provider": "codex",
+          "before_admission": true,
+          "gateway_query": true
+        },
+        {
+          "alternate_route_probe": "passed"
+        },
+        {
+          "task": "A",
+          "action": "cancel",
+          "policy_version": 2
+        },
+        {
+          "task": "B",
+          "action": "cancel",
+          "policy_version": 3
+        },
+        {
+          "idle_connections": 64,
+          "authenticated_clients": 8,
+          "authenticated_requests": 37,
+          "load_failures": [],
+          "maximum_query_seconds": 0.7497395519167185,
+          "cancel_seconds": 0.17459573177620769,
+          "cancel_deadline_seconds": 20
+        },
+        {
+          "task": "A",
+          "action": "resume",
+          "policy_version": 4
+        },
+        {
+          "task": "B",
+          "action": "resume",
+          "policy_version": 5
+        },
+        {
+          "surviving_session_reconnected": true,
+          "replacement_overlap_denied": true,
+          "stale_credential_denied": true
+        }
+      ],
+      "validation_evidence": {
+        "by_task": {
+          "A": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          },
+          "B": {
+            "claude": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            },
+            "codex": {
+              "assignments": 1,
+              "supplied_logs": 0,
+              "retrieved_logs": 0,
+              "status": "not_exercised"
+            }
+          }
+        },
+        "all_selected_reviewers_present": true,
+        "all_supplied_logs_retrieved": true,
+        "all_selected_providers_exercised": false
+      }
+    }
+  ],
+  "limitations": [
+    "One bounded fixture, no statistical reliability or tail-latency claim.",
+    "Task coordination is deterministic. Separate selected-provider coordinator startup probes query the gateway before admission.",
+    "Provider usage includes native CLI context and tools; missing counters remain unknown.",
+    "Private homes do not imply cold provider caches; execution order can affect costs.",
+    "This fixture does not exercise GitHub publication or tracker closure.",
+    "This pair passed while the separate installed unit suite still had a coordinator storage-reserve regression. It is not final release acceptance.",
+    "Full and automatic modes used the same requested aliases and profiles, but Claude reported different observed model sets. Codex resolved model metadata and cost remain unknown.",
+    "Gateway payload tokens decreased from 79480 to 14387 in this pair. Native usage and cost were mixed and automatic mode took longer; no overall cost or performance improvement is established.",
+    "No validation logs were supplied to these initial clean reviews. Both selected reviewers were present, but log retrieval was not exercised by this pair. Separate controller evidence tests cover supplied-log access."
+  ]
+}

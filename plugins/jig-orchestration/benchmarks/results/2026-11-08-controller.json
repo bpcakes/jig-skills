@@ -1,0 +1,122 @@
+{
+  "returncode": 0,
+  "wall_seconds": 79.13980180118233,
+  "options": [
+    "--scope",
+    "working-tree",
+    "--commit-mode",
+    "none",
+    "--max-rounds",
+    "2",
+    "--reviewers",
+    "claude,codex",
+    "--claude-model",
+    "opus",
+    "--claude-effort",
+    "xhigh",
+    "--claude-launcher",
+    "none",
+    "--codex-runtime",
+    "cli",
+    "--codex-model",
+    "gpt-6-astra",
+    "--codex-effort",
+    "xhigh",
+    "--codex-launcher",
+    "none"
+  ],
+  "synthetic_roles": [
+    "triage",
+    "repair"
+  ],
+  "live_roles": [
+    "review"
+  ],
+  "scope": "disposable export-value fixture, not the final source panel",
+  "phase": "CONVERGED",
+  "providerCoverage": {
+    "requested": [
+      "claude",
+      "codex"
+    ],
+    "completed": [
+      "claude",
+      "codex"
+    ],
+    "unavailable": [],
+    "failures": {}
+  },
+  "source": "module.exports = 2;\n",
+  "jobs": [
+    {
+      "role": "reviewer",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "executor",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "executor",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "reviewer",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "executor",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "reviewer",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "executor",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "reviewer",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    },
+    {
+      "role": "reviewer",
+      "status": "exited",
+      "returncode": 0,
+      "local_settled": true
+    }
+  ],
+  "artifacts": 8,
+  "finished_at": "2026-11-08T14:46:53.562423+00:00",
+  "runtime_sha256": "948377bd0176323a32598400c424b16c37add547a9f4710adb66aa5b00f12442",
+  "runtime_hash_scope": [
+    "plugins/jig-orchestration/skills/herdr-orchestrate/scripts",
+    "plugins/jig-review/skills"
+  ],
+  "report_errors": [
+    "Malformed review result: does not match the assignment result schema."
+  ],
+  "limitations": [
+    "One disposable workflow with live selected reviewers and synthetic triage/repair.",
+    "No provider billing comparison measured.",
+    "No multi-task restart, cancellation or host publication concurrency claim.",
+    "Not the independent panel review of the implementation."
+  ]
+}

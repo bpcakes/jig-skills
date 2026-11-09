@@ -9,7 +9,9 @@ import { ReviewEvidence } from "../skills/panel-review/scripts/review-evidence.m
 import { buildReviewPrompt, collectReviewContext, resolveScope } from "../skills/panel-review/scripts/review-context.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 import { runClaudeReview } from "../skills/panel-review/scripts/claude-review.mjs";
+import { runCodexReview } from "../skills/panel-review/scripts/codex-review.mjs";
 import { runCursorReview } from "../skills/panel-review/scripts/cursor-review.mjs";
+import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
@@ -101,6 +103,74 @@ test("aggregate overflow preserves distinct base/index/current versions and untr
     assert.ok(text.split("\n").every((line) => line.length < 2000));
   }
 });
+
+for (const kind of ["individual", "aggregate"]) {
+  test(`untracked ${kind} preview overflow is fully paged without staging`, async (t) => {
+    const repo = repository(t);
+    writeFileSync(path.join(repo, "base.txt"), "base\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-qm", "base");
+    const content = kind === "individual" ? "ž".repeat(35_000) : "u".repeat(60_000);
+    const names = kind === "individual" ? ["large.txt"] : ["one.txt", "two.txt", "three.txt"];
+    for (const name of names) writeFileSync(path.join(repo, name), `${content}\nEND-${name}\n`);
+    const initial = await captureFingerprint({ cwd: repo, scope: "working-tree" });
+    const scope = await resolveScope({ cwd: repo, scope: "working-tree" });
+    assert.equal((await collectReviewContext(scope)).incomplete, true);
+
+    const evidence = store(t);
+    const context = await collectReviewContext(scope, { evidence });
+    assert.equal(context.incomplete, false);
+    assert.ok(context.evidence.pageCount > 1);
+    assert.ok(Buffer.byteLength(buildReviewPrompt(scope, context)) < 8192);
+    const captured = sectionText(evidence, "Working tree untracked files");
+    for (const name of names) assert.ok(captured.includes(`${content}\nEND-${name}\n`));
+    assert.doesNotMatch(captured, /omitted=/);
+    const manifest = JSON.parse(readFileSync(context.evidence.manifestPath));
+    assert.equal(manifest.captureComplete, true);
+    assert.equal((await captureFingerprint({ cwd: repo, scope: "working-tree" })).fingerprint, initial.fingerprint);
+    assert.equal(git(repo, "diff", "--cached", "--name-only"), "");
+  });
+}
+
+test("paged untracked capture still refuses evidence beyond its shared budget", async (t) => {
+  const repo = repository(t);
+  writeFileSync(path.join(repo, "base.txt"), "base\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-qm", "base");
+  writeFileSync(path.join(repo, "source.txt"), "x".repeat(2048));
+  const scope = await resolveScope({ cwd: repo, scope: "working-tree" });
+  const evidence = store(t, { maxBytes: 1024 });
+  const context = await collectReviewContext(scope, { evidence });
+  assert.equal(context.incomplete, true);
+  assert.ok(evidence.bytes <= 1024);
+  assert.throws(() => evidence.structuredReport('{"complete":true}', context),
+    (error) => error.code === "INCOMPLETE_REVIEW_EVIDENCE");
+});
+
+for (const [provider, runner] of [["claude", runClaudeReview], ["codex", runCodexReview], ["cursor", runCursorReview]]) {
+  test(`${provider} refuses incomplete structured evidence before invoking the provider`, async (t) => {
+    const repo = repository(t);
+    writeFileSync(path.join(repo, "base.txt"), "base\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-qm", "base");
+    writeFileSync(path.join(repo, "binary.bin"), Buffer.from([1, 0, 2]));
+    const initial = await captureFingerprint({ cwd: repo, scope: "working-tree" });
+    const helper = mkdtempSync(path.join(os.tmpdir(), "jig-incomplete-evidence-"));
+    t.after(() => rmSync(helper, { recursive: true, force: true }));
+    const marker = path.join(helper, "invoked");
+    const fake = path.join(helper, "provider.mjs");
+    writeFileSync(fake, `#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(marker)}, 'invoked');\n`);
+    chmodSync(fake, 0o755);
+    let parsed = false;
+    await assert.rejects(runner({ cwd: repo, scope: "working-tree", model: "test-model", effort: "high",
+      launcher: "none", fileAccess: "restricted", timeoutMs: 10_000, expectedFingerprint: initial.fingerprint }, {
+      [`${provider}Bin`]: fake,
+      parseReport: () => { parsed = true; return {}; },
+    }), (error) => error.code === "INCOMPLETE_REVIEW_EVIDENCE" && failureResult(error).retryable === false);
+    assert.equal(existsSync(marker), false);
+    assert.equal(parsed, false);
+  });
+}
 
 test("branch evidence uses the pinned merge-base and preserves deleted content", async (t) => {
   const repo = repository(t);

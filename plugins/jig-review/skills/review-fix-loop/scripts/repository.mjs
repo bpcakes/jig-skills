@@ -6,13 +6,16 @@ import { contentHash, copyBlob, hash, json, readBlob, readJSON, storeBlob, store
 import { sameFile, streamFile, withRegularFile } from "./file-content.mjs";
 import { captureFingerprint } from "../../panel-review/scripts/scope-fingerprint.mjs";
 import { isExcludedPath } from "../../panel-review/scripts/review-exclusions.mjs";
-import { gitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
+import { localGitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
+import { gitStdio } from "../../panel-review/scripts/git-lease.mjs";
+import { nonExecutingGitArgs } from "../../panel-review/scripts/git-no-exec.mjs";
 import { assertCompleteFingerprint } from "../../panel-review/scripts/adapter-runtime.mjs";
 import { assertStorage, DEFAULT_STORAGE, storageLimit } from "./storage-budget.mjs";
 
 export function git(cwd, ...args) {
-  const env = gitEnvironment();
-  const execute = argv => execFileSync("git", argv, { cwd, env, maxBuffer: 64 * 1024 * 1024, timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
+  const env = localGitEnvironment();
+  const options = { cwd, env, maxBuffer: 64 * 1024 * 1024, timeout: 30000, stdio: gitStdio(["ignore", "pipe", "pipe"]) };
+  const execute = argv => execFileSync("git", nonExecutingGitArgs(argv, options), options);
   let command = 0;
   while (args[command] === "-c") command += 2;
   if (args[command] !== "diff") return execute(args);
@@ -239,9 +242,10 @@ export function pathsDifferFromIndex(root, paths, repositories) {
     // and skip-worktree flags. Honor Git's text conversion without writing or
     // refreshing the index, and keep executable filters unsupported.
     assertSupportedAttributes(directory, [relative], {});
-    const actual = withRegularFile(path.join(directory, relative), fd => execFileSync("git", ["hash-object", `--path=${relative}`, "--stdin"], {
-      cwd: directory, env: gitEnvironment(), timeout: 30000, stdio: [fd, "pipe", "pipe"],
-    }).toString("utf8").trim());
+    const actual = withRegularFile(path.join(directory, relative), fd => {
+      const options = { cwd: directory, env: localGitEnvironment(), timeout: 30000, stdio: gitStdio([fd, "pipe", "pipe"]) };
+      return execFileSync("git", nonExecutingGitArgs(["hash-object", `--path=${relative}`, "--stdin"], options), options).toString("utf8").trim();
+    });
     return actual !== oid;
   });
 }
@@ -287,9 +291,11 @@ function comparisonContext(directory, store, configuration) {
 }
 function assertSupportedAttributes(directory, paths, configuration) {
   if (!paths.length) return;
-  const values = names(execFileSync("git", ["check-attr", "-z", "--stdin", "filter", "diff"], {
-    cwd: directory, env: gitEnvironment(), input: `${paths.join("\0")}\0`, maxBuffer: 64 * 1024 * 1024, timeout: 30000,
-  }));
+  const options = {
+    cwd: directory, env: localGitEnvironment(), input: `${paths.join("\0")}\0`, maxBuffer: 64 * 1024 * 1024, timeout: 30000,
+    stdio: gitStdio(["pipe", "pipe", "pipe"]),
+  };
+  const values = names(execFileSync("git", nonExecutingGitArgs(["check-attr", "-z", "--stdin", "filter", "diff"], options), options));
   for (let i = 0; i < values.length; i += 3) {
     const [name, attribute, value] = values.slice(i, i + 3);
     if (["unspecified", "unset", "set"].includes(value)) continue;

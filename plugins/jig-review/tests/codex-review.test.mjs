@@ -29,6 +29,7 @@ import {
 import { mcpOverrides, mcpServers, pinnedOverrides, prepareHome, reviewerConfig } from "../skills/panel-review/scripts/codex-session.mjs";
 import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
+import { CHANNEL_SETTINGS, verifiedReadOnlyChannel } from "../skills/panel-review/scripts/orchestration-channel.mjs";
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -204,6 +205,29 @@ test("Codex arguments select an ephemeral read-only session that keeps the home'
   const defaults = buildCodexArgs({ model: null, effort: null }, { repoRoot: "/repo" }, "/tmp/last.txt");
   assert.ok(!defaults.includes("--model"));
   assert.ok(!defaults.some((arg) => arg.startsWith("model_reasoning_effort")));
+});
+
+test("a verified orchestration review uses the named read-only profile without conflicting legacy flags", () => {
+  const args = buildCodexArgs({ model: "gpt-6-astra", effort: "xhigh", orchestrationChannel: true },
+    { repoRoot: "/repo" }, "/tmp/report");
+  assert.ok(!args.includes("--sandbox"));
+  for (const setting of CHANNEL_SETTINGS) assert.ok(args.includes(setting), setting);
+  assert.ok(args.includes('permissions.herdr_review={extends=":read-only",network={enabled=true}}'));
+  assert.ok(args.includes('approval_policy="never"'));
+  assert.ok(args.includes('model_reasoning_effort="xhigh"'));
+  assert.equal(args[args.indexOf("--model") + 1], "gpt-6-astra");
+  assert.ok(!args.join(" ").includes("danger-full-access"));
+});
+
+test("partial or caller-invented channel bindings cannot select orchestration permissions", async (t) => {
+  assert.equal(await verifiedReadOnlyChannel("/repo", { environment: {} }), false);
+  await assert.rejects(verifiedReadOnlyChannel("/repo", { environment: { ORCHESTRATION_TASK: "A" } }), /complete fixed channel binding/);
+  const f = await adapterFixture(t);
+  withEnvironment(t, { ORCHESTRATION_SOCKET: null, ORCHESTRATION_CREDENTIAL_FILE: null, ORCHESTRATION_TASK: null });
+  const fakeCodex = fakeProvider(f.scratch, "fake-codex.mjs");
+  await runCodexReview({ ...f.parse(), orchestrationChannel: true }, { codexBin: fakeCodex });
+  assert.ok(f.captured().argv.includes("--sandbox"));
+  assert.ok(!f.captured().argv.includes(CHANNEL_SETTINGS[0]));
 });
 
 test("the final message file is the report", (t) => {
@@ -502,6 +526,25 @@ test("the reviewer's configuration keeps model settings and drops project trust 
     "[mcp_servers.mail]", 'command = "mail"', "[projects_extra]", "kept = true"]) assert.ok(kept.split("\n").includes(line), line);
   for (const fragment of ["trust_level", "instructions_file", "/under/table", "/array", "repo.with.dots"]) assert.ok(!kept.includes(fragment), fragment);
   assert.equal(reviewerConfig('model = "m"\r\n[projects."/r"]\r\ntrust_level = "trusted"\r\n'), 'model = "m"\r');
+});
+
+test("channel reviews discard inherited permission policies while retaining selected model settings", () => {
+  const config = [
+    'model = "gpt-6-astra"', 'model_reasoning_effort = "xhigh"',
+    'sandbox_mode = "danger-full-access"', 'default_permissions = "custom"',
+    'permissions.custom.network.enabled = true',
+    '[permissions.herdr_review]', 'extends = ":workspace"',
+    '[permissions.herdr_review.filesystem]', '"/" = "write"',
+    '[sandbox_workspace_write]', 'network_access = true', 'writable_roots = ["/"]',
+    '[profiles.work]', 'model = "gpt-6-sol"', 'sandbox_mode = "read-only"',
+    '[mcp_servers.mail]', 'command = "mail"', '',
+  ].join('\n');
+  assert.equal(reviewerConfig(config), config, "standalone configuration behavior remains unchanged");
+  const filtered = reviewerConfig(config, { orchestrationChannel: true });
+  assert.equal(filtered, [
+    'model = "gpt-6-astra"', 'model_reasoning_effort = "xhigh"',
+    '[profiles.work]', 'model = "gpt-6-sol"', '[mcp_servers.mail]', 'command = "mail"', '',
+  ].join('\n'));
 });
 
 test("MCP servers are disabled by name, and names a dotted key cannot address fail closed", () => {

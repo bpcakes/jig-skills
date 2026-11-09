@@ -1,0 +1,563 @@
+{
+  "measured_on": "2026-11-08",
+  "kind": "development diagnostics, not a paired comparison",
+  "attempts": [
+    {
+      "attempt": "first",
+      "status": "failed",
+      "cause": "A relay reused a global action ID; cleanup then masked the primary error and removed usage before a surviving writer settled.",
+      "seconds": null,
+      "provider_usage": null,
+      "measurement_limit": "Native usage was not retained; missing usage is unknown."
+    },
+    {
+      "attempt": "second",
+      "status": "failed",
+      "cause": "The reconnect oracle demanded an exposed disconnect although automatic retry reconnected the same session successfully.",
+      "seconds": 127.13200607802719,
+      "source_acceptance": {},
+      "review_completed": false,
+      "provider_usage": {
+        "claude": {
+          "model_invocations": 1,
+          "successful_exits": 1,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 13643,
+              "known_subtotal": 13643,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 240015,
+              "known_subtotal": 240015,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 38,
+              "known_subtotal": 38,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 6635,
+              "known_subtotal": 6635,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.289999,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        },
+        "codex": {
+          "model_invocations": 1,
+          "successful_exits": 1,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 155904,
+              "known_subtotal": 155904,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 162903,
+              "known_subtotal": 162903,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 1792,
+              "known_subtotal": 1792,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 120,
+              "known_subtotal": 120,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        }
+      },
+      "harness_sha256": "aebc929e7426e192d52e9173fe2261574f0a317fbd688004a05130ec945308d7",
+      "runner_sha256": "21fc38e9a652ae2705082ab99c93041b7b65b53d5776716a201d74c6f698a92d",
+      "runtime_manifest_sha256": "18458c53a7b1a4a8697ab5a8283fa3567c53d5423e30d52c589954dadd7a77f7"
+    },
+    {
+      "attempt": "third",
+      "status": "failed",
+      "cause": "The harness revoked a session but did not explicitly cancel that task before waiting for its writer to settle.",
+      "seconds": 147.24980296520516,
+      "source_acceptance": {},
+      "review_completed": false,
+      "provider_usage": {
+        "claude": {
+          "model_invocations": 1,
+          "successful_exits": 1,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 13199,
+              "known_subtotal": 13199,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 224166,
+              "known_subtotal": 224166,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 38,
+              "known_subtotal": 38,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 6381,
+              "known_subtotal": 6381,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.2781972,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        },
+        "codex": {
+          "model_invocations": 1,
+          "successful_exits": 1,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 148864,
+              "known_subtotal": 148864,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 165272,
+              "known_subtotal": 165272,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 2204,
+              "known_subtotal": 2204,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 374,
+              "known_subtotal": 374,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        }
+      },
+      "harness_sha256": "0633b0dd604c4dbae1941824c9d0b538a5d58730f674949c5946676028a3decf",
+      "runner_sha256": "9b21a3156dce3abfb184c0e0718b3b1f1ad28148d4e14b3d42e1b5ed2d0ac921",
+      "runtime_manifest_sha256": "3005fa2dbf9a4d5f7abe858f36513e8ebdd1f2ad75d078fb8ffbd5aac02fda46"
+    },
+    {
+      "attempt": "fourth",
+      "status": "failed",
+      "cause": "The harness treated a temporary state_busy admission refusal as a terminal workflow failure.",
+      "seconds": 48.040355707053095,
+      "source_acceptance": {},
+      "review_completed": false,
+      "provider_usage": {
+        "codex": {
+          "model_invocations": 1,
+          "successful_exits": 0,
+          "missing_usage_invocations": 1,
+          "native_counters": {},
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        },
+        "claude": {
+          "model_invocations": 1,
+          "successful_exits": 0,
+          "missing_usage_invocations": 1,
+          "native_counters": {},
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        }
+      },
+      "harness_sha256": "db0c0f5d9dfae991fa0bd1602e77f8115fffdbf3acaec564c639faa9d7121e3c",
+      "runner_sha256": "9b21a3156dce3abfb184c0e0718b3b1f1ad28148d4e14b3d42e1b5ed2d0ac921",
+      "runtime_manifest_sha256": "3005fa2dbf9a4d5f7abe858f36513e8ebdd1f2ad75d078fb8ffbd5aac02fda46"
+    },
+    {
+      "attempt": "fifth",
+      "status": "failed",
+      "cause": "Triage requested adapter namespace attestation from a nested CLI sandbox and reported recovery; the usage collector then failed on a local CLI JSON array.",
+      "seconds": null,
+      "source_acceptance": {
+        "before_review": true
+      },
+      "review_completed": false,
+      "provider_usage": {
+        "claude": {
+          "model_invocations": 2,
+          "successful_exits": 2,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 30489,
+              "known_subtotal": 30489,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 319860,
+              "known_subtotal": 319860,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 44,
+              "known_subtotal": 44,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 10360,
+              "known_subtotal": 10360,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.51526,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        },
+        "codex": {
+          "model_invocations": 4,
+          "successful_exits": 4,
+          "missing_usage_invocations": 1,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": null,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": null,
+              "known_subtotal": 423936,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": null,
+              "known_subtotal": 487599,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": null,
+              "known_subtotal": 8101,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": null,
+              "known_subtotal": 2031,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        }
+      },
+      "measurement_limit": "One completed Codex reviewer has unknown usage after collector failure; known totals were reconstructed from retained output."
+    },
+    {
+      "attempt": "sixth",
+      "status": "failed",
+      "cause": "Initial triage was given an empty validationPending list before required validation ran, and requested recovery for the scheduled checks.",
+      "seconds": 288.2873650533147,
+      "source_acceptance": {
+        "before_review": true
+      },
+      "review_completed": false,
+      "provider_usage": {
+        "codex": {
+          "model_invocations": 4,
+          "successful_exits": 4,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 360704,
+              "known_subtotal": 360704,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 388250,
+              "known_subtotal": 388250,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 8282,
+              "known_subtotal": 8282,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 2354,
+              "known_subtotal": 2354,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        },
+        "claude": {
+          "model_invocations": 2,
+          "successful_exits": 2,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 29360,
+              "known_subtotal": 29360,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 221963,
+              "known_subtotal": 221963,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 30,
+              "known_subtotal": 30,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 7835,
+              "known_subtotal": 7835,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.4360926,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        }
+      },
+      "harness_sha256": "491cccdd3c9ed4f18c17c5c27231deb13c45b51791ba0db597924d5c9acfd401",
+      "runner_sha256": "0978473d6047f0995bfed0cb28ea4a8dc5d202c5acaff9231463cc4ec606b930",
+      "runtime_manifest_sha256": "6ce1248f2c54b2cbe5952bde23caeabb2fd5d322e6d709484399b360f0549489"
+    },
+    {
+      "attempt": "seventh",
+      "status": "failed",
+      "cause": "Both live controllers converged and both source checks passed, but the harness required task B initial reviewers to retrieve logs that had not been supplied before validation ran. The result remains a failed historical attempt.",
+      "seconds": 667.3110284078866,
+      "source_acceptance": {
+        "before_review": true,
+        "after_review": true
+      },
+      "review_completed": true,
+      "validation_log_reads": {
+        "A": {
+          "claude": 1,
+          "codex": 1
+        },
+        "B": {
+          "claude": 0,
+          "codex": 0
+        }
+      },
+      "controls": [
+        {
+          "alternate_route_probe": "passed"
+        },
+        {
+          "task": "A",
+          "action": "cancel",
+          "policy_version": 2
+        },
+        {
+          "task": "B",
+          "action": "cancel",
+          "policy_version": 3
+        },
+        {
+          "idle_connections": 64,
+          "cancel_seconds": 0.3034744616597891,
+          "cancel_deadline_seconds": 20
+        },
+        {
+          "task": "A",
+          "action": "resume",
+          "policy_version": 4
+        },
+        {
+          "task": "B",
+          "action": "resume",
+          "policy_version": 5
+        },
+        {
+          "restart_old_pid": 28337,
+          "restart_new_pid": 119359,
+          "surviving_session_reconnected": true,
+          "replacement_overlap_denied": true,
+          "stale_credential_denied": true
+        }
+      ],
+      "provider_usage": {
+        "codex": {
+          "model_invocations": 9,
+          "successful_exits": 9,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_write_input_tokens": {
+              "total": 0,
+              "known_subtotal": 0,
+              "missing_records": 0
+            },
+            "cached_input_tokens": {
+              "total": 631168,
+              "known_subtotal": 631168,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 776029,
+              "known_subtotal": 776029,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 18793,
+              "known_subtotal": 18793,
+              "missing_records": 0
+            },
+            "reasoning_output_tokens": {
+              "total": 5908,
+              "known_subtotal": 5908,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": null,
+          "observed_models": [],
+          "requested_models": [
+            "gpt-6-astra"
+          ],
+          "cli_versions": [
+            "codex-cli 0.167.0"
+          ]
+        },
+        "claude": {
+          "model_invocations": 4,
+          "successful_exits": 4,
+          "missing_usage_invocations": 0,
+          "native_counters": {
+            "cache_creation_input_tokens": {
+              "total": 37059,
+              "known_subtotal": 37059,
+              "missing_records": 0
+            },
+            "cache_read_input_tokens": {
+              "total": 247860,
+              "known_subtotal": 247860,
+              "missing_records": 0
+            },
+            "input_tokens": {
+              "total": 46,
+              "known_subtotal": 46,
+              "missing_records": 0
+            },
+            "output_tokens": {
+              "total": 13304,
+              "known_subtotal": 13304,
+              "missing_records": 0
+            }
+          },
+          "reported_cost_usd": 0.6123080000000001,
+          "observed_models": [
+            "claude-opus-5-5"
+          ],
+          "requested_models": [
+            "opus"
+          ],
+          "cli_versions": [
+            "2.1.319 (Claude Code)"
+          ]
+        }
+      },
+      "harness_sha256": "b71a19d9228ea2ee48170b82d34c1d69f68a46060f2a36ff39882a48ae1aa90b",
+      "runner_sha256": "0978473d6047f0995bfed0cb28ea4a8dc5d202c5acaff9231463cc4ec606b930",
+      "runtime_manifest_sha256": "3c52b12947da33bfd96810c4274600cbd08a14ec855d4e5a9834548c5ef07af9"
+    }
+  ],
+  "limitations": [
+    "All seven attempts failed the complete workflow gate; partial successes do not change that outcome.",
+    "The coordinator was deterministic. Other executed model roles used the selected native providers.",
+    "Provider-native counters are separate; cache subsets are not added to input totals. Missing counters and costs remain unknown.",
+    "These attempts used changing harness/runtime revisions and cannot estimate a full-versus-auto effect."
+  ]
+}

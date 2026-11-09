@@ -329,6 +329,18 @@ test("review evidence cannot close its nonce delimiter", () => {
   assert.match(prompt, /<repository-context-fixed-nonce>/);
 });
 
+test("verified channel instructions permit the fixed client without contradictory shell restrictions", () => {
+  const scope = { label: "test scope" }, context = { text: "source", incomplete: false, limitations: [] };
+  const standalone = buildReviewPrompt(scope, context);
+  assert.match(standalone, /Do not invoke skills, other agents, external reviewers, or shell commands/);
+  for (const tooling of ["claude", "codex"]) {
+    const prompt = buildReviewPrompt(scope, context, { tooling, orchestrationChannel: true, orchestrationTask: "task-A" });
+    assert.match(prompt, /communicate\.py --json '<JSON request>'/);
+    assert.match(prompt, /Use task_id "task-A"/);
+    assert.doesNotMatch(prompt, /external reviewers, or shell commands/);
+  }
+});
+
 test("working-tree context supports an unborn HEAD", async (t) => {
   const repo = mkdtempSync(path.join(os.tmpdir(), "jig-review-unborn-"));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
