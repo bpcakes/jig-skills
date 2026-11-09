@@ -1510,8 +1510,18 @@ os.execv({executable!r}, [{executable!r}, *args])
                     else:
                         process.stdin.write(request)
                         process.stdin.close()
-                    with self.assertRaises(subprocess.TimeoutExpired):
+                    try:
                         process.wait(timeout=0.3)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    else:
+                        if parent:
+                            parent.settimeout(2)
+                            response = parent.recv(65536)
+                        else:
+                            response = process.stdout.read()
+                        self.fail(f"watch exited before response disconnect: status={process.returncode}, "
+                                  f"response={response!r}, stderr={process.stderr.read()!r}")
                     if parent:
                         parent.close()
                     else:

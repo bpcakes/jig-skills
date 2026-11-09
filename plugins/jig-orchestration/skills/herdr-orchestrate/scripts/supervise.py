@@ -7,7 +7,7 @@ records authority and evidence; adapters and drivers perform external gates.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -828,7 +828,7 @@ def response_disconnect(response_fd):
           and stat.S_IFMT(os.fstat(response_fd).st_mode) in {stat.S_IFIFO, stat.S_IFSOCK}):
         # macOS poll reports socket HUP for a request-side half-close. The
         # kqueue write filter reports EOF only when the response reader leaves.
-        with select.kqueue() as queue:
+        with closing(select.kqueue()) as queue:
             queue.control([select.kevent(response_fd, filter=select.KQ_FILTER_WRITE,
                                          flags=select.KQ_EV_ADD)], 0, 0)
             yield lambda: any(event.flags & (select.KQ_EV_EOF | select.KQ_EV_ERROR)
