@@ -47,6 +47,11 @@ class RuntimeTests(unittest.TestCase):
     def response(self, status="idle", identity=None):
         return {"agent": {**(identity or self.identity), "agent_status": status}}
 
+    def test_response_disconnect_supports_redirected_output(self):
+        with (self.root / "response.json").open("wb") as output:
+            with runtime.response_disconnect(output.fileno()) as disconnected:
+                self.assertFalse(disconnected())
+
     def schedule(self, **fields):
         return runtime.scheduler_patch(self.run, lambda _: fields)
 

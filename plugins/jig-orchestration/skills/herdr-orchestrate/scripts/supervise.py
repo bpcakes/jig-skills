@@ -19,6 +19,7 @@ import select
 import shutil
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -818,27 +819,41 @@ def apply_request(run_dir, request, caller="coordinator", *, session=None):
     return result
 
 
+@contextmanager
+def response_disconnect(response_fd):
+    """Observe the response reader without mistaking request EOF for closure."""
+    if response_fd is None:
+        yield lambda: False
+    elif (hasattr(select, "kqueue")
+          and stat.S_IFMT(os.fstat(response_fd).st_mode) in {stat.S_IFIFO, stat.S_IFSOCK}):
+        # macOS poll reports socket HUP for a request-side half-close. The
+        # kqueue write filter reports EOF only when the response reader leaves.
+        with select.kqueue() as queue:
+            queue.control([select.kevent(response_fd, filter=select.KQ_FILTER_WRITE,
+                                         flags=select.KQ_EV_ADD)], 0, 0)
+            yield lambda: any(event.flags & (select.KQ_EV_EOF | select.KQ_EV_ERROR)
+                              for event in queue.control([], 1, 0))
+    else:
+        response = select.poll()
+        response.register(response_fd, select.POLLERR | select.POLLHUP | select.POLLNVAL)
+        yield lambda: bool(response.poll(0))
+
+
 def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator", until_change=False, response_fd=None):
     if (not isinstance(after, str) or type(timeout_seconds) not in {int, float}
             or not 0 <= timeout_seconds <= 30 or type(until_change) is not bool):
         raise RuntimeErrorDetail("invalid_input", "watch requires a change token and a timeout between zero and 30 seconds")
     deadline = time.monotonic() + timeout_seconds
-    response = None
-    if until_change and response_fd is not None:
-        # Request EOF is the JSON delimiter, not a disconnect. Watch the
-        # response side: pipe readers and SSH's no-PTY socket can disappear
-        # without sending this process a signal or changing task state.
-        response = select.poll()
-        response.register(response_fd, select.POLLERR | select.POLLHUP | select.POLLNVAL)
-    while True:
-        if response is not None and response.poll(0):
-            raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
-        view = task_view(run_dir, task_id, caller)
-        changed = view["change_token"] != after
-        remaining = deadline - time.monotonic()
-        if changed or remaining <= 0 and not until_change:
-            return {**view, "changed": changed}
-        time.sleep(0.25 if until_change else min(0.25, remaining))
+    with response_disconnect(response_fd if until_change else None) as disconnected:
+        while True:
+            if disconnected():
+                raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
+            view = task_view(run_dir, task_id, caller)
+            changed = view["change_token"] != after
+            remaining = deadline - time.monotonic()
+            if changed or remaining <= 0 and not until_change:
+                return {**view, "changed": changed}
+            time.sleep(0.25 if until_change else min(0.25, remaining))
 
 
 def serve(run_dir, caller, request, response_fd=None):

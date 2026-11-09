@@ -84,6 +84,8 @@ class WorkflowEvidenceTests(unittest.TestCase):
 
 class ControllerRetentionTests(unittest.TestCase):
     def fixture(self, root):
+        # Match admitted runtime paths, including macOS's /var -> /private/var.
+        root = root.resolve()
         run, workspace = root / "run", root / "workspace"
         execution = run / "execution-test"
         execution.mkdir(parents=True)
@@ -156,6 +158,7 @@ class ControllerRetentionTests(unittest.TestCase):
             self.assertIsNone(manifest["files"][1]["retained"])
             self.assertEqual(manifest["output"], receipt["output"])
 
+    @unittest.skipUnless(sys.platform == "linux", "enforced controller requires Linux process identity")
     def test_actual_timeout_receipt_retains_known_assignments_after_cleanup(self):
         import test_channel  # Select the configured installed runtime.
         import review_controller
@@ -196,7 +199,7 @@ class ControllerRetentionTests(unittest.TestCase):
 
     def test_missing_controller_directory_is_explicit(self):
         with tempfile.TemporaryDirectory() as retained, tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             manifest = evidence.retain_controller({"outcome": "unknown", "receipt": {
                 "controller_directory": str(root / "workspace/.git/jig/review-fix/absent")}},
                 run=root / "run", workspace=root / "workspace", destination=Path(retained) / "diagnostics")

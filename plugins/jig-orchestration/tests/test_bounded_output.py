@@ -118,6 +118,7 @@ os.write(1, b'bounded')
         self.assertIn("sync failure", logs.records["stdout"]["error"])
         self.assertEqual(self.out.read_bytes(), b"complete response\n")
 
+    @unittest.skipUnless(sys.platform == "linux", "enforced controller requires Linux process identity")
     def test_controller_rejects_a_valid_json_prefix_when_output_was_truncated(self):
         program = self.root / "controller.py"
         program.write_text("import sys,time; sys.stdout.write('{\"preflight\":true}'+' '*2097152); sys.stdout.flush(); time.sleep(.1)")
