@@ -87,7 +87,9 @@ class ChannelFixture:
             context.__exit__(None, None, None)
 
     def call(self, token, **payload):
-        return communicate.request(payload, socket_path=str(self.run / "endpoint/gateway.sock"), credential=token, timeout=5)
+        # Functional checks use the documented client deadlines. Deadline tests
+        # supply their own limits; slow durable writes need not finish in 5s.
+        return communicate.request(payload, socket_path=str(self.run / "endpoint/gateway.sock"), credential=token)
 
 
 class ChannelTests(ChannelFixture, unittest.TestCase):
