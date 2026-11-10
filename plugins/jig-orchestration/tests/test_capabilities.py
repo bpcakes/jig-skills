@@ -162,6 +162,64 @@ class CapabilityTests(ChannelFixture, unittest.TestCase):
             Engine.apply(self.run, self.admission(worktree=str(alias)))
         Engine.apply(self.run, self.admission())
 
+    def test_checkout_waits_for_atomic_controller_claim_publication(self):
+        workspace = self.trees / "A"
+        claims = workspace / ".git/jig/review-fix/fixture/assignments/repair"
+        claims.mkdir(parents=True)
+        temporary, claimed = claims / "claim-temporary", claims / "claimed"
+        temporary.write_text('{"owner":"fixture"}')
+        claimed.hardlink_to(temporary)
+        original = Path.lstat
+        observed = []
+        def finish_publication(path, *args, **kwargs):
+            info = original(path, *args, **kwargs)
+            if path in (temporary, claimed) and info.st_nlink == 2:
+                observed.append(path)
+                temporary.unlink()
+            return info
+        with patch.object(Path, "lstat", finish_publication):
+            self.assertEqual(capabilities.checkout(Engine.read(self.run), "local", workspace, self.run), str(workspace))
+        self.assertTrue(observed)
+        self.assertEqual(claimed.stat().st_nlink, 1)
+        self.assertEqual(json.loads(claimed.read_text()), {"owner": "fixture"})
+
+    def test_checkout_rescans_after_atomic_temporary_disappears(self):
+        workspace = self.trees / "A"
+        temporary = workspace / ".git/claim-temporary"
+        temporary.write_text("published elsewhere")
+        original = Path.lstat
+        def finish_publication(path, *args, **kwargs):
+            if path == temporary:
+                temporary.unlink()
+            return original(path, *args, **kwargs)
+        with patch.object(Path, "lstat", finish_publication):
+            self.assertEqual(capabilities.checkout(Engine.read(self.run), "local", workspace, self.run), str(workspace))
+        self.assertFalse(temporary.exists())
+
+    def test_checkout_rechecks_earlier_metadata_after_claim_settles(self):
+        workspace = self.trees / "A"
+        claims = workspace / ".git/jig"
+        claims.mkdir()
+        temporary, claimed = claims / "claim-temporary", claims / "claimed"
+        temporary.write_text("claim")
+        claimed.hardlink_to(temporary)
+        original = Path.lstat
+        def finish_publication(path, *args, **kwargs):
+            info = original(path, *args, **kwargs)
+            if path in (temporary, claimed) and info.st_nlink == 2:
+                temporary.unlink()
+                (workspace / ".git/late-alias").symlink_to(workspace / ".git/HEAD")
+            return info
+        with patch.object(Path, "lstat", finish_publication), self.assertRaisesRegex(StateError, "symlinks"):
+            capabilities.checkout(Engine.read(self.run), "local", workspace, self.run)
+
+    def test_checkout_rejects_symlinks_without_waiting_for_them_to_disappear(self):
+        workspace = self.trees / "A"
+        (workspace / ".git/alias").symlink_to(workspace / ".git/HEAD")
+        with patch.object(capabilities.time, "sleep", side_effect=AssertionError("waited on a symlink")):
+            with self.assertRaisesRegex(StateError, "symlinks"):
+                capabilities.checkout(Engine.read(self.run), "local", workspace, self.run)
+
     def test_long_lived_host_cannot_certify_edited_runtime_files(self):
         runtime = self.root / "runtime-during-change"
         runtime.mkdir()
