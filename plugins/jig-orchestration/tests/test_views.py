@@ -1,6 +1,7 @@
 """Compact responses preserve blockers and retain immutable full evidence."""
 import json
 import unittest
+from unittest.mock import patch
 
 from test_channel import ChannelFixture, channel, Engine
 
@@ -45,6 +46,22 @@ class ViewTests(ChannelFixture, unittest.TestCase):
         replacement = channel.issue(self.run, "driver-A")
         self.assertEqual(self.call(self.token, **first["detail_request"])["error"], "session_revoked")
         self.assertEqual(self.call(replacement, **first["detail_request"])["error"], "snapshot")
+
+    def test_expired_snapshot_points_back_to_a_fresh_query(self):
+        import views
+        issued = []
+        with patch.object(views, "SNAPSHOT_LIMIT", 2):
+            for index in range(4):
+                version = Engine.read(self.run)["tasks"]["A"]["version"]
+                self.call(self.token, op="observe", task_id="A", action_id="change-" + str(index), expected_policy=1,
+                          expected_task=version, fields={"next_action": "step " + str(index)}, evidence=self.proof)
+                issued.append(self.call(self.token, op="query", task_id="A", mode="compact"))
+        self.assertEqual(len(views.retained(self.run / "view-snapshots")), 2)
+        expired = self.call(self.token, **issued[0]["detail_request"], path=["task", "next_action"])
+        self.assertEqual(expired["error"], "snapshot")
+        self.assertIn("query again", expired["message"])
+        current = self.call(self.token, **issued[-1]["detail_request"], path=["task", "next_action"])
+        self.assertEqual(json.loads(current["content"]), "step 3")
 
     def test_paginated_snapshot_reconstructs_full_view(self):
         compact = self.call(self.token, op="query", task_id="A", mode="compact")

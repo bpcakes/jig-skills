@@ -25,7 +25,8 @@ import sys
 import time
 import uuid
 
-from state import Engine, StateError, canonical, host_roles, scheduler_deadline, scheduler_identity, scheduler_seconds, task_complete
+from state import (Engine, StateError, StateWatch, canonical, host_roles, scheduler_deadline, scheduler_identity,
+                   scheduler_seconds, task_complete)
 
 MAX_INPUT = 1024 * 1024
 MAX_JSON_DEPTH = 64
@@ -880,12 +881,14 @@ def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator"
             or not 0 <= timeout_seconds <= 30 or type(until_change) is not bool):
         raise RuntimeErrorDetail("invalid_input", "watch requires a change token and a timeout between zero and 30 seconds")
     deadline = time.monotonic() + timeout_seconds
+    written = StateWatch(run_dir)
     with response_disconnect(response_fd if until_change else None) as disconnected:
         while True:
             if disconnected():
                 raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
-            view = task_view(run_dir, task_id, caller)
-            changed = view["change_token"] != after
+            if written.due():  # Otherwise nothing was written and the last view still holds.
+                view = task_view(run_dir, task_id, caller)
+                changed = view["change_token"] != after
             remaining = deadline - time.monotonic()
             if changed or remaining <= 0 and not until_change:
                 return {**view, "changed": changed}
@@ -918,12 +921,14 @@ def watch_inbox(run_dir, caller, request, response_fd=None):
         raise RuntimeErrorDetail("invalid_input", "An inbox watch takes only op, task_id, view:\"inbox\", after (an inbox "
                                  "cursor), timeout_seconds between zero and 30, and until_change")
     deadline = time.monotonic() + timeout_seconds
+    written = StateWatch(run_dir)
     with response_disconnect(response_fd if until_change else None) as disconnected:
         while True:
             if disconnected():
                 raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
-            view, changed, after = with_transport(run_dir, caller, lambda session: inbox_wait(
-                run_dir, session, caller, request.get("task_id"), after))
+            if written.due():  # Otherwise nothing was written: same page, same session.
+                view, changed, after = with_transport(run_dir, caller, lambda session: inbox_wait(
+                    run_dir, session, caller, request.get("task_id"), after))
             remaining = deadline - time.monotonic()
             if changed or remaining <= 0 and not until_change:
                 return {**view, "changed": changed}
@@ -952,14 +957,14 @@ def channel_request(run_dir, caller, request, response_fd=None):
 
 
 def serve(run_dir, caller, request, response_fd=None):
-    if Engine.read(run_dir)["config"].get("communication", {}).get("mode") == "enforced":
+    state = Engine.read(run_dir)
+    if state["config"].get("communication", {}).get("mode") == "enforced":
         raise RuntimeErrorDetail("authenticated_channel_required", "Enforced agents must use the authenticated gateway")
     # Pin caller and run-dir in an authorized_keys forced command, with restrict.
     if os.environ.get("SSH_ORIGINAL_COMMAND", ""):
         raise RuntimeErrorDetail("remote_command_rejected", "Send JSON on stdin without a remote command")
     if "caller" in request:
         raise RuntimeErrorDetail("caller_spoof", "Caller identity comes from the forced SSH command")
-    state = Engine.read(run_dir)
     actor = state["config"].get("actors", {}).get(caller)
     if caller == "coordinator" or not actor or actor.get("helper_route") is not True:
         raise RuntimeErrorDetail("unknown_caller", "Only a registered restricted worker route may serve requests")

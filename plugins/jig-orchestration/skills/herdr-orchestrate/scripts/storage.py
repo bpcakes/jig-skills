@@ -2,6 +2,7 @@
 
 Reservations precede writes and survive crashes. Unused reservations are not
 silently reclaimed: doing so could forget uncertain writes or replay receipts.
+The view snapshot cache is the one exception; see `retain`.
 This is not a filesystem quota for job homes, process logs or source checkouts.
 """
 from __future__ import annotations
@@ -107,6 +108,32 @@ def reserve(run_dir, files, *, recovery=False, control=False):
         allocate(updated, files, recovery=recovery, control=control)
         if updated != ledger:
             write_atomic(path / LEDGER, updated)
+    finally:
+        os.close(fd)
+
+
+def retain(run_dir, directory, names):
+    """Return the reservations of a cache directory's entries that are gone.
+
+    Only view snapshots qualify: each repeats retained state and is rebuilt
+    by the next query. Receipts, artifacts and contracts are never reclaimed.
+    The caller holds that cache's lock, so no write is in flight under it.
+    """
+    require(directory == "view-snapshots", "storage", "only the view snapshot cache is reclaimable")
+    path = Path(run_dir)
+    if not (path / LEDGER).exists():
+        return
+    fd = os.open(path / "protocol-storage.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        private(path / "protocol-storage.lock")
+        lock_file(fd)
+        ledger = read_json(path / LEDGER)
+        require(ledger.get("schema") == 1, "incompatible", "unsupported retained protocol storage schema")
+        kept = {directory + "/" + name for name in names}
+        files = {name: size for name, size in ledger["files"].items()
+                 if not name.startswith(directory + "/") or name in kept}
+        if files != ledger["files"]:
+            write_atomic(path / LEDGER, {**ledger, "files": files})
     finally:
         os.close(fd)
 

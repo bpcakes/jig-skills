@@ -1,28 +1,76 @@
-"""Bounded task views with immutable, session-scoped full evidence snapshots."""
+"""Bounded task views, each with an immutable, session-scoped snapshot of its full detail.
+
+Snapshots are a bounded cache, not retained evidence: see `save_snapshot`.
+"""
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 
 import channel
-from state import Engine, canonical, private, read_json, require, unresolved_finding, write_atomic
+from state import (Engine, StateError, canonical, lock_file, private, read_json, require, unresolved_finding,
+                   write_atomic)
 
 MAX_VIEW_BYTES = 32768
+SNAPSHOT_LIMIT = 64
 
 
 def complete(full):
     return {**full, "view_schema": 1, "mode": "full", "complete": True}
 
 
+def retained(directory):
+    """Snapshot files, least recently issued first."""
+    with os.scandir(directory) as entries:
+        found = [(entry.stat(follow_symlinks=False).st_mtime_ns, entry.name) for entry in entries
+                 if not entry.name.startswith(".") and entry.is_file(follow_symlinks=False)]
+    return [name for _, name in sorted(found)]
+
+
+def evict(run_dir, directory, keep):
+    """Drop all but the `keep` most recent snapshots and return their storage."""
+    names = retained(directory)
+    expired = names[:max(0, len(names) - keep)]
+    for name in expired:
+        key = hashlib.sha256(name.encode()).hexdigest()
+        for leftover in (name, ".write-lock-" + key, ".write-pending-" + key):  # write_atomic's companions
+            (directory / leftover).unlink(missing_ok=True)
+    if expired:
+        from storage import retain
+        retain(run_dir, directory.name, names[len(expired):])
+    return len(expired)
+
+
 def save_snapshot(run_dir, identifier, snapshot):
+    """Keep a compact view's full detail readable for a while.
+
+    A snapshot repeats state that is retained elsewhere, and the next query
+    issues a current one, so this is a cache: the most recent SNAPSHOT_LIMIT
+    survive, and older ones give way sooner when retained storage is short.
+    """
     directory = Path(run_dir) / "view-snapshots"
     directory.mkdir(mode=0o700, exist_ok=True)
     private(directory, directory=True)
     path = directory / identifier
-    if not path.exists():
-        write_atomic(path, snapshot)
+    # One writer at a time: eviction must never race the write it makes room for.
+    guard = os.open(directory / ".cache-lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        lock_file(guard)
+        if path.exists():
+            os.utime(path)  # Issued again, so it is recent again.
+            return
+        evict(run_dir, directory, SNAPSHOT_LIMIT - 1)
+        while True:
+            try:
+                return write_atomic(path, snapshot)
+            except StateError as error:
+                if error.code != "storage_capacity" or not evict(run_dir, directory, len(retained(directory)) - 1):
+                    raise
+    finally:
+        os.close(guard)
 
 
 def overview(run_dir, session, full, *, adaptive=True):
@@ -149,8 +197,10 @@ def read(run_dir, session, request):
     identifier = request.get("snapshot")
     require(isinstance(identifier, str) and re.fullmatch(r"[0-9a-f]{64}", identifier), "snapshot", "invalid view snapshot")
     path = Path(run_dir) / "view-snapshots" / identifier
-    require(path.is_file(), "snapshot", "view snapshot is unavailable")
-    snapshot = read_json(path)
+    try:
+        snapshot = read_json(path)
+    except FileNotFoundError:
+        raise StateError("snapshot", "view snapshot is no longer retained; query again for a current one") from None
     require(snapshot["session_id"] == session.id and snapshot["task_id"] == task_id
             and hashlib.sha256(canonical(snapshot).encode()).hexdigest() == identifier,
             "snapshot", "view snapshot is unavailable or its integrity check failed")

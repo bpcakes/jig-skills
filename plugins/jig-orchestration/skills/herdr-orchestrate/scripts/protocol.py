@@ -234,7 +234,9 @@ def transition(state, request, principal, session, run_dir):
         current["messages"][message["id"]] = message
         notice = event(state, task_id, "message", [actor, recipient], origin=actor, message_id=message["id"])
         message["sequence"] = notice["sequence"]
-        return {"message_id": message["id"], "cursor": cursor(current, notice["sequence"]), "accepted": True}
+        # Its position, not a cursor: continuing an inbox from here would step
+        # over whatever the sender has not read yet.
+        return {"message_id": message["id"], "sequence": notice["sequence"], "accepted": True}
     if operation == "ack":
         sequence = position(current, request.get("cursor"))
         key = canonical([actor, task_id])
@@ -255,11 +257,15 @@ def inbox_wait(run_dir, session, actor, task_id, after):
     """One poll for a waiter: (page, changed, cursor to poll from next).
 
     The waiter's own messages and actions are history, not news. Step past
-    them so they neither end the wait nor hide a later page.
+    every page of them now, so they neither end the wait nor hide a later
+    page: the waiter does not read again until something is written.
     """
-    view = read(run_dir, session, {"op": "inbox", "task_id": task_id, "after": after})
-    changed = bool(view["resync_required"] or any(item.get("origin") != actor for item in view["events"]))
-    return view, changed, after if changed else view["cursor"]
+    while True:
+        view = read(run_dir, session, {"op": "inbox", "task_id": task_id, "after": after})
+        changed = bool(view["resync_required"] or any(item.get("origin") != actor for item in view["events"]))
+        if changed or not view["more"]:
+            return view, changed, after if changed else view["cursor"]
+        after = view["cursor"]
 
 
 def open_questions(current, actor, task_id):

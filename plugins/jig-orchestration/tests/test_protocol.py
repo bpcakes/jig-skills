@@ -42,6 +42,16 @@ class ProtocolTests(ChannelFixture, unittest.TestCase):
                            recipient="driver-B", kind="update", body="secret")
         self.assertEqual(denied["error"], "scope")
 
+    def test_sending_returns_no_cursor_that_would_skip_unread_messages(self):
+        assigned = self.call(self.coordinator, op="message", task_id="A", action_id="assignment",
+                             recipient="driver-A", kind="assignment", body="Implement the parser")
+        asked = self.message()  # Sent before this driver has read its assignment.
+        self.assertNotIn("cursor", asked)
+        self.assertGreater(asked["sequence"], assigned["sequence"])
+        unread = self.call(self.drivers["A"], op="inbox", task_id="A")
+        self.assertEqual([(item["message_id"], item["sequence"]) for item in unread["events"]],
+                         [("assignment", assigned["sequence"]), ("question", asked["sequence"])])
+
     def test_acknowledgement_survives_restart_without_claiming_effect(self):
         result = self.message()
         self.assertTrue(result.get("accepted"), result)

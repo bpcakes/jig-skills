@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 import unittest
+import unittest.mock
 
 import test_channel
 from test_channel import ChannelFixture, Engine, StateError, channel, communicate
@@ -274,6 +275,53 @@ channel.apply(sys.argv[2], channel.parse_credential(sys.argv[3]),
         with self.assertRaisesRegex(StateError, "capacity"):
             save_snapshot(self.run, "another", {"large": "y" * 200000})
         self.assertFalse((self.run / "view-snapshots/another").exists())
+
+    def snapshot(self, index, size=2000):
+        import views
+        body = {"session_id": "fixture", "task_id": "A", "view": {"index": index, "detail": "x" * size}}
+        identifier = hashlib.sha256(canonical(body).encode()).hexdigest()
+        views.save_snapshot(self.run, identifier, body)
+        return identifier
+
+    def snapshots(self):
+        import views
+        reserved = {name.split("/", 1)[1] for name in read_json(self.run / storage.LEDGER)["files"]
+                    if name.startswith("view-snapshots/")}
+        stored = set(views.retained(self.run / "view-snapshots"))
+        self.assertEqual(reserved, stored)  # Storage is returned with each expired snapshot.
+        self.assertEqual(len(list((self.run / "view-snapshots").glob(".write-lock-*"))), len(stored))
+        return stored
+
+    def test_snapshot_cache_keeps_the_most_recent_and_returns_the_rest(self):
+        import views
+        issued = []
+        with unittest.mock.patch.object(views, "SNAPSHOT_LIMIT", 3):
+            for index in range(6):
+                issued.append(self.snapshot(index))
+                # Issue times a clock tick apart, whatever this filesystem's resolution.
+                stamp = time.time_ns() - (60 - index) * 10 ** 9
+                os.utime(self.run / "view-snapshots" / issued[-1], ns=(stamp, stamp))
+            self.assertEqual(self.snapshots(), set(issued[3:]))
+            before = storage.status(self.run)
+            self.assertEqual(self.snapshot(3), issued[3])  # Issued again: recent again, and no new storage.
+            self.assertEqual(storage.status(self.run), before)
+            issued.append(self.snapshot(6))
+            self.assertEqual(self.snapshots(), {issued[3], issued[5], issued[6]})
+        with self.assertRaisesRegex(StateError, "only the view snapshot cache"):
+            storage.retain(self.run, "actions", [])
+
+    def test_snapshot_makes_room_from_older_snapshots_when_storage_is_short(self):
+        older = [self.snapshot(index, 20000) for index in range(2)]
+        for index, identifier in enumerate(older):
+            stamp = time.time_ns() - (60 - index) * 10 ** 9
+            os.utime(self.run / "view-snapshots" / identifier, ns=(stamp, stamp))
+        self.fill()
+        newest = self.snapshot(2, 30000)  # Larger than what the artifacts left free.
+        stored = self.snapshots()
+        self.assertIn(newest, stored)
+        self.assertNotIn(older[0], stored)
+        status = storage.status(self.run)
+        self.assertLessEqual(status["reserved_bytes"], status["limits"]["max_bytes"] - status["limits"]["reserved_bytes"])
 
     def test_repeated_process_crashes_leave_one_reserved_temporary_then_recover(self):
         content = "recover this immutable artifact" * 100

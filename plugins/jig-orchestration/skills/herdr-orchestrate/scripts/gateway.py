@@ -20,7 +20,7 @@ import time
 
 import channel
 from communicate import MAX_FRAME, PROTOCOL
-from state import Engine, StateError, canonical, lock_timeout, private, require
+from state import Engine, StateError, StateWatch, canonical, lock_timeout, private, require
 
 
 def query(run_dir, session, task_id=None, mode="auto"):
@@ -127,13 +127,17 @@ def handle(run_dir, session, payload, connection=None, stopping=None):
                 and 0 <= timeout <= 30 and type(payload.get("until_change", False)) is bool,
                 "invalid", "watch needs a token and a bounded timeout")
         deadline = time.monotonic() + timeout
+        inbox = payload.get("view", "task") == "inbox"
+        require(inbox or payload.get("view", "task") == "task", "invalid", "watch view must be task or inbox")
+        written = StateWatch(run_dir)
         while True:
-            if payload.get("view", "task") == "inbox":
-                view, changed, after = inbox_wait(run_dir, session, actor, task_id, after)
-            else:
-                require(payload.get("view", "task") == "task", "invalid", "watch view must be task or inbox")
-                view = query(run_dir, session, task_id)
-                changed = view["change_token"] != after
+            # Until something is written, the last view and session check still hold.
+            if written.due():
+                if inbox:
+                    view, changed, after = inbox_wait(run_dir, session, actor, task_id, after)
+                else:
+                    view = query(run_dir, session, task_id)
+                    changed = view["change_token"] != after
             if changed or time.monotonic() >= deadline:
                 return {**view, "changed": changed}
             if stopping is not None and stopping.is_set():
@@ -327,15 +331,21 @@ class Server:
             self.release_worker(key)
 
     def maintain(self):
-        from jobs import cancel_requested
+        from jobs import cancel_requested, namespace
+        written, running = StateWatch(self.run_dir), []
         while not self.stopping.is_set():
             try:
-                with lock_timeout(.5):
-                    identities = self.identities(Engine.read(self.run_dir))
+                # A pass reads the whole state under the run lock. Repeat it after
+                # a write, or once a job last seen running is no longer verifiably live.
+                if written.due() or any(type(namespace(job)) is not int for job in running):
+                    with lock_timeout(.5):
+                        state = cancel_requested(self.run_dir)
+                    running = [job for job in state.get("communication", {}).get("jobs", {}).values()
+                               if not job.get("local_settled")]
                     with self.lock:
-                        self.known_sessions = identities
-                    cancel_requested(self.run_dir)
+                        self.known_sessions = self.identities(state)
             except StateError as error:
+                written.retry()
                 if error.code != "state_busy":
                     self.maintenance_failure = error
                     self.stopping.set()

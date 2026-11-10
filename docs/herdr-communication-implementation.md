@@ -1493,3 +1493,80 @@ Herdr pane or an LLM coordinator, including whether a sandboxed agent can report
 the `agent_session` that binding requires; the unnamed host-operator role;
 polling reads under one state lock; permanent view snapshots and receipts; and
 the cursor returned by `message`, which lies past the sender's own event.
+
+## Waiting cost, snapshot cache and coordinator scope — 2026-11-10
+
+Code follow-up to the open items listed above. Nothing here changes the
+acceptance contract or closes P1–P3.
+
+**Waiting.** The gateway's `watch`, the restricted route's task and inbox
+waits and the gateway's maintenance pass each took the run lock and parsed the
+whole state on every poll: twenty times a second per gateway waiter, four per
+restricted waiter (twice each for an inbox wait) and eight for maintenance.
+`state.StateWatch` now samples the state file's modification time, inode and
+size, and whether an interrupted transaction is present, before a read. A
+waiter reads again only when they differ. `write_bytes_atomic` gives each
+replacement state file a modification time later than its predecessor's, so two
+writes inside one clock tick cannot look alike. A waiter still reads once per
+`StateWatch.interval` (5 s), which bounds the delay on a filesystem that cannot
+store such times. Maintenance keeps the unsettled jobs from its last pass and
+repeats the pass after a write or once one of them is no longer verifiably
+live. Skipping unchanged polls exposed that the inbox wait had relied on its
+next poll to step past a second page of the waiter's own history;
+`protocol.inbox_wait` now steps past every such page in one call.
+
+Measured once per tree on a shared machine, with the fixture run holding 700
+retained 2 KiB messages (1.6 MB of state) and three idle inbox waiters on the
+gateway. Over four seconds the merged commit parsed the state 260 times and
+used 1.10 CPU-seconds; this tree parsed it 17 times and used 0.12. Across 12
+pause/resume requests with the same waiters, median control latency fell from
+195 ms to 150 ms and the maximum from 327 ms to 268 ms, and waiter `busy`
+errors went from three to none. Without waiters the two trees measured 98 ms
+and 109 ms, which is noise.
+
+**View snapshots.** A compact query of a changed large view wrote a full
+snapshot that was never removed, and its reservation was never returned.
+Snapshots repeat state that is retained elsewhere, so `views.save_snapshot` now
+treats them as a cache: the run keeps its 64 most recently issued, a snapshot
+issued again counts as recent, and a query that meets `storage_capacity`
+expires older snapshots before it gives up. `storage.retain` returns the
+reservations of expired entries and accepts no other directory; receipts,
+artifacts and contracts are still never reclaimed. A detail read of an expired
+snapshot answers `snapshot` with "query again for a current one".
+
+**Coordinator scope.** `channel.check` now gives a coordinator session the
+run's configured scope at the time of each request instead of the scope
+recorded when it was issued. Only host administration changes that scope, and
+a coordinator has no task checkout, so a task added or split after launch no
+longer costs a relaunch and the coordinator's context. Driver, executor and
+reviewer sessions keep their launch scope. The unconfined transport therefore
+no longer replaces the coordinator's record on a scope change.
+
+**Smaller fixes.** `message` reports the message's inbox `sequence` and no
+longer a `cursor`: that cursor lay past the sender's own event, and continuing
+from it skipped an unread assignment. `jobs.namespace` treats
+`ProcessLookupError` from a process that exits while its namespace link is
+followed as gone, which was the one error in the untouched export's suite.
+`supervise.serve` reads the state once instead of twice.
+
+Verification on Linux with Bubblewrap available, source tree, deterministic
+providers and a fake Herdr throughout. Twelve tests are new:
+`tests/test_waiting.py` (six) counts state parses during idle waits and
+maintenance, requires waits to end on a write with the periodic read disabled,
+and settles a job that exits while the state is quiet; the others cover the
+snapshot bound and its storage, an expired detail read, a coordinator
+admitting and messaging a task added after its launch, the `message` result
+and the namespace race. Each fix was reverted in a scratch copy of the scripts
+and its tests failed there. The orchestration suite ran 520 tests without a
+failure; the installation, orchestration-fixture and host-parity checks passed
+(57), as did the evaluation fixture suites (164) and `git diff --check`. The
+intermittent controller failure recorded above did not recur in this run, and
+`assert_completed` now reports the retained logs that the earlier failure's
+cleanup deleted. No live pane, model or installation was exercised or changed.
+
+Still open: every `ack` leaves a permanent receipt, and `test_storage.py` uses
+acknowledgements as its receipt filler, so changing that needs those tests
+reworked; message bodies are kept in both the state and their receipts; a
+gateway request parses the state three times and a mutation several more; the
+host-operator role is unnamed; and nothing has run against a real pane or an
+LLM coordinator.

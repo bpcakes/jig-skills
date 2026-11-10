@@ -436,7 +436,10 @@ evidence. A compact response provides a `detail_request` for its immutable
 snapshot. Add `path:["task","findings"]` and optionally
 `select:"unresolved_findings"` to retrieve only unresolved entries with their
 original indices. Detail and artifact reads return character offsets and
-`complete`; fetch remaining pages when required.
+`complete`; fetch remaining pages when required. Snapshots are a cache of state
+that is retained elsewhere: the run keeps its 64 most recently issued, fewer
+when retained storage is short. A `snapshot` error on a detail read means that
+one expired; query again and use the new `detail_request`.
 
 The coordinator's query without a task is bounded too. Its aggregate blocker
 counts cover all scoped tasks, including those omitted from the preview; use
@@ -474,7 +477,7 @@ discarded prefix of the original output.
 
 | Operation | Use |
 | --- | --- |
-| `message` | Stable `action_id`, task, recipient, kind (`question`, `reply`, `update`, `assignment`) and a body up to 4,096 UTF-8 bytes. Only the coordinator assigns work. Replies name `reply_to`; larger evidence uses scoped artifacts. |
+| `message` | Stable `action_id`, task, recipient, kind (`question`, `reply`, `update`, `assignment`) and a body up to 4,096 UTF-8 bytes. Only the coordinator assigns work. Replies name `reply_to`; larger evidence uses scoped artifacts. The result reports the message's inbox `sequence`. That is not a cursor: wait from an inbox page's cursor, or unread items before the message are skipped. |
 | `inbox` / `message_read` | Read bounded events or a retained message. Missed messages and visible artifact notices remain paginated and discoverable after notification eviction. A cursor gap also requires refreshing task state. |
 | `ack` | Persist retrieval acknowledgement for the task/cursor. Once nothing addressed to the caller lies beyond its acknowledged cursors, its pending [hint](#hints) is retired. This never records the requested effect as complete. |
 | `watch` | Wait on a task change token or `view:"inbox"` cursor. An inbox wait ends on another party's event, never the caller's own. `until_change:true` quietly reconnects between bounded waits. |
@@ -497,7 +500,10 @@ questions remain discoverable without knowing their message IDs in advance.
 Acknowledgement records retrieval, not successful application of a request.
 
 Coordinator, driver and executor permissions differ even though the transport is
-the same. Requests cannot select a caller or expand task scope. Session
+the same. Requests cannot select a caller or expand task scope. A coordinator
+session covers the run's configured scope as trusted host administration changes
+it, so a task added or split after its launch needs no coordinator relaunch.
+Driver, executor and reviewer sessions keep the tasks they were launched for. Session
 replacement fences reads, writes, waits and provider tunnels; it does not prove
 that the old job or its external effect settled. Source leases and registered
 job reconciliation govern replacement writers. Inspection of an issued adapter
@@ -659,15 +665,19 @@ physically full or failed filesystem, or unlimited control requests.
 `storage_capacity` stops the attempted new write; it does not discard old
 receipts, unresolved questions or immutable evidence. Existing receipts and
 artifacts remain readable and exact action replay requires no new reservation.
-Queries requiring a new snapshot may report capacity exhaustion. Retrying a
+A query that needs a new snapshot first expires older snapshots, and reports
+capacity exhaustion only when that still leaves too little room. Retrying a
 mutation uses the same action ID; changing IDs creates new retained receipts.
 Do not delete the ledger or old receipts to recover space: reservations survive
-crashes conservatively and are not silently reclaimed. An older enforced run
+crashes conservatively and are not silently reclaimed. View snapshots are the
+one exception: their storage is returned as they expire. An older enforced run
 without its budget must resume on its compatible runtime, not acquire an
 invented empty ledger.
 
 Gateway handshakes do not wait on authoritative state. Authentication and job
 reconciliation run outside the accept loop, with finite state-lock waits.
+A `watch` and the gateway's own maintenance read state again only after it is
+written, so idle waiters neither hold the state lock nor slow a control request.
 `state_busy` reports contention without claiming success; retry the same action
 ID or cursor. Runtime hashing and Git metadata scans for admission, handoff and
 job start run outside the global state lock while retaining the checkout lease.

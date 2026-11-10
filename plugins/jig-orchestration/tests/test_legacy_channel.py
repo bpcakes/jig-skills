@@ -97,28 +97,35 @@ class LegacyChannelTests(LegacyChannelFixture, unittest.TestCase):
         self.assertEqual(self.active("coordinator"), first)
         bound = endpoint("coordinator", "p1")
         self.assertEqual(notify.bind(self.run, "coordinator", None, bound), first)
+        self.driver("A", op="inbox", task_id="A")
+        driver, pane = self.active("driver-A"), endpoint("driver-A", "p3")
+        self.assertEqual(notify.bind(self.run, "driver-A", None, pane), driver)
         state = Engine.read(self.run)
         actors = {**state["config"]["actors"],
-                  "driver-C": {"role": "driver", "task_ids": ["C"], "host": "local", "helper_route": True}}
+                  "driver-A": {**state["config"]["actors"]["driver-A"], "task_ids": ["A", "C"]}}
         Engine.apply(self.run, {"op": "configure", "action_id": "add-C", "expected_policy": state["policy_version"],
                                 "fields": {"scope": {"task_ids": ["A", "B", "C"]}, "actors": actors},
                                 "evidence": self.proof})
-        self.refused("wrong_task", self.driver, "C", op="inbox", task_id="C")
+        self.refused("wrong_task", self.driver, "A", op="inbox", task_id="C")
         (self.trees / "C").mkdir()
-        Engine.apply(self.run, {"op": "admit", "action_id": "admit-C", "task_id": "C", "driver": "driver-C",
+        Engine.apply(self.run, {"op": "admit", "action_id": "admit-C", "task_id": "C", "driver": "driver-A",
                                 "expected_policy": Engine.read(self.run)["policy_version"], "host": "local",
                                 "identity": {"native_id": "native-C"}, "worktree": str(self.trees / "C"),
                                 "branch": "task/C", "claim": {**self.proof, "authority": "fixture", "task_id": "C",
-                                                             "owner": "driver-C", "confirmed": True, "ready": True,
+                                                             "owner": "driver-A", "confirmed": True, "ready": True,
                                                              "unpublished": False}})
         # A split or scope change needs no relaunch: the next request covers it.
-        self.coordinator(op="message", task_id="C", action_id="assign-C", recipient="driver-C", kind="assignment",
+        self.coordinator(op="message", task_id="C", action_id="assign-C", recipient="driver-A", kind="assignment",
                          body="Implement the consumer")
-        self.assertEqual(self.driver("C", op="inbox", task_id="C")["events"][-1]["message"]["kind"], "assignment")
+        self.assertEqual(self.driver("A", op="inbox", task_id="C")["events"][-1]["message"]["kind"], "assignment")
         sessions = Engine.read(self.run)["communication"]["sessions"]
-        current = self.active("coordinator")
-        self.assertNotEqual(current, first)
-        self.assertEqual((sessions[current]["task_ids"], sessions[current]["endpoint"]), (["A", "B", "C"], bound))
+        # The coordinator's record always covers the run, so it keeps its
+        # binding and any wait in flight. A driver's record names its tasks:
+        # it is replaced, and the pane binding moves with the same agent.
+        self.assertEqual((self.active("coordinator"), sessions[first]["endpoint"]), (first, bound))
+        current = self.active("driver-A")
+        self.assertNotEqual(current, driver)
+        self.assertEqual((sessions[current]["task_ids"], sessions[current]["endpoint"]), (["A", "C"], pane))
 
     def test_enforced_run_refuses_both_unconfined_transports(self):
         with locked(self.run) as path:

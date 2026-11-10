@@ -175,13 +175,12 @@ def transport_session(run_dir, actor):
     state = Engine.read(run_dir)
     require(state["config"].get("communication", {}).get("mode") != "enforced",
             "authenticated_channel_required", "enforced agents must use the authenticated gateway")
-    if actor == "coordinator":
-        tasks, requested = list(state["config"]["scope"]["task_ids"]), None
-    else:
+    requested = None  # A coordinator's record always covers the run's current scope.
+    if actor != "coordinator":
         binding = state["config"].get("actors", {}).get(actor) or {}
-        tasks = requested = [task_id for task_id in binding.get("task_ids", [])
-                             if state["tasks"].get(task_id, {}).get("driver") == actor]
-        require(tasks, "wrong_task", "no admitted task is assigned to this caller")
+        requested = [task_id for task_id in binding.get("task_ids", [])
+                     if state["tasks"].get(task_id, {}).get("driver") == actor]
+        require(requested, "wrong_task", "no admitted task is assigned to this caller")
     communication = state.get("communication", {})
     identifier = communication.get("active", {}).get(actor)
     previous = communication.get("sessions", {}).get(identifier, {})
@@ -196,7 +195,7 @@ def transport_session(run_dir, actor):
             if error.code != "session_revoked":
                 raise
         else:
-            if previous["task_ids"] == tasks:
+            if requested is None or previous["task_ids"] == requested:
                 return session
             endpoint = previous.get("endpoint")  # Same agent; only its task scope moved.
     return parse_credential(issue(run_dir, actor, task_ids=requested, endpoint=endpoint))
@@ -245,7 +244,13 @@ def check(state, session, *, operation=None, task_id=None):
     if record.get("parent_session") is not None:
         for bound_id in record["task_ids"]:
             authorizing_session(state, record["parent_session"], bound_id)
-    scope = set(record["task_ids"]) & set(state["config"]["scope"]["task_ids"])
+    configured = state["config"]["scope"]["task_ids"]
+    if record["role"] == "coordinator":
+        # The coordinator answers for the whole run, and only host
+        # administration changes that scope. A task added or split after its
+        # launch reaches it without a relaunch that would discard its context.
+        record = {**record, "task_ids": list(configured)}
+    scope = set(record["task_ids"]) & set(configured)
     if task_id is not None:
         require(isinstance(task_id, str), "invalid", "task id must be a string")
         require(task_id in scope, "wrong_task", "session cannot access this task")

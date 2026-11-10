@@ -99,8 +99,8 @@ def namespace(job):
         require(type(pid) is int and pid > 1 and type(expected) is int, "job", "invalid namespace record")
         try:
             actual = Path(f"/proc/{pid}/ns/pid").stat().st_ino
-        except FileNotFoundError:
-            return None
+        except (FileNotFoundError, ProcessLookupError):
+            return None  # The process can also exit between the lookup and following its link.
         return pid if actual == expected else None
     except (FileNotFoundError, json.JSONDecodeError):
         return False
@@ -325,9 +325,12 @@ def launch(directory, spec, argv, *, mounts=None, environment=None,
 
 
 def cancel_requested(run_dir):
-    """Host reconciler; a signal request alone never records settlement."""
+    """Host reconciler; a signal request alone never records settlement.
+
+    Returns the state it reconciled, so a periodic caller needs no second read.
+    """
     with locked(run_dir) as path:
-        state = read_json(path / "state.json")
+        reconciled = state = read_json(path / "state.json")
         targets = []
         changed = False
         for job in records(state).values():
@@ -380,3 +383,4 @@ def cancel_requested(run_dir):
                 pass
             finally:
                 os.close(fd)
+    return reconciled
