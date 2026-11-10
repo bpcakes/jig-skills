@@ -131,13 +131,8 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
             require(communication["active"].get(actor) == transport_from.id
                     and previous.get("digest") == transport_from.digest,
                     "session_revoked", "transport session changed during renewal")
-            retained = set(previous.get("bindings", {})) & set(bindings)
-            if (not previous.get("revoked") and previous.get("role") == role
-                    and (role == "coordinator" or retained)
-                    and all(previous["bindings"][task_id] == bindings[task_id] for task_id in retained)):
-                # Dropping a task does not replace the agent driving the rest.
-                # Compare retained bindings inside the issuance transaction.
-                endpoint = previous.get("endpoint")
+            if previous.get("role") == role:
+                endpoint = transport_endpoint(state, transport_from.id)
         generation = communication["generations"].get(actor, 0) + 1
         communication["generations"][actor] = generation
         communication["active"][actor] = session_id
@@ -175,6 +170,31 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
                 write_atomic(contract_path, review_contract)
         write_atomic(path / "state.json", state)
     return credential
+
+
+def transport_endpoint(state, session_id):
+    """An unconfined endpoint survives only unchanged retained authority.
+
+    Use the same rule before renewal and during delivery: dropping one task
+    need not replace the agent, but a changed binding for a retained task does.
+    """
+    communication = state.get("communication", {})
+    record = communication.get("sessions", {}).get(session_id, {})
+    actor = record.get("actor")
+    if record.get("revoked") or communication.get("active", {}).get(actor) != session_id:
+        return None
+    if record.get("role") == "coordinator" and actor == "coordinator":
+        return record.get("endpoint")
+    route = state["config"].get("actors", {}).get(actor, {})
+    if record.get("role") != "driver" or route.get("helper_route") is not True:
+        return None
+    scope = set(route.get("task_ids", [])) & set(state["config"]["scope"]["task_ids"])
+    retained = {task_id: task_binding(task) for task_id in scope
+                if (task := state["tasks"].get(task_id)) is not None and task["driver"] == actor
+                and task_id in record.get("bindings", {})}
+    if retained and all(record["bindings"][task_id] == binding for task_id, binding in retained.items()):
+        return record.get("endpoint")
+    return None
 
 
 def transport_session(run_dir, actor):

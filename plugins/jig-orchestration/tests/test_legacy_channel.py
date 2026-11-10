@@ -4,6 +4,8 @@ The local command is the coordinator and the forced-command route names each
 driver. Herdr is always a fake; no live pane is contacted.
 """
 from datetime import datetime, timedelta, timezone
+from contextlib import redirect_stdout
+import io
 import json
 import os
 import subprocess
@@ -89,8 +91,41 @@ class LegacyChannelTests(LegacyChannelFixture, unittest.TestCase):
     def test_retained_task_identity_change_still_drops_the_driver_endpoint(self):
         self.bind_shared_driver()
         self.handoff("A", "driver-A")  # Same actor, different native task identity.
+        with patch.object(supervise, "herdr_call", side_effect=AssertionError("prompted the replaced driver")):
+            self.assertEqual(notify.deliver(self.run, actor="driver-A")["status"], "unbound")
+        self.assertFalse(Engine.read(self.run)["communication"]["wakes"]["driver-A"]["delivered"])
         self.driver("A", op="inbox", task_id="A")
         self.assertIsNone(notify.target(Engine.read(self.run), "driver-A"))
+
+    def test_handoff_can_hint_remaining_tasks_before_transport_renewal(self):
+        pane = self.bind_shared_driver()
+        previous = self.active("driver-A")
+        self.handoff("B", "driver-B")
+        self.coordinator(op="message", task_id="A", action_id="continue-A", recipient="driver-A",
+                         kind="assignment", body="Continue A")
+        prompts = []
+        def herdr(target, argv):
+            if argv[1] == "prompt":
+                prompts.append(target["agent"]["pane_id"])
+            return {"agent": {**target["agent"], "agent_status": "idle"}}
+        with patch.object(supervise, "herdr_call", side_effect=herdr):
+            self.assertEqual(notify.deliver(self.run, actor="driver-A")["status"], "delivered")
+        self.assertEqual(self.active("driver-A"), previous)
+        self.assertEqual(prompts, [pane["agent"]["pane_id"]])
+
+    def test_driver_identity_change_during_lookup_prevents_the_prompt(self):
+        self.bind_shared_driver()
+        prompts = []
+        def replace(target, argv):
+            if argv[1] == "get":
+                self.handoff("A", "driver-A")
+            else:
+                prompts.append(argv)
+            return {"agent": {**target["agent"], "agent_status": "idle"}}
+        with patch.object(supervise, "herdr_call", side_effect=replace):
+            self.assertEqual(notify.deliver(self.run, actor="driver-A")["status"], "session_changed")
+        self.assertEqual(prompts, [])
+        self.assertFalse(Engine.read(self.run)["communication"]["wakes"]["driver-A"]["delivered"])
 
     def test_explicit_revocation_does_not_restore_a_driver_endpoint(self):
         self.bind_shared_driver()
@@ -313,6 +348,45 @@ class LegacyHintTests(LegacyChannelFixture, unittest.TestCase):
         return self.driver("A", op="message", task_id="A", action_id=identifier, recipient="coordinator",
                            kind="question", body="Which interface?")
 
+    def notify_cli(self, seconds):
+        output = io.StringIO()
+        with patch.object(sys, "argv", ["notify.py", "--run-dir", str(self.run), "--actor", "coordinator"]), \
+                patch.object(notify, "datetime") as clock, redirect_stdout(output):
+            clock.now.return_value = self.now + timedelta(seconds=seconds)
+            notify.main()
+        return json.loads(output.getvalue())
+
+    def test_standalone_delivery_obeys_pending_cadence_and_stop(self):
+        self.ask("first")
+        wake = self.tick(0)
+        self.assertEqual(self.notify_cli(90)["status"], "quiet")  # Reconciliation is pending.
+        supervise.complete(self.run, wake["wake_id"], self.now + timedelta(seconds=95))
+        self.assertEqual(self.notify_cli(100)["status"], "quiet")
+        self.assertEqual(self.notify_cli(160)["status"], "delivered")
+        self.ask("second")
+        self.assertEqual(self.notify_cli(165)["status"], "quiet")
+        supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
+        self.assertEqual(self.notify_cli(230)["status"], "quiet")
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation"), ("coordinator", "hint")])
+
+    def test_standalone_delivery_holds_dispatch_ownership_and_rechecks_stop(self):
+        self.prepare_hint()
+        errors = []
+        def compete(target, argv):
+            response = self.herdr(target, argv)
+            if argv[1] == "get":
+                try:
+                    self.tick(91)
+                except supervise.RuntimeErrorDetail as error:
+                    errors.append(error.code)
+                supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
+            return response
+        with patch.object(supervise, "herdr_call", side_effect=compete):
+            self.notify_cli(90)
+        self.assertEqual(errors, ["already_running"])
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation")])
+        self.assertFalse(Engine.read(self.run)["communication"]["wakes"]["coordinator"]["delivered"])
+
     def test_hint_reaches_the_registered_coordinator_between_reconciliation_wakes(self):
         self.ask("first")
         # The coordinator has never used the channel; its scheduler identity is enough.
@@ -390,20 +464,33 @@ class LegacyHintTests(LegacyChannelFixture, unittest.TestCase):
 
     def test_rebind_during_hint_lookup_never_prompts_the_old_endpoint(self):
         self.prepare_hint()
+        notify.bind(self.run, "coordinator", None, endpoint("coordinator", "p1"))
         def rebind(target, argv):
             response = self.herdr(target, argv)
             if argv[1] == "get":
-                supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
-                state = Engine.read(self.run)
-                settings = {**state["config"]["scheduler"], **endpoint("replacement", "p4"), "enabled": True}
-                Engine.apply(self.run, {"op": "configure", "action_id": "rebind", "expected_policy": state["policy_version"],
-                                       "fields": {"scheduler": settings}, "evidence": self.proof})
+                self.rebind_coordinator()
             return response
         with patch.object(supervise, "herdr_call", side_effect=rebind):
             self.tick(90)
         self.assertEqual(self.prompts, [("coordinator", "reconciliation")])
         self.assertEqual(self.tick(100)["channel_hint"]["status"], "delivered")
         self.assertEqual(self.prompts[-1], ("replacement", "hint"))
+
+    def rebind_coordinator(self):
+        supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
+        state = Engine.read(self.run)
+        settings = {**state["config"]["scheduler"], **endpoint("replacement", "p4"), "enabled": True}
+        Engine.apply(self.run, {"op": "configure", "action_id": "rebind", "expected_policy": state["policy_version"],
+                               "fields": {"scheduler": settings}, "evidence": self.proof})
+
+    def test_saved_coordinator_endpoint_cannot_override_scheduler_rebinding(self):
+        self.prepare_hint()
+        session = notify.bind(self.run, "coordinator", None, endpoint("coordinator", "p1"))
+        self.rebind_coordinator()
+        self.assertEqual(self.notify_cli(90)["status"], "delivered")
+        self.assertEqual(self.prompts[-1], ("replacement", "hint"))
+        self.assertEqual(Engine.read(self.run)["communication"]["sessions"][session]["endpoint"],
+                         endpoint("coordinator", "p1"))
 
     def test_hint_holds_dispatch_ownership_against_a_competing_tick(self):
         self.prepare_hint()
@@ -456,6 +543,7 @@ class LegacyHintTests(LegacyChannelFixture, unittest.TestCase):
         self.assertIsNone(wake.get("last_hint_at"))
         self.assertEqual(wake["last_hint_attempt_at"], (self.now + timedelta(seconds=90)).isoformat())
         self.assertEqual(self.tick(95)["status"], "minimum_cadence")
+        self.assertEqual(self.notify_cli(95)["status"], "quiet")
         self.assertEqual(self.prompts, [("coordinator", "reconciliation"), ("coordinator", "hint")])
         self.assertEqual(self.tick(151)["channel_hint"]["status"], "delivered")
 

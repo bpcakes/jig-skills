@@ -45,9 +45,8 @@ def target(state, name):
     communication = state.get("communication", {})
     sid = communication.get("active", {}).get(name)
     session = communication.get("sessions", {}).get(sid, {})
-    if session.get("endpoint") and not session.get("revoked"):
-        return sid, session["endpoint"]
-    if name == "coordinator" and state["config"].get("communication", {}).get("mode") != "enforced":
+    unconfined = state["config"].get("communication", {}).get("mode") != "enforced"
+    if name == "coordinator" and unconfined:
         # An unconfined run already registered its coordinator's exact Herdr
         # identity for scheduled supervision. Hints use that pane, including
         # before the coordinator has made its first channel request.
@@ -55,6 +54,16 @@ def target(state, name):
         settings = scheduler_config(state["config"], state["scheduler"])
         if isinstance(settings.get("agent"), dict) and not session.get("revoked"):
             return sid, settings
+    if session.get("endpoint") and not session.get("revoked"):
+        import channel
+        if unconfined and session.get("role") in {"coordinator", "driver"}:
+            endpoint = channel.transport_endpoint(state, sid)
+            return (sid, endpoint) if endpoint is not None else None
+        try:
+            channel.check(state, channel.Session(sid, session["digest"]))
+        except channel.StateError:
+            return None
+        return sid, session["endpoint"]
     return None
 
 
@@ -176,7 +185,14 @@ def main():
         session_id = bind(args.run_dir, args.actor, args.bind_session, json.loads(Path(args.endpoint).read_text()))
         print(json.dumps({"status": "bound", "actor": args.actor, "session_id": session_id}))
         return
-    print(json.dumps(deliver(args.run_dir, args.actor)))
+    # A standalone delivery shares dispatch ownership with tick. Unconfined
+    # coordinator hints must obey its current policy even on this entry point.
+    from supervise import exclusive, scheduler_config
+    with exclusive(args.run_dir, "delivery.lock"):
+        state = Engine.read(args.run_dir)
+        settings = (scheduler_config(state["config"], state["scheduler"])
+                    if state["config"].get("communication", {}).get("mode") != "enforced" else None)
+        print(json.dumps(deliver(args.run_dir, args.actor, scheduler=settings)))
 
 
 if __name__ == "__main__":
