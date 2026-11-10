@@ -50,7 +50,7 @@ Only schedule when requested/authorized. Run `supervise.py supervise` as a super
 
 The wake targets the registered pane and validates the returned agent identity. A changed or missing identity leaves delivery unconfirmed without automatic retry. The current Herdr prompt API has no atomic native-session precondition, so an occupant change during the call remains a race; the wake also tells its receiver to verify its registered identity before acting. A blocked or unrecognized coordinator produces a health failure with its pane location, rather than a healthy busy skip.
 
-Ticks wake the coordinator for a bounded reconciliation; they do not meter all task progress. Honor any minimum cadence, including “only every N minutes.” Event wakes require corresponding authority. Record attempted, delivered, and completed checks separately: a busy skip or transport acknowledgement is not completed supervision.
+Ticks wake the coordinator for a bounded reconciliation; they do not meter all task progress. Honor any minimum cadence, including “only every N minutes.” An [inbox hint](communication.md#hints) to the coordinator is a prompt as well: it keeps that minimum from the previous wake or hint and is never stacked on a pending wake. Event wakes require corresponding authority. Record attempted, delivered, and completed checks separately: a busy skip or transport acknowledgement is not completed supervision.
 
 Changing cadence recomputes the stored next due time from the latest attempt or completion under the new interval. It preserves pending wake identities and event requests; a pending pass still needs completion, and queued events remain subject to the new minimum cadence.
 

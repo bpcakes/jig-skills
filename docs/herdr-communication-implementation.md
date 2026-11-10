@@ -1419,3 +1419,77 @@ the real owner-replacement/adoption path with diagnostic survival after cleanup,
 normal authenticated review/repair/commit/replay, and existing retention and scoped
 evidence-read checks. All 69 installed runtime files match source. Full required
 validation and both complete independent reviews remain pending for this candidate.
+
+## Protocol decoupled from isolation; wake semantics — 2026-11-09
+
+A design review of the candidate above found that the message protocol reached
+only enforced runs, although it does not depend on the sandbox, and that hint
+delivery prompted agents about their own actions and about items they had
+already read. This entry changes the contract's scope; it does not close P1–P3.
+
+**Decision.** `communication.mode` now selects only the execution boundary and
+its transport. `supervise.py init` no longer injects `enforced`: isolation is an
+explicit choice, because it supports one local Linux host and a run whose host
+cannot verify would initialize and then never admit work. Unconfined runs keep
+their interface and gain the same protocol through it. This supersedes "existing
+unconfined runs retain their current interface" in the contract only by addition.
+
+**Unconfined transports.** The coordinator uses the new local `supervise.py
+channel` command; a registered driver sends the same requests through its SSH
+`serve` route. Both resolve a transport session: the gateway's session record,
+created on first use for the caller the transport already identified, so scope,
+task bindings, cursors, artifacts and wake state share one implementation. No
+gateway or credential file is involved. The record follows the caller's current
+scope, so a newly scoped or admitted task needs no relaunch there. The enforced
+coordinator's scope is still fixed at issue; that finding remains open. Enforced
+runs refuse both transports. In either mode a message to a driver without a
+verified return route is now refused as `unreachable` instead of waiting in an
+inbox nobody can read.
+
+**Wake semantics, both modes.**
+
+- An event records its `origin`. The originator is never hinted and its own
+  events do not end its inbox `watch`, which also steps over pages holding only
+  its own history. Explicit inbox reads still list them.
+- `state_changed` hints the other party only when pause, cancellation, holds,
+  delegation, recovery, blocker, driver or identity change, when the task parks
+  or crosses closure, when a run-wide pause/cancel/hold changes, or when a task
+  is first admitted. Other lifecycle steps and artifact publication are listed
+  without a hint. Actionable integration notices are unchanged.
+- A wake keeps the per-task position that caused it. `ack` retires the hint once
+  no position lies beyond the actor's acknowledged cursors. Retirement follows
+  explicit acknowledgement, not reads: a read persists nothing and a lost
+  response must not suppress the only prompt.
+- Delivery prompts only an `idle` or `done` agent. `working` defers without a
+  failure count. Any other status is never typed into and is recorded as an
+  unconfirmed delivery: a blocked pane may be showing an approval prompt.
+- In an unconfined run the scheduler tick delivers at most one hint after its
+  scheduled pass. A coordinator hint uses the registered scheduler identity,
+  waits for a pending reconciliation wake to complete, and keeps
+  `minimum_cadence_seconds` from the previous wake or hint; that hint in turn
+  spaces the next wake. Drivers are hinted only through an explicitly bound
+  endpoint.
+
+Verification on Linux with Bubblewrap available, source tree, deterministic
+providers and a fake Herdr throughout. `tests/test_legacy_channel.py` adds 12
+checks of both transports, scope following, enforced refusal, the inbox watch,
+the CLI and scheduled hints; `test_notify.py` gains six for origin, attention,
+acknowledgement, artifacts and agent status, and `test_protocol.py` one for the
+gateway watch. An untouched export of the preceding commit ran 489 tests with
+one error: `jobs.namespace` raised `ProcessLookupError` reading `/proc/<pid>/ns/pid`
+for an exiting process, which it does not treat as gone. The modified tree ran
+508 tests with one failing: the first controller run in
+`test_upstream_recovery_after_owner_replacement_and_history_change` returned
+`unknown` with an empty stdout and a 3,195-byte stderr that cleanup deleted. That
+test then passed alone, in its 24-test suite, and in about 50 further repetitions,
+with one more failure of the same shape; 29 runs on the export never failed. Two
+failures in roughly 54 runs against none in 29 does not separate the trees, and
+the cause is unknown. The installation, orchestration-fixture and host-parity
+checks passed (57), as did the evaluation fixture suites (164) and `git diff
+--check`. No live pane, model or installation was exercised or changed.
+
+Still open from the review and not addressed here: no exercise against a real
+Herdr pane or an LLM coordinator, including whether a sandboxed agent can report
+the `agent_session` that binding requires; the unnamed host-operator role;
+polling reads under one state lock; permanent view snapshots and receipts; and
+the cursor returned by `message`, which lies past the sender's own event.

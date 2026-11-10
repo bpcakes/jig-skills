@@ -222,8 +222,45 @@ def completion_retry_at(state, settings):
     return scheduler_deadline(attempted, settings["minimum_cadence_seconds"])
 
 
+def coordinator_prompted_at(state):
+    """Latest scheduler prompt of either kind to an unconfined coordinator."""
+    schedule = state["scheduler"]
+    hinted = state.get("communication", {}).get("wakes", {}).get("coordinator", {}).get("last_hint_at")
+    times = [parse_time(value) for value in (schedule.get("last_attempt_at"), schedule.get("last_completed_at"), hinted)]
+    return max((value for value in times if value is not None), default=None)
+
+
 def tick(run_dir, now=None):
+    """One scheduler pass; an unconfined run then sends at most one inbox hint.
+
+    Enforced runs deliver hints inside their own pass. Here the reconciliation
+    wake keeps its cadence and completion rules, and hints for addressed
+    messages and attention changes travel separately so they need not wait.
+    """
     now = now or datetime.now(timezone.utc)
+    result = scheduled_tick(run_dir, now)
+    if result.get("status") == "scheduler_stopped":
+        return result
+    state = Engine.read(run_dir)
+    if (state["config"].get("communication", {}).get("mode") == "enforced"
+            or all(wake["delivered"] for wake in state.get("communication", {}).get("wakes", {}).values())):
+        return result
+    from notify import deliver
+    # A pending reconciliation wake already asks the coordinator for a full
+    # pass, which includes its inbox. A hint is also a prompt: it honors the
+    # same minimum interval the user set for scheduled wakes.
+    settings = scheduler_config(state["config"], state["scheduler"])
+    prompted = coordinator_prompted_at(state)
+    exclude = ({"coordinator"} if state["scheduler"].get("pending_action_id") or prompted
+               and now < scheduler_deadline(prompted, settings["minimum_cadence_seconds"]) else ())
+    try:
+        hint = deliver(run_dir, now=now, exclude=exclude)
+    except (StateError, RuntimeErrorDetail, OSError) as exc:
+        hint = {"status": "failed", "error": str(exc)}
+    return result if hint["status"] in {"quiet", "unbound", "backoff"} else {**result, "channel_hint": hint}
+
+
+def scheduled_tick(run_dir, now):
     with exclusive(run_dir, "delivery.lock"):
         state = Engine.read(run_dir)
         settings = scheduler_config(state["config"], state["scheduler"])
@@ -261,10 +298,7 @@ def tick(run_dir, now=None):
         if schedule.get("pending_action_id"):
             return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
                     "delivery_status": schedule.get("delivery_status")}
-        last = parse_time(schedule.get("last_attempt_at"))
-        completed = parse_time(schedule.get("last_completed_at"))
-        if completed and (last is None or completed > last):
-            last = completed
+        last = coordinator_prompted_at(state)
         due = parse_time(schedule.get("next_due_at"))
         requested = bool(schedule.get("wake_requested_at"))
         if last and now < scheduler_deadline(last, settings["minimum_cadence_seconds"]):
@@ -488,8 +522,10 @@ def channel_health_failures(state, settings, now):
             continue
         since = parse_time(wake.get("pending_since") or session["issued_at"])
         if now > scheduler_deadline(since, interval * 3):
+            busy = (wake.get("attempt") or {}).get("status") == "busy"
             failures.append({"id": "channel-delivery-" + actor + "-" + timestamp(since),
-                             "reason": "Pending channel hint cannot be delivered to " + actor})
+                             "reason": ("Unread updates are waiting while " + actor + " stays busy" if busy
+                                        else "Pending channel hint cannot be delivered to " + actor)})
     return failures
 
 
@@ -856,6 +892,65 @@ def watch_task(run_dir, task_id, after, timeout_seconds=30, caller="coordinator"
             time.sleep(0.25 if until_change else min(0.25, remaining))
 
 
+def with_transport(run_dir, caller, call):
+    """Run one channel call as a caller the transport has already identified."""
+    import channel
+    for attempt in range(2):
+        session = channel.transport_session(run_dir, caller)
+        try:
+            return call(session)
+        except StateError as exc:
+            # The record was replaced or its task binding changed after it was
+            # resolved. The transport identity is unchanged, so resolve it once
+            # more. Mutations stay idempotent through their action ID.
+            if exc.code != "session_revoked" or attempt:
+                raise
+
+
+def watch_inbox(run_dir, caller, request, response_fd=None):
+    from protocol import inbox_wait
+    after, timeout_seconds = request.get("after"), request.get("timeout_seconds", 30)
+    until_change = request.get("until_change", False)
+    if (set(request) - {"op", "task_id", "view", "after", "timeout_seconds", "until_change"}
+            or request.get("view") != "inbox" or not isinstance(after, str)
+            or type(timeout_seconds) not in {int, float} or not 0 <= timeout_seconds <= 30
+            or type(until_change) is not bool):
+        raise RuntimeErrorDetail("invalid_input", "An inbox watch takes only op, task_id, view:\"inbox\", after (an inbox "
+                                 "cursor), timeout_seconds between zero and 30, and until_change")
+    deadline = time.monotonic() + timeout_seconds
+    with response_disconnect(response_fd if until_change else None) as disconnected:
+        while True:
+            if disconnected():
+                raise RuntimeErrorDetail("watch_disconnected", "Watch response channel is closed")
+            view, changed, after = with_transport(run_dir, caller, lambda session: inbox_wait(
+                run_dir, session, caller, request.get("task_id"), after))
+            remaining = deadline - time.monotonic()
+            if changed or remaining <= 0 and not until_change:
+                return {**view, "changed": changed}
+            time.sleep(0.25 if until_change else min(0.25, remaining))
+
+
+def channel_request(run_dir, caller, request, response_fd=None):
+    """Durable messages and artifacts for an unconfined run.
+
+    The local command acts as the coordinator and `serve` passes the caller its
+    forced command pinned. The request can select neither. Enforced runs reach
+    the same protocol only through the gateway, inside their boundary.
+    """
+    import channel
+    from protocol import MUTATIONS, READS, read
+    if "caller" in request or "session" in request:
+        raise RuntimeErrorDetail("caller_spoof", "Caller identity comes from the transport, not the request")
+    operation = request.get("op")
+    if operation == "watch":
+        return watch_inbox(run_dir, caller, request, response_fd)
+    if operation not in MUTATIONS | READS:
+        raise RuntimeErrorDetail("invalid_input", "Channel requests are message, ack, artifact_put, inbox, message_read, "
+                                 "artifact_read, result, or a watch with view:\"inbox\"")
+    return with_transport(run_dir, caller, lambda session: (
+        channel.apply(run_dir, session, request) if operation in MUTATIONS else read(run_dir, session, request)))
+
+
 def serve(run_dir, caller, request, response_fd=None):
     if Engine.read(run_dir)["config"].get("communication", {}).get("mode") == "enforced":
         raise RuntimeErrorDetail("authenticated_channel_required", "Enforced agents must use the authenticated gateway")
@@ -868,6 +963,9 @@ def serve(run_dir, caller, request, response_fd=None):
     actor = state["config"].get("actors", {}).get(caller)
     if caller == "coordinator" or not actor or actor.get("helper_route") is not True:
         raise RuntimeErrorDetail("unknown_caller", "Only a registered restricted worker route may serve requests")
+    from protocol import MUTATIONS, READS
+    if request.get("op") in MUTATIONS | READS or request.get("op") == "watch" and request.get("view") == "inbox":
+        return channel_request(run_dir, caller, request, response_fd)
     if request.get("op") == "query":
         return task_view(run_dir, request.get("task_id"), caller)
     if request.get("op") == "watch":
@@ -893,7 +991,7 @@ def serve(run_dir, caller, request, response_fd=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "status", "integration", "watch", "apply", "execute", "reconcile", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
+    for name in ("init", "status", "integration", "watch", "apply", "channel", "execute", "reconcile", "action", "serve", "tick", "supervise", "wake", "complete", "health"):
         child = sub.add_parser(name)
         child.add_argument("--run-dir", required=True)
         if name == "init":
@@ -908,7 +1006,7 @@ def main(argv=None):
             child.add_argument("--after", required=True)
             child.add_argument("--timeout-seconds", type=float, default=30)
             child.add_argument("--until-change", action="store_true")
-        elif name in {"apply", "execute", "reconcile"}:
+        elif name in {"apply", "channel", "execute", "reconcile"}:
             child.add_argument("--request", default="-")
         elif name == "action":
             child.add_argument("--id", required=True)
@@ -929,10 +1027,12 @@ def main(argv=None):
         raise RuntimeErrorDetail("remote_command_rejected", "Restricted routes may only use serve")
     if args.command == "init":
         config = read_json(args.config)
-        if args.communication_mode:
-            config["communication"] = {"mode": args.communication_mode}
-        elif "communication" not in config:
-            config["communication"] = {"mode": "enforced"}
+        # The message protocol is available in every run. Isolation is a
+        # separate, explicit choice: it needs a verified local Linux host.
+        selected = config.get("communication", {})
+        if isinstance(selected, dict):  # Anything else is left for validation to reject.
+            config["communication"] = {"mode": "legacy", **selected,
+                                       **({"mode": args.communication_mode} if args.communication_mode else {})}
         settings = scheduler_config(config)
         next_due = timestamp(scheduler_deadline(datetime.now(timezone.utc), settings["cadence_seconds"]))
         result = Engine.initialize(args.run_dir, config)
@@ -953,6 +1053,8 @@ def main(argv=None):
                           response_fd=sys.stdout.fileno())
     if args.command == "apply":
         return apply_request(args.run_dir, read_json(args.request), caller="coordinator")
+    if args.command == "channel":
+        return channel_request(args.run_dir, "coordinator", read_json(args.request), response_fd=sys.stdout.fileno())
     if args.command == "integration":
         from integration import refresh
         return refresh(args.run_dir, args.task, bootstrap=args.bootstrap)

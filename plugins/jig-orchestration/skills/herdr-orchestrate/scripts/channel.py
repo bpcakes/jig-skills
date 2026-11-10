@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import secrets
 
-from state import Engine, canonical, locked, private, read_json, require, timestamp, write_atomic
+from state import Engine, StateError, canonical, locked, private, read_json, require, timestamp, write_atomic
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ def contract(run_dir, principal):
 
 
 def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egress_hosts=None,
-          parent_session=None, expected_bindings=None):
+          parent_session=None, expected_bindings=None, endpoint=None):
     """Host-only provisioning. Return the secret once; never include it in views."""
     from egress import destination
     egress_hosts = [] if egress_hosts is None else egress_hosts
@@ -135,6 +135,8 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
             "egress_hosts": egress_hosts,
             "parent_session": parent_session.id if parent_session is not None else None,
         }
+        if endpoint is not None:
+            record["endpoint"] = endpoint
         from storage import ensure, reserve
         ensure(path, state["config"])
         reservations = {}
@@ -160,6 +162,44 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
                 write_atomic(contract_path, review_contract)
         write_atomic(path / "state.json", state)
     return credential
+
+
+def transport_session(run_dir, actor):
+    """Session for a caller whose transport already identified it.
+
+    An unconfined run knows its coordinator by the local command and a driver
+    by its SSH forced command. Both get the gateway's session record, so scope,
+    task bindings, cursors and hints follow one set of rules. The secret never
+    leaves this function: the transport is the credential, not this record.
+    """
+    state = Engine.read(run_dir)
+    require(state["config"].get("communication", {}).get("mode") != "enforced",
+            "authenticated_channel_required", "enforced agents must use the authenticated gateway")
+    if actor == "coordinator":
+        tasks, requested = list(state["config"]["scope"]["task_ids"]), None
+    else:
+        binding = state["config"].get("actors", {}).get(actor) or {}
+        tasks = requested = [task_id for task_id in binding.get("task_ids", [])
+                             if state["tasks"].get(task_id, {}).get("driver") == actor]
+        require(tasks, "wrong_task", "no admitted task is assigned to this caller")
+    communication = state.get("communication", {})
+    identifier = communication.get("active", {}).get(actor)
+    previous = communication.get("sessions", {}).get(identifier, {})
+    endpoint = None
+    if previous.get("role") in {"coordinator", "driver"}:
+        session = Session(identifier, previous["digest"])
+        try:
+            check(state, session)
+        except StateError as error:
+            # Changed ownership or identity needs a fresh record, and a fresh
+            # endpoint binding: the pane may now hold a different agent.
+            if error.code != "session_revoked":
+                raise
+        else:
+            if previous["task_ids"] == tasks:
+                return session
+            endpoint = previous.get("endpoint")  # Same agent; only its task scope moved.
+    return parse_credential(issue(run_dir, actor, task_ids=requested, endpoint=endpoint))
 
 
 def revoke(run_dir, actor):

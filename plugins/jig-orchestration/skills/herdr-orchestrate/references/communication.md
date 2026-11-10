@@ -1,19 +1,98 @@
-# Authenticated communication
+# Agent communication
 
-An enforced run has one agent-facing protocol. The trusted host runtime owns the
-private run directory, launch profiles, session issuance, execution supervision
-and Herdr endpoint bindings. Models receive a task-scoped credential and the
-gateway endpoint inside a Linux Bubblewrap boundary. They cannot administer the
-run. This boundary does not eliminate covert information channels in source,
-build output or permitted external services.
+Every run has one message protocol: durable questions, replies, assignments and
+updates between the coordinator and a task's driver, scoped evidence artifacts,
+an inbox with cursors, and generic wake hints. The protocol is separate from the
+execution boundary. `communication.mode` selects only the boundary and the
+transport that goes with it:
+
+| Mode | How a request reaches the protocol | Boundary |
+| --- | --- | --- |
+| `legacy` (default) | The coordinator runs `supervise.py channel`. A driver sends the same request through its verified `serve` return route. | None. Identity comes from the transport, as for every other request in an unconfined run. |
+| `enforced` | Every model runs `communicate.py` with its launch credential against the gateway. | Linux Bubblewrap on one verified local host. No other agent route exists. |
+
+Message kinds, cursors, acknowledgement, artifacts and hints behave the same in
+both modes; see [agent requests](#agent-requests) and [hints](#hints). A run's
+mode is fixed when it is initialized. `supervise.py init` selects `legacy` unless
+the configuration or `--communication-mode enforced` asks for isolation.
+
+## Unconfined runs
+
+No gateway, credential or launch profile is involved. The coordinator sends one
+JSON request per command; `--request -` reads standard input:
+
+```sh
+python3 <skill-root>/scripts/supervise.py channel --run-dir <private-run> --request <request.json>
+```
+
+A driver sends that same object to its [restricted return route](runtime.md#restricted-worker-return-route).
+The forced command names the driver; a request can never select its caller.
+Both transports accept `message`, `ack`, `artifact_put`, `inbox`, `message_read`,
+`artifact_read`, `result`, and `watch` with `view:"inbox"`. A driver without a
+verified return route cannot use the protocol: a message addressed to it is
+refused as `unreachable`, and the coordinator mediates for it as before.
+
+For example, a driver asks and then waits without spending model turns:
+
+```json
+{"op":"message","task_id":"example-A","action_id":"a-question-1","recipient":"coordinator","kind":"question","body":"Which interface revision should the consumer use?"}
+{"op":"watch","task_id":"example-A","view":"inbox","after":"<cursor from its last inbox page>","until_change":true}
+```
+
+The first request a caller makes creates its session record on the coordinator
+host. It follows the caller's current task scope, so newly scoped or admitted
+tasks need no relaunch. The record holds no secret and proves nothing by itself;
+a revoked route or a changed task binding stops it. This gives an unconfined run
+durable, ordered, retry-safe messages. It does not confine anyone: same-user
+agents remain as trusted as the rest of that run.
+
+## Hints
+
+A hint is the fixed text "Orchestration updates are available. Read your
+authenticated inbox." typed into a registered pane by the scheduler. It carries
+no task content and grants no authority. Each one costs its recipient a model
+turn, so the runtime sends one only when all of these hold:
+
+- Something was addressed to that actor: a message, a change to its task's
+  pause, cancellation, holds, delegation, recovery, blocker, ownership, parking
+  or closure, a run-wide pause, cancel or hold, or an actionable integration
+  notice. Routine lifecycle steps and artifact publication stay in the inbox
+  without a hint; attach evidence to a message when someone must act on it.
+- Another party caused it. An actor is never hinted about its own message or
+  action, and its own events do not end its inbox `watch`.
+- The actor has not acknowledged past it. `ack` retires the pending hint.
+- The pane's agent is `idle` or `done`. A `working` agent is retried shortly
+  without counting a failure. A blocked or unrecognized pane is never typed into
+  and is recorded as an unconfirmed delivery.
+
+An enforced run binds each launch with `notify.py --bind-session`, as described
+under host setup. In an unconfined run the coordinator needs no binding: hints
+use its registered [scheduler](runtime.md#scheduler) identity, wait while a
+reconciliation wake is pending, and keep the scheduler's minimum cadence from
+any earlier wake or hint. Set `minimum_cadence_seconds` below `cadence_seconds`
+to let a driver's question arrive between reconciliation passes. Bind a driver's
+verified pane with `notify.py --run-dir <private-run> --actor <driver> --endpoint
+<verified-endpoint.json>`; an unbound driver learns of messages through its
+inbox watch. Stopping the scheduler stops hints.
+
+## Enforced runs
+
+An enforced run has one agent-facing protocol and no alternate route. The trusted
+host runtime owns the private run directory, launch profiles, session issuance,
+execution supervision and Herdr endpoint bindings. Models receive a task-scoped
+credential and the gateway endpoint inside a Linux Bubblewrap boundary. They
+cannot administer the run. This boundary does not eliminate covert information
+channels in source, build output or permitted external services. Host setup,
+the review-fix execution boundary, compatibility, retained capacity and
+acceptance below describe that mode.
 
 ## Host setup and launches
 
-`supervise.py init --run-dir <private-run> --config <config.json>` defaults new
-runs to `communication.mode=enforced`. A deliberately legacy run uses
-`--communication-mode legacy` or an explicit legacy configuration. Do not migrate
-an active run by editing its mode. Unsupported enforcement stops launch; it
-never selects an unconfined command or a weaker reviewer model.
+Select enforcement with `supervise.py init --run-dir <private-run> --config
+<config.json> --communication-mode enforced`, or `"communication":{"mode":"enforced"}`
+in the configuration. Do not migrate an active run by editing its mode.
+Unsupported enforcement stops launch; it never selects an unconfined command or
+a weaker reviewer model.
 
 Start `python3 <skill-root>/scripts/gateway.py --run-dir <private-run>` on the
 trusted host. Enforced launches require Linux, Bubblewrap and working user,
@@ -145,6 +224,11 @@ authenticated inbox. It never embeds task contents or grants authority. Failed
 recipients back off independently; new events preserve that retry state.
 
 ## Agent requests
+
+Request objects and their results are the same in both modes. `communicate.py`
+and its timing rules below are the enforced client; an unconfined caller passes
+the same object to its [transport](#unconfined-runs), which accepts the message,
+inbox, artifact and inbox-watch operations.
 
 The client bounds each request across connection, response reads and retries:
 ordinary requests default to 30 seconds, a single `watch` to 35 seconds, and
@@ -392,9 +476,9 @@ discarded prefix of the original output.
 | --- | --- |
 | `message` | Stable `action_id`, task, recipient, kind (`question`, `reply`, `update`, `assignment`) and a body up to 4,096 UTF-8 bytes. Only the coordinator assigns work. Replies name `reply_to`; larger evidence uses scoped artifacts. |
 | `inbox` / `message_read` | Read bounded events or a retained message. Missed messages and visible artifact notices remain paginated and discoverable after notification eviction. A cursor gap also requires refreshing task state. |
-| `ack` | Persist retrieval acknowledgement for the task/cursor. This never records the requested effect as complete. |
-| `watch` | Wait on a task change token or `view:"inbox"` cursor. `until_change:true` quietly reconnects between bounded waits. |
-| `artifact_put` / `artifact_read` | Publish immutable scoped UTF-8 evidence, then retrieve it selectively. Keep full reviewer reports immutable. Other reviewers cannot read them before adjudication. |
+| `ack` | Persist retrieval acknowledgement for the task/cursor. Once nothing addressed to the caller lies beyond its acknowledged cursors, its pending [hint](#hints) is retired. This never records the requested effect as complete. |
+| `watch` | Wait on a task change token or `view:"inbox"` cursor. An inbox wait ends on another party's event, never the caller's own. `until_change:true` quietly reconnects between bounded waits. |
+| `artifact_put` / `artifact_read` | Publish immutable scoped UTF-8 evidence, then retrieve it selectively. Readers see it in their inbox without a hint; attach it to a message when someone must act. Keep full reviewer reports immutable. Other reviewers cannot read them before adjudication. |
 | `execute` / `result` | Request a configured action or inspect the original durable action result. Preserve the same action ID after transport failure. |
 
 Process every returned inbox page, including when `resync_required` is true. That
@@ -406,8 +490,9 @@ task change tokens with message cursors. A task-state watch does not signal a
 message arrival; messages intentionally do not change task versions. The watch
 duration field is `timeout_seconds` (0–30); unsupported fields are rejected.
 The page still contains retained messages and visible artifact
-notices in delivery order. Continue from its `cursor` while `more` is true; only
-acknowledge a cursor after processing its page. Unsolicited updates and answered
+notices in delivery order. Each event names its `origin`; the caller's own
+messages and actions stay listed as history. Continue from its `cursor` while
+`more` is true; only acknowledge a cursor after processing its page. Unsolicited updates and answered
 questions remain discoverable without knowing their message IDs in advance.
 Acknowledgement records retrieval, not successful application of a request.
 
@@ -491,8 +576,9 @@ Rollback drains an enforced run using its existing pinned runtime:
    silently substitute another controller/runtime for recovery.
 
 The configuration API rejects changing an existing run's communication mode.
-Legacy runs retain their existing interface. Upgrading a legacy run into enforced
-execution is not an automatic migration provided by this release.
+Unconfined runs keep their existing interface and reach the message protocol
+through it. Upgrading one into enforced execution is not an automatic migration
+provided by this release.
 
 ## Retained protocol capacity
 

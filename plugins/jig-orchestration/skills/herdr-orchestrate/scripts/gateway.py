@@ -105,11 +105,11 @@ def handle(run_dir, session, payload, connection=None, stopping=None):
     require(isinstance(payload, dict) and "caller" not in payload and "session" not in payload,
             "invalid", "request must be an object without a caller or session override")
     operation, task_id = payload.get("op"), payload.get("task_id")
-    channel.caller(run_dir, session, operation, task_id)
+    actor = channel.caller(run_dir, session, operation, task_id)
     if operation == "context":
         require(set(payload) == {"op", "task_id"}, "invalid", "context requires only the assigned task")
         return execution_context(run_dir, session, task_id, connection)
-    from protocol import READS, read
+    from protocol import READS, inbox_wait, read
     if operation in READS:
         return read(run_dir, session, payload)
     if operation == "query":
@@ -129,8 +129,7 @@ def handle(run_dir, session, payload, connection=None, stopping=None):
         deadline = time.monotonic() + timeout
         while True:
             if payload.get("view", "task") == "inbox":
-                view = read(run_dir, session, {"op": "inbox", "task_id": task_id, "after": after})
-                changed = view.get("resync_required") or bool(view.get("events"))
+                view, changed, after = inbox_wait(run_dir, session, actor, task_id, after)
             else:
                 require(payload.get("view", "task") == "task", "invalid", "watch view must be task or inbox")
                 view = query(run_dir, session, task_id)

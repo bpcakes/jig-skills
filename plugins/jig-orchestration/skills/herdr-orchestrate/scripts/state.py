@@ -517,7 +517,7 @@ class Engine:
 
     @staticmethod
     def apply(run_dir, request, caller="coordinator", *, execution=None, session=None, workspace_lease=None):
-        from protocol import MUTATIONS, state_changed, transition as communication_transition
+        from protocol import MUTATIONS, attention, state_changed, transition as communication_transition
         require(isinstance(request, dict) and "caller" not in request, "invalid", "caller is transport identity, not request data")
         require(nonempty(request.get("action_id")) and nonempty(request.get("op")), "invalid", "action_id and op are required")
         communication_operation = request["op"] in MUTATIONS
@@ -593,6 +593,8 @@ class Engine:
                     require(request.get("expected_task") == task["version"], "stale_task", "current task version is required")
                 Engine._authorize(state, request, caller, task)
             pending = task.get("pending_intent") if task else None
+            # Compared after the transition to decide who is hinted about it.
+            before = attention(state)
             if pending and pending.get("execution"):
                 if request["op"] == "dispatch":
                     require(caller == pending["executor"], "forbidden", "only the prepared executor may issue this operation")
@@ -628,7 +630,7 @@ class Engine:
             task = state["tasks"].get(request.get("task_id"))
             if task is not None and not communication_operation:
                 task["version"] += 1
-            state_changed(state, request)
+            state_changed(state, request, caller, before)
             result = {"action_id": request["action_id"], "version": state["version"],
                       "policy_version": state["policy_version"], "task_version": task["version"] if task else None,
                       **(details or {})}

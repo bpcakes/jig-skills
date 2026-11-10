@@ -497,7 +497,7 @@ print(json.dumps({'status':'unknown' if p['mode']=='dispatch' else 'succeeded',
         self.assertNotIn("private-fixture-secret", json.dumps([prepared, view, detail, recorded]))
         self.assertIn("sha256", prepared["intent"]["execution"]["adapter_binding"])
 
-    def test_cli_initialization_defaults_to_enforced_and_legacy_requires_explicit_selection(self):
+    def test_cli_initialization_requires_explicit_enforcement_which_refuses_the_ssh_route(self):
         import supervise
         config = self.root / "config.json"
         config.write_text(json.dumps(self.config))
@@ -505,8 +505,8 @@ print(json.dumps({'status':'unknown' if p['mode']=='dispatch' else 'succeeded',
             run = self.root / ("fresh-" + mode)
             argv = [sys.executable, "-B", str(test_channel.SCRIPTS / "supervise.py"), "init",
                     "--run-dir", str(run), "--config", str(config)]
-            if mode == "legacy":
-                argv += ["--communication-mode", "legacy"]
+            if mode == "enforced":
+                argv += ["--communication-mode", "enforced"]
             result = subprocess.run(argv, capture_output=True, text=True, check=True)
             self.assertEqual(json.loads(result.stdout)["communication_mode"], mode)
             self.assertEqual(Engine.read(run)["config"]["communication"]["mode"], mode)
