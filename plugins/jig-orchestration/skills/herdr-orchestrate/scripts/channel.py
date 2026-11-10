@@ -69,7 +69,7 @@ def contract(run_dir, principal):
 
 
 def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egress_hosts=None,
-          parent_session=None, expected_bindings=None, endpoint=None):
+          parent_session=None, expected_bindings=None, endpoint=None, transport_from=None):
     """Host-only provisioning. Return the secret once; never include it in views."""
     from egress import destination
     egress_hosts = [] if egress_hosts is None else egress_hosts
@@ -125,6 +125,19 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
             require(parent_session is None, "session", "root agents cannot inherit child authority")
         from protocol import data as protocol_data
         communication = protocol_data(state)
+        if transport_from is not None:
+            require(not enforced and isinstance(transport_from, Session), "session", "invalid transport renewal")
+            previous = communication["sessions"].get(transport_from.id, {})
+            require(communication["active"].get(actor) == transport_from.id
+                    and previous.get("digest") == transport_from.digest,
+                    "session_revoked", "transport session changed during renewal")
+            retained = set(previous.get("bindings", {})) & set(bindings)
+            if (not previous.get("revoked") and previous.get("role") == role
+                    and (role == "coordinator" or retained)
+                    and all(previous["bindings"][task_id] == bindings[task_id] for task_id in retained)):
+                # Dropping a task does not replace the agent driving the rest.
+                # Compare retained bindings inside the issuance transaction.
+                endpoint = previous.get("endpoint")
         generation = communication["generations"].get(actor, 0) + 1
         communication["generations"][actor] = generation
         communication["active"][actor] = session_id
@@ -184,21 +197,20 @@ def transport_session(run_dir, actor):
     communication = state.get("communication", {})
     identifier = communication.get("active", {}).get(actor)
     previous = communication.get("sessions", {}).get(identifier, {})
-    endpoint = None
+    session = None
     if previous.get("role") in {"coordinator", "driver"}:
         session = Session(identifier, previous["digest"])
         try:
             check(state, session)
         except StateError as error:
-            # Changed ownership or identity needs a fresh record, and a fresh
-            # endpoint binding: the pane may now hold a different agent.
+            # Renew the task scope; issue rechecks whether the same agent's
+            # endpoint can be retained for the remaining tasks.
             if error.code != "session_revoked":
                 raise
         else:
             if requested is None or previous["task_ids"] == requested:
                 return session
-            endpoint = previous.get("endpoint")  # Same agent; only its task scope moved.
-    return parse_credential(issue(run_dir, actor, task_ids=requested, endpoint=endpoint))
+    return parse_credential(issue(run_dir, actor, task_ids=requested, transport_from=session))
 
 
 def revoke(run_dir, actor):

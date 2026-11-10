@@ -58,14 +58,15 @@ def target(state, name):
     return None
 
 
-def deliver(run_dir, actor=None, *, now=None, exclude=()):
-    from supervise import exclusive, herdr_call, parse_time, verify_identity, RuntimeErrorDetail
+def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
+    from supervise import exclusive, herdr_call, hint_eligible, parse_time, verify_identity, RuntimeErrorDetail
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "channel-delivery.lock"):
         state = Engine.read(run_dir)
         communication = state.get("communication", {})
         candidates = [(name, notice) for name, notice in communication.get("wakes", {}).items()
-                      if not notice["delivered"] and (actor is None or actor == name) and name not in exclude]
+                      if not notice["delivered"] and (actor is None or actor == name) and name not in exclude
+                      and (scheduler is None or hint_eligible(state, name, scheduler, now))]
         if not candidates:
             return {"status": "quiet"}
         # Oldest attempted recipient first. Keep this state in the outbox so
@@ -93,13 +94,15 @@ def deliver(run_dir, actor=None, *, now=None, exclude=()):
             current = read_json(path / "state.json")
             require(current["communication"]["active"].get(name) == sid,
                     "session_revoked", "delivery session changed")
+            if target(current, name) != (sid, endpoint):
+                return {"status": "binding_changed", "actor": name, "sequence": sequence}
             if current["communication"]["wakes"][name]["delivered"]:
                 return {"status": "acknowledged", "actor": name, "sequence": sequence}
             current["communication"]["wakes"][name].update(
                 last_attempt_at=now.isoformat(), retry_at=retry_at, failures=failures,
                 attempt={"session_id": sid, "sequence": sequence, "status": "dispatching", "at": now.isoformat()})
             write_atomic(path / "state.json", current)
-        failure, prompted = None, False
+        failure = None
         try:
             actual = herdr_call(endpoint, ["agent", "get", endpoint["agent"]["name"]])["agent"]
             verify_identity(actual, endpoint["agent"])
@@ -117,10 +120,21 @@ def deliver(run_dir, actor=None, *, now=None, exclude=()):
                     require(current["communication"]["active"].get(name) == sid,
                             "session_revoked", "delivery session changed")
                     retired = current["communication"]["wakes"][name]["delivered"]
-                if retired:
-                    status = "acknowledged"
-                else:
-                    prompted = True  # From here the pane may have received text.
+                    if retired:
+                        status = "acknowledged"
+                    elif (target(current, name) != (sid, endpoint)
+                          or scheduler is not None and not hint_eligible(current, name, scheduler, now)):
+                        status = "ineligible"
+                    else:
+                        # The next call may reach the pane even if this process
+                        # dies before recording its reply. Cadence uses intent,
+                        # while last_hint_at remains confirmed delivery.
+                        wake = current["communication"]["wakes"][name]
+                        wake["last_hint_attempt_at"] = now.isoformat()
+                        wake["attempt"]["status"] = "prompting"
+                        write_atomic(path / "state.json", current)
+                        status = "prompting"
+                if status == "prompting":
                     delivered = herdr_call(endpoint, ["agent", "prompt", endpoint["agent"]["pane_id"], HINT])["agent"]
                     verify_identity(delivered, endpoint["agent"])
                     status = "delivered"
@@ -129,19 +143,18 @@ def deliver(run_dir, actor=None, *, now=None, exclude=()):
             failure = {"code": getattr(error, "code", type(error).__name__), "message": str(error)[:512]}
         with locked(run_dir) as path:
             current = read_json(path / "state.json")
-            active = current["communication"]["active"].get(name) == sid
+            active = target(current, name) == (sid, endpoint)
             wake = current["communication"]["wakes"].get(name)
             if active and wake:
                 wake["attempt"] = {"session_id": sid, "sequence": sequence, "status": status,
                                    "at": now.isoformat(), "failure": failure}
-                if prompted:
-                    wake["last_hint_at"] = now.isoformat()
                 if status == "delivered":
+                    wake["last_hint_at"] = now.isoformat()
                     # An acknowledgement may have retired it during the prompt;
                     # a newer event keeps it pending for the next interval.
                     wake["delivered"] = wake["delivered"] or wake["sequence"] == sequence
                     wake.update(failures=0, retry_at=(now + timedelta(seconds=RETRY_SECONDS)).isoformat())
-                elif status in {"busy", "acknowledged"}:
+                elif status in {"busy", "acknowledged", "ineligible"}:
                     # Neither is a transport failure: keep the short interval.
                     wake.update(failures=failures - 1, retry_at=(now + timedelta(seconds=RETRY_SECONDS)).isoformat())
                 write_atomic(path / "state.json", current)

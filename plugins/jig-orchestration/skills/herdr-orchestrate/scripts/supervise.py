@@ -226,19 +226,38 @@ def completion_retry_at(state, settings):
 def coordinator_prompted_at(state):
     """Latest scheduler prompt of either kind to an unconfined coordinator."""
     schedule = state["scheduler"]
-    hinted = state.get("communication", {}).get("wakes", {}).get("coordinator", {}).get("last_hint_at")
-    times = [parse_time(value) for value in (schedule.get("last_attempt_at"), schedule.get("last_completed_at"), hinted)]
+    wake = state.get("communication", {}).get("wakes", {}).get("coordinator", {})
+    times = [parse_time(value) for value in (schedule.get("last_attempt_at"), schedule.get("last_completed_at"),
+                                           wake.get("last_hint_at"), wake.get("last_hint_attempt_at"))]
     return max((value for value in times if value is not None), default=None)
 
 
+def hint_eligible(state, actor, settings, now):
+    """Recheck scheduler policy at the hint's durable dispatch boundary."""
+    current = scheduler_config(state["config"], state["scheduler"])
+    if current != settings or not enabled(state, current):
+        return False
+    if actor != "coordinator" or state["config"].get("communication", {}).get("mode") == "enforced":
+        return True
+    prompted = coordinator_prompted_at(state)
+    return not (state["scheduler"].get("pending_action_id") or prompted
+                and now < scheduler_deadline(prompted, settings["minimum_cadence_seconds"]))
+
+
 def tick(run_dir, now=None):
+    # Hints and reconciliation wakes share one dispatch owner. The state lock
+    # remains available to stop/rebind/ack operations during external calls.
+    with exclusive(run_dir, "delivery.lock"):
+        return _tick(run_dir, now or datetime.now(timezone.utc))
+
+
+def _tick(run_dir, now):
     """One scheduler pass; an unconfined run then sends at most one inbox hint.
 
     Enforced runs deliver hints inside their own pass. Here the reconciliation
     wake keeps its cadence and completion rules, and hints for addressed
     messages and attention changes travel separately so they need not wait.
     """
-    now = now or datetime.now(timezone.utc)
     result = scheduled_tick(run_dir, now)
     if result.get("status") == "scheduler_stopped":
         return result
@@ -247,158 +266,152 @@ def tick(run_dir, now=None):
             or all(wake["delivered"] for wake in state.get("communication", {}).get("wakes", {}).values())):
         return result
     from notify import deliver
-    # A pending reconciliation wake already asks the coordinator for a full
-    # pass, which includes its inbox. A hint is also a prompt: it honors the
-    # same minimum interval the user set for scheduled wakes.
     settings = scheduler_config(state["config"], state["scheduler"])
-    prompted = coordinator_prompted_at(state)
-    exclude = ({"coordinator"} if state["scheduler"].get("pending_action_id") or prompted
-               and now < scheduler_deadline(prompted, settings["minimum_cadence_seconds"]) else ())
     try:
-        hint = deliver(run_dir, now=now, exclude=exclude)
+        hint = deliver(run_dir, now=now, scheduler=settings)
     except (StateError, RuntimeErrorDetail, OSError) as exc:
         hint = {"status": "failed", "error": str(exc)}
     return result if hint["status"] in {"quiet", "unbound", "backoff"} else {**result, "channel_hint": hint}
 
 
 def scheduled_tick(run_dir, now):
-    with exclusive(run_dir, "delivery.lock"):
-        state = Engine.read(run_dir)
-        settings = scheduler_config(state["config"], state["scheduler"])
-        if not enabled(state, settings):
-            return {"status": "scheduler_stopped"}
-        managed_guard(settings)
-        Engine.heartbeat(run_dir, timestamp(now))
-        state = Engine.read(run_dir)
-        if state["config"].get("communication", {}).get("mode") == "enforced":
-            return channel_tick(run_dir, state, settings, now)
+    """Reconciliation pass; tick owns the shared dispatch lock."""
+    state = Engine.read(run_dir)
+    settings = scheduler_config(state["config"], state["scheduler"])
+    if not enabled(state, settings):
+        return {"status": "scheduler_stopped"}
+    managed_guard(settings)
+    Engine.heartbeat(run_dir, timestamp(now))
+    state = Engine.read(run_dir)
+    if state["config"].get("communication", {}).get("mode") == "enforced":
+        return channel_tick(run_dir, state, settings, now)
+    schedule = state["scheduler"]
+    skip_scan = False
+    if schedule.get("integration_completion"):
+        def discard_orphan(current):
+            latest = current["scheduler"]
+            marker = latest.get("integration_completion")
+            if marker and marker != "manual" and marker != latest.get("pending_action_id"):
+                return {"integration_completion": None, "integration_attempt_at": None,
+                        "integration_attempt_binding": None}
+            return None
+        state = scheduler_patch(run_dir, discard_orphan)
         schedule = state["scheduler"]
-        skip_scan = False
         if schedule.get("integration_completion"):
-            def discard_orphan(current):
-                latest = current["scheduler"]
-                marker = latest.get("integration_completion")
-                if marker and marker != "manual" and marker != latest.get("pending_action_id"):
-                    return {"integration_completion": None, "integration_attempt_at": None,
-                            "integration_attempt_binding": None}
-                return None
-            state = scheduler_patch(run_dir, discard_orphan)
+            marker = schedule["integration_completion"]
+            retry_at = completion_retry_at(state, settings)
+            completion = ({"status": "integration_pending", "wake_id": marker, "retry_at": timestamp(retry_at)}
+                          if retry_at and now < retry_at else complete(run_dir, marker, now=now, resume=True))
+            if marker != "manual" or completion["status"] != "integration_pending":
+                return completion
+            # A failed manual pass does not own the coordinator wake slot.
+            # Keep its retry marker until recovery or a new pass is prepared.
+            skip_scan = True
+            state = Engine.read(run_dir)
             schedule = state["scheduler"]
-            if schedule.get("integration_completion"):
-                marker = schedule["integration_completion"]
-                retry_at = completion_retry_at(state, settings)
-                completion = ({"status": "integration_pending", "wake_id": marker, "retry_at": timestamp(retry_at)}
-                              if retry_at and now < retry_at else complete(run_dir, marker, now=now, resume=True))
-                if marker != "manual" or completion["status"] != "integration_pending":
-                    return completion
-                # A failed manual pass does not own the coordinator wake slot.
-                # Keep its retry marker until recovery or a new pass is prepared.
-                skip_scan = True
-                state = Engine.read(run_dir)
-                schedule = state["scheduler"]
-        if schedule.get("pending_action_id"):
-            return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
-                    "delivery_status": schedule.get("delivery_status")}
-        last = coordinator_prompted_at(state)
-        due = parse_time(schedule.get("next_due_at"))
-        requested = bool(schedule.get("wake_requested_at"))
-        if last and now < scheduler_deadline(last, settings["minimum_cadence_seconds"]):
-            return {"status": "minimum_cadence"}
-        if due and now < due and not requested:
-            return {"status": "not_due", "next_due_at": timestamp(due)}
-        scheduler_patch(run_dir, lambda _: {"last_attempt_at": timestamp(now),
-                        "next_due_at": timestamp(scheduler_deadline(now, settings["cadence_seconds"]))})
-        from integration import refresh
-        if not skip_scan:
-            refresh(run_dir)
+    if schedule.get("pending_action_id"):
+        return {"status": "awaiting_reconciliation", "wake_id": schedule["pending_action_id"],
+                "delivery_status": schedule.get("delivery_status")}
+    last = coordinator_prompted_at(state)
+    due = parse_time(schedule.get("next_due_at"))
+    requested = bool(schedule.get("wake_requested_at"))
+    if last and now < scheduler_deadline(last, settings["minimum_cadence_seconds"]):
+        return {"status": "minimum_cadence"}
+    if due and now < due and not requested:
+        return {"status": "not_due", "next_due_at": timestamp(due)}
+    scheduler_patch(run_dir, lambda _: {"last_attempt_at": timestamp(now),
+                    "next_due_at": timestamp(scheduler_deadline(now, settings["cadence_seconds"]))})
+    from integration import refresh
+    if not skip_scan:
+        refresh(run_dir)
 
-        def check_binding(current):
-            if scheduler_config(current["config"], current["scheduler"]) != settings:
-                raise RuntimeErrorDetail("scheduler_rebound", "Scheduler configuration changed during identity lookup; inspect again")
+    def check_binding(current):
+        if scheduler_config(current["config"], current["scheduler"]) != settings:
+            raise RuntimeErrorDetail("scheduler_rebound", "Scheduler configuration changed during identity lookup; inspect again")
 
-        try:
-            actual = herdr_call(settings, ["agent", "get", settings["agent"]["name"]])["agent"]
-            verify_identity(actual, settings["agent"])
-            status = actual.get("agent_status", "unknown")
-            if status not in {"working", "idle", "done"}:
-                raise RuntimeErrorDetail("coordinator_" + str(status),
-                    f"Coordinator at {settings['session']}/{settings['agent']['pane_id']} is {status}; inspect its original pane")
-            def recovered(current):
-                check_binding(current)
-                return {"failure": None} if endpoint_failure(current["scheduler"]) else None
-            scheduler_patch(run_dir, recovered)  # Verified recovery survives a concurrent manual completion.
-            if status == "working":
-                def busy(current):
-                    check_binding(current)
-                    if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
-                        return None
-                    return {"delivery_status": "busy", "failure": None,
-                            "busy_since_at": current["scheduler"].get("busy_since_at") or timestamp(now)}
-                scheduler_patch(run_dir, busy)
-                return {"status": "busy", "agent_status": status}
-        except (RuntimeErrorDetail, OSError, subprocess.TimeoutExpired, KeyError, TypeError) as exc:
-            code = str(getattr(exc, "code", type(exc).__name__))
-            def failed(current):
-                check_binding(current)
-                previous = current["scheduler"].get("failure") or {}
-                continuing = previous.get("code") == code or previous.get("id") == "endpoint-" + code
-                return {"failure": {"id": previous["id"] if continuing else "endpoint-" + uuid.uuid4().hex,
-                                    "code": code, "at": (previous.get("at") or timestamp(now)) if continuing else timestamp(now),
-                                    "reason": str(exc)}}
-            recorded = scheduler_patch(run_dir, failed)
-            return {"status": "endpoint_unavailable", "failure": recorded["scheduler"]["failure"]}
-
-        wake_id = "wake-" + uuid.uuid4().hex
-        def prepare(current):
+    try:
+        actual = herdr_call(settings, ["agent", "get", settings["agent"]["name"]])["agent"]
+        verify_identity(actual, settings["agent"])
+        status = actual.get("agent_status", "unknown")
+        if status not in {"working", "idle", "done"}:
+            raise RuntimeErrorDetail("coordinator_" + str(status),
+                f"Coordinator at {settings['session']}/{settings['agent']['pane_id']} is {status}; inspect its original pane")
+        def recovered(current):
             check_binding(current)
-            if not enabled(current, settings):
-                raise RuntimeErrorDetail("scheduler_stopped", "Scheduler stopped before dispatch")
-            if current["scheduler"].get("pending_action_id"):
-                raise RuntimeErrorDetail("wake_pending", "Another wake is unresolved")
-            if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
-                return None  # A completed reconciliation consumed this tick.
-            return {"pending_action_id": wake_id, "delivery_status": "dispatching", "failure": None,
-                    "integration_completion": None, "integration_attempt_at": None,
-                    "integration_attempt_binding": None,
-                    "wake_requested_at": None, "wake_reason": None, "busy_since_at": None,
-                    "last_dispatched_action_id": wake_id, "last_dispatched_at": timestamp(now)}
-        prepared = scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
-        if prepared["scheduler"].get("pending_action_id") != wake_id:
-            return {"status": "reconciliation_completed"}
-        prompt = (
-            f"Orchestration wake {wake_id}. Run directory: {Path(run_dir).resolve()}. "
-            "Perform one bounded reconciliation using the registered configuration and current state. "
-            "Respect admission mode, pauses, holds, limits and registered work areas. This scheduled "
-            "message grants no new authority. Observe and record outcomes even while work is paused. "
-            f"It addresses native session {settings['agent']['agent_session']['value']}; verify your registered identity before acting. "
-            f"After completing the pass, use python3 {shlex.quote(str(Path(__file__).resolve()))} complete "
-            f"--run-dir {shlex.quote(str(Path(run_dir).resolve()))} "
-            f"--wake-id {wake_id}. Do not complete a wake merely because it was delivered."
-        )
-        try:
-            delivered_agent = herdr_call(settings, ["agent", "prompt", settings["agent"]["pane_id"], prompt])["agent"]
-            verify_identity(delivered_agent, settings["agent"])
-        except (RuntimeErrorDetail, OSError, subprocess.TimeoutExpired, KeyError, TypeError) as exc:
-            def uncertain(current):
-                if current["scheduler"].get("pending_action_id") != wake_id:
+            return {"failure": None} if endpoint_failure(current["scheduler"]) else None
+        scheduler_patch(run_dir, recovered)  # Verified recovery survives a concurrent manual completion.
+        if status == "working":
+            def busy(current):
+                check_binding(current)
+                if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
                     return None
-                return {"delivery_status": "unconfirmed", "failure": {
-                    "id": wake_id, "at": timestamp(now), "reason": str(exc)}}
-            scheduler_patch(run_dir, uncertain)
-            return {"status": "delivery_unconfirmed", "wake_id": wake_id}
-        def delivered(current):
-            schedule = current["scheduler"]
-            if schedule.get("last_dispatched_action_id") != wake_id:
-                return None  # Never replace evidence for a newer dispatched wake.
-            fields = {}
-            previous = parse_time(schedule.get("last_delivered_at"))
-            if previous is None or previous <= now:
-                fields.update(last_delivered_at=timestamp(now), last_delivered_action_id=wake_id)
-            if schedule.get("pending_action_id") == wake_id:
-                fields.update(delivery_status="delivered", failure=None)
-            return fields or None  # Preserve a completion that won the acknowledgement race.
-        scheduler_patch(run_dir, delivered)
-        return {"status": "delivered", "wake_id": wake_id}
+                return {"delivery_status": "busy", "failure": None,
+                        "busy_since_at": current["scheduler"].get("busy_since_at") or timestamp(now)}
+            scheduler_patch(run_dir, busy)
+            return {"status": "busy", "agent_status": status}
+    except (RuntimeErrorDetail, OSError, subprocess.TimeoutExpired, KeyError, TypeError) as exc:
+        code = str(getattr(exc, "code", type(exc).__name__))
+        def failed(current):
+            check_binding(current)
+            previous = current["scheduler"].get("failure") or {}
+            continuing = previous.get("code") == code or previous.get("id") == "endpoint-" + code
+            return {"failure": {"id": previous["id"] if continuing else "endpoint-" + uuid.uuid4().hex,
+                                "code": code, "at": (previous.get("at") or timestamp(now)) if continuing else timestamp(now),
+                                "reason": str(exc)}}
+        recorded = scheduler_patch(run_dir, failed)
+        return {"status": "endpoint_unavailable", "failure": recorded["scheduler"]["failure"]}
+
+    wake_id = "wake-" + uuid.uuid4().hex
+    def prepare(current):
+        check_binding(current)
+        if not enabled(current, settings):
+            raise RuntimeErrorDetail("scheduler_stopped", "Scheduler stopped before dispatch")
+        if current["scheduler"].get("pending_action_id"):
+            raise RuntimeErrorDetail("wake_pending", "Another wake is unresolved")
+        if current["scheduler"].get("last_completed_action_id") != schedule.get("last_completed_action_id"):
+            return None  # A completed reconciliation consumed this tick.
+        return {"pending_action_id": wake_id, "delivery_status": "dispatching", "failure": None,
+                "integration_completion": None, "integration_attempt_at": None,
+                "integration_attempt_binding": None,
+                "wake_requested_at": None, "wake_reason": None, "busy_since_at": None,
+                "last_dispatched_action_id": wake_id, "last_dispatched_at": timestamp(now)}
+    prepared = scheduler_patch(run_dir, prepare)  # Durable intent is required before prompt.
+    if prepared["scheduler"].get("pending_action_id") != wake_id:
+        return {"status": "reconciliation_completed"}
+    prompt = (
+        f"Orchestration wake {wake_id}. Run directory: {Path(run_dir).resolve()}. "
+        "Perform one bounded reconciliation using the registered configuration and current state. "
+        "Respect admission mode, pauses, holds, limits and registered work areas. This scheduled "
+        "message grants no new authority. Observe and record outcomes even while work is paused. "
+        f"It addresses native session {settings['agent']['agent_session']['value']}; verify your registered identity before acting. "
+        f"After completing the pass, use python3 {shlex.quote(str(Path(__file__).resolve()))} complete "
+        f"--run-dir {shlex.quote(str(Path(run_dir).resolve()))} "
+        f"--wake-id {wake_id}. Do not complete a wake merely because it was delivered."
+    )
+    try:
+        delivered_agent = herdr_call(settings, ["agent", "prompt", settings["agent"]["pane_id"], prompt])["agent"]
+        verify_identity(delivered_agent, settings["agent"])
+    except (RuntimeErrorDetail, OSError, subprocess.TimeoutExpired, KeyError, TypeError) as exc:
+        def uncertain(current):
+            if current["scheduler"].get("pending_action_id") != wake_id:
+                return None
+            return {"delivery_status": "unconfirmed", "failure": {
+                "id": wake_id, "at": timestamp(now), "reason": str(exc)}}
+        scheduler_patch(run_dir, uncertain)
+        return {"status": "delivery_unconfirmed", "wake_id": wake_id}
+    def delivered(current):
+        schedule = current["scheduler"]
+        if schedule.get("last_dispatched_action_id") != wake_id:
+            return None  # Never replace evidence for a newer dispatched wake.
+        fields = {}
+        previous = parse_time(schedule.get("last_delivered_at"))
+        if previous is None or previous <= now:
+            fields.update(last_delivered_at=timestamp(now), last_delivered_action_id=wake_id)
+        if schedule.get("pending_action_id") == wake_id:
+            fields.update(delivery_status="delivered", failure=None)
+        return fields or None  # Preserve a completion that won the acknowledgement race.
+    scheduler_patch(run_dir, delivered)
+    return {"status": "delivered", "wake_id": wake_id}
 
 
 def request_wake(run_dir, reason="requested", now=None):
@@ -498,7 +511,7 @@ def channel_tick(run_dir, state, settings, now):
     current = Engine.read(run_dir)
     if not enabled(current, scheduler_config(current["config"], current["scheduler"])):
         return {"status": "scheduler_stopped"}
-    return deliver(run_dir, now=now)
+    return deliver(run_dir, now=now, scheduler=settings)
 
 
 def channel_health_failures(state, settings, now):

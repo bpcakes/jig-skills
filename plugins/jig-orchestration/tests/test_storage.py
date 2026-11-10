@@ -349,6 +349,56 @@ protocol.write_blob(sys.argv[2], sys.argv[3])
         self.assertFalse(list((self.run / "artifacts").glob(".write-pending-*")))
         self.assertEqual((self.run / "artifacts" / digest).read_text(), content)
 
+    def test_snapshot_reclamation_removes_interrupted_writes_before_returning_storage(self):
+        import views
+        script = '''
+import os, sys
+sys.path.insert(0, sys.argv[1])
+import state, views
+replace = state.os.replace
+def interrupt(source, target):
+    if target.parent.name == "view-snapshots": os._exit(17)
+    return replace(source, target)
+state.os.replace = interrupt
+views.save_snapshot(sys.argv[2], sys.argv[3], {"view": "x" * 20000})
+'''
+        artifact = self.put("retained", "authoritative evidence")["artifact"]["id"]
+        for index in range(3):
+            identifier = hashlib.sha256(str(index).encode()).hexdigest()
+            result = subprocess.run([sys.executable, "-B", "-c", script, str(test_channel.SCRIPTS),
+                                     str(self.run), identifier], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 17, result.stderr)
+            directory = self.run / "view-snapshots"
+            self.assertEqual(len(list(directory.glob(".write-pending-*"))), 1)
+            ledger = read_json(self.run / storage.LEDGER)
+            self.assertIn("view-snapshots/" + identifier, ledger["files"])
+        # There have been no completed snapshots to expire. A successful query
+        # still cleans the last orphan and preserves authoritative evidence.
+        current = self.snapshot(99)
+        self.assertFalse(list(directory.glob(".write-pending-*")))
+        self.assertEqual(len(list(directory.glob(".write-lock-*"))), 1)
+        ledger = read_json(self.run / storage.LEDGER)
+        self.assertEqual({key for key in ledger["files"] if key.startswith("view-snapshots/")},
+                         {"view-snapshots/" + current})
+        self.assertEqual(self.call(self.driver, op="artifact_read", task_id="A", artifact_id=artifact)["content"],
+                         "authoritative evidence")
+
+    def test_snapshot_deletions_are_durable_before_accounting_release(self):
+        import views
+        original = self.snapshot(0)
+        before = read_json(self.run / storage.LEDGER)
+        with unittest.mock.patch.object(views, "SNAPSHOT_LIMIT", 1), \
+                unittest.mock.patch.object(views, "sync_directory", side_effect=OSError("interrupted directory sync")):
+            with self.assertRaisesRegex(OSError, "interrupted directory sync"):
+                self.snapshot(1)
+        self.assertFalse((self.run / "view-snapshots" / original).exists())
+        self.assertEqual(read_json(self.run / storage.LEDGER), before)
+        # Restart after unlink but before durable accounting release.
+        current = self.snapshot(2)
+        ledger = read_json(self.run / storage.LEDGER)
+        self.assertEqual({key for key in ledger["files"] if key.startswith("view-snapshots/")},
+                         {"view-snapshots/" + current})
+
     def test_state_lock_pressure_returns_honest_bounded_error_then_same_control_succeeds(self):
         request = {"op": "control", "control": "pause", "action_id": "pressure-pause", "expected_policy": 1}
         # Warm the immutable identity cache, then block authoritative state.

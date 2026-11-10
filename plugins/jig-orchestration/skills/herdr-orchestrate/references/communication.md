@@ -676,8 +676,11 @@ invented empty ledger.
 
 Gateway handshakes do not wait on authoritative state. Authentication and job
 reconciliation run outside the accept loop, with finite state-lock waits.
-A `watch` and the gateway's own maintenance read state again only after it is
-written, so idle waiters neither hold the state lock nor slow a control request.
+A `watch` and the gateway's own maintenance normally read state again after a
+write, with a periodic fallback read every five seconds. Maintenance also reads
+when a previously running job is no longer verifiably live. Waiters release the
+state lock between reads; these checks reduce idle contention without eliminating
+it or guaranteeing that control requests are never delayed.
 `state_busy` reports contention without claiming success; retry the same action
 ID or cursor. Runtime hashing and Git metadata scans for admission, handoff and
 job start run outside the global state lock while retaining the checkout lease.

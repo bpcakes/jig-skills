@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 
 import channel
-from state import (Engine, StateError, canonical, lock_file, private, read_json, require, unresolved_finding,
+from state import (Engine, StateError, canonical, lock_file, private, read_json, require, sync_directory, unresolved_finding,
                    write_atomic)
 
 MAX_VIEW_BYTES = 32768
@@ -31,17 +31,27 @@ def retained(directory):
 
 
 def evict(run_dir, directory, keep):
-    """Drop all but the `keep` most recent snapshots and return their storage."""
+    """Reconcile the cache under its lock before returning any storage."""
     names = retained(directory)
     expired = names[:max(0, len(names) - keep)]
     for name in expired:
-        key = hashlib.sha256(name.encode()).hexdigest()
-        for leftover in (name, ".write-lock-" + key, ".write-pending-" + key):  # write_atomic's companions
-            (directory / leftover).unlink(missing_ok=True)
-    if expired:
-        from storage import retain
-        retain(run_dir, directory.name, names[len(expired):])
-    return len(expired)
+        (directory / name).unlink()
+    surviving = names[len(expired):]
+    keys = {hashlib.sha256(name.encode()).hexdigest() for name in surviving}
+    removed = len(expired)
+    # A crash before replace leaves companions without a completed snapshot.
+    # No cache writer is active while the caller holds .cache-lock.
+    for entry in directory.iterdir():
+        match = re.fullmatch(r"\.write-(?:lock|pending)-([0-9a-f]{64})", entry.name)
+        if match and match[1] not in keys:
+            entry.unlink()
+            removed += 1
+    # Even an orphan-only cache, or a crash after unlink, needs reconciliation.
+    # Persist deletions before the ledger can forget the bytes they covered.
+    sync_directory(directory)
+    from storage import retain
+    retain(run_dir, directory.name, surviving)
+    return removed
 
 
 def save_snapshot(run_dir, identifier, snapshot):

@@ -245,8 +245,10 @@ def transition(state, request, principal, session, run_dir):
         # cursors, it has retrieved everything a pending hint would point at.
         wake = current["wakes"].get(actor)
         if wake is not None:
+            scope = set(principal["task_ids"]) & set(state["config"]["scope"]["task_ids"])
             wake["tasks"] = {name: position for name, position in wake.get("tasks", {}).items()
-                             if position > current["acknowledgements"].get(canonical([actor, name]), 0)}
+                             if name in scope
+                             and position > current["acknowledgements"].get(canonical([actor, name]), 0)}
             if not wake["tasks"]:
                 wake["delivered"] = True
         return {"acknowledged": cursor(current, current["acknowledgements"][key]), "effect_confirmed": False}

@@ -27,6 +27,28 @@ def endpoint(actor, pane):
 
 
 class LegacyChannelFixture(ChannelFixture):
+    def handoff(self, task_id, driver):
+        for operation, fields in (("park", {}), ("handoff", {
+                "host": "local", "driver": driver, "worktree": str(self.trees / task_id),
+                "branch": "task/" + task_id, "identity": {"native_id": "native-" + driver + "-" + task_id},
+                "source": {**self.proof, "published": True, "revision": "H1"}})):
+            state = Engine.read(self.run)
+            Engine.apply(self.run, {"op": operation, "action_id": operation + "-" + driver + "-" + task_id,
+                                   "task_id": task_id, "expected_policy": state["policy_version"],
+                                   "expected_task": state["tasks"][task_id]["version"],
+                                   "evidence": {**self.proof, "all_jobs_settled": True}, **fields})
+
+    def bind_shared_driver(self):
+        state = Engine.read(self.run)
+        actors = {**state["config"]["actors"],
+                  "driver-A": {**state["config"]["actors"]["driver-A"], "task_ids": ["A", "B"]}}
+        Engine.apply(self.run, {"op": "configure", "action_id": "share-B", "expected_policy": state["policy_version"],
+                               "fields": {"actors": actors}, "evidence": self.proof})
+        self.handoff("B", "driver-A")
+        pane = endpoint("driver-A", "p3")
+        notify.bind(self.run, "driver-A", None, pane)
+        return pane
+
     def coordinator(self, **request):
         return supervise.channel_request(self.run, "coordinator", request)
 
@@ -43,6 +65,61 @@ class LegacyChannelFixture(ChannelFixture):
 
 
 class LegacyChannelTests(LegacyChannelFixture, unittest.TestCase):
+    def test_handoff_keeps_the_remaining_tasks_verified_driver_endpoint(self):
+        pane = self.bind_shared_driver()
+        previous = self.active("driver-A")
+        self.handoff("B", "driver-B")
+        self.driver("A", op="inbox", task_id="A")
+        state = Engine.read(self.run)
+        current = self.active("driver-A")
+        self.assertNotEqual(current, previous)
+        self.assertEqual(state["communication"]["sessions"][current]["task_ids"], ["A"])
+        self.assertEqual(notify.target(state, "driver-A"), (current, pane))
+        self.coordinator(op="message", task_id="A", action_id="continue-A", recipient="driver-A",
+                         kind="assignment", body="Continue A")
+        prompts = []
+        def herdr(target, argv):
+            if argv[1] == "prompt":
+                prompts.append(target["agent"]["pane_id"])
+            return {"agent": {**target["agent"], "agent_status": "idle"}}
+        with patch.object(supervise, "herdr_call", side_effect=herdr):
+            self.assertEqual(notify.deliver(self.run, actor="driver-A")["status"], "delivered")
+        self.assertEqual(prompts, [pane["agent"]["pane_id"]])
+
+    def test_retained_task_identity_change_still_drops_the_driver_endpoint(self):
+        self.bind_shared_driver()
+        self.handoff("A", "driver-A")  # Same actor, different native task identity.
+        self.driver("A", op="inbox", task_id="A")
+        self.assertIsNone(notify.target(Engine.read(self.run), "driver-A"))
+
+    def test_explicit_revocation_does_not_restore_a_driver_endpoint(self):
+        self.bind_shared_driver()
+        channel.revoke(self.run, "driver-A")
+        self.driver("A", op="inbox", task_id="A")
+        self.assertIsNone(notify.target(Engine.read(self.run), "driver-A"))
+
+    def test_ack_after_handoff_retires_inaccessible_positions_but_keeps_new_mail(self):
+        self.bind_shared_driver()
+        self.coordinator(op="message", task_id="B", action_id="old-B", recipient="driver-A",
+                         kind="assignment", body="Earlier B assignment")
+        self.handoff("B", "driver-B")
+        self.coordinator(op="message", task_id="A", action_id="first-A", recipient="driver-A",
+                         kind="assignment", body="First A assignment")
+        page = self.driver("A", op="inbox", task_id="A")
+        self.coordinator(op="message", task_id="A", action_id="new-A", recipient="driver-A",
+                         kind="assignment", body="Newer unread A assignment")
+        self.driver("A", op="ack", task_id="A", action_id="ack-first-A", cursor=page["cursor"])
+        wake = Engine.read(self.run)["communication"]["wakes"]["driver-A"]
+        self.assertNotIn("B", wake["tasks"])
+        self.assertIn("A", wake["tasks"])
+        self.assertFalse(wake["delivered"])
+        page = self.driver("A", op="inbox", task_id="A")
+        self.assertEqual(page["events"][-1]["message"]["id"], "new-A")
+        self.driver("A", op="ack", task_id="A", action_id="ack-new-A", cursor=page["cursor"])
+        wake = Engine.read(self.run)["communication"]["wakes"]["driver-A"]
+        self.assertEqual(wake["tasks"], {})
+        self.assertTrue(wake["delivered"])
+
     def test_question_reply_and_evidence_cross_both_transports(self):
         question = {"op": "message", "task_id": "A", "action_id": "question", "recipient": "coordinator",
                     "kind": "question", "body": "Which interface?"}
@@ -294,6 +371,101 @@ class LegacyHintTests(LegacyChannelFixture, unittest.TestCase):
         supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
         self.assertEqual(self.tick(30), {"status": "scheduler_stopped"})
         self.assertEqual(len(self.prompts), 1)
+
+    def prepare_hint(self):
+        supervise.complete(self.run, self.tick(0)["wake_id"], self.now + timedelta(seconds=5))
+        self.ask("pending-question")
+
+    def test_stop_during_hint_lookup_suppresses_dispatch(self):
+        self.prepare_hint()
+        def stop(target, argv):
+            response = self.herdr(target, argv)
+            if argv[1] == "get":
+                supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
+            return response
+        with patch.object(supervise, "herdr_call", side_effect=stop):
+            self.tick(90)
+        self.assertFalse(Engine.read(self.run)["scheduler"]["enabled"])
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation")])
+
+    def test_rebind_during_hint_lookup_never_prompts_the_old_endpoint(self):
+        self.prepare_hint()
+        def rebind(target, argv):
+            response = self.herdr(target, argv)
+            if argv[1] == "get":
+                supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
+                state = Engine.read(self.run)
+                settings = {**state["config"]["scheduler"], **endpoint("replacement", "p4"), "enabled": True}
+                Engine.apply(self.run, {"op": "configure", "action_id": "rebind", "expected_policy": state["policy_version"],
+                                       "fields": {"scheduler": settings}, "evidence": self.proof})
+            return response
+        with patch.object(supervise, "herdr_call", side_effect=rebind):
+            self.tick(90)
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation")])
+        self.assertEqual(self.tick(100)["channel_hint"]["status"], "delivered")
+        self.assertEqual(self.prompts[-1], ("replacement", "hint"))
+
+    def test_hint_holds_dispatch_ownership_against_a_competing_tick(self):
+        self.prepare_hint()
+        errors = []
+        def compete(target, argv):
+            response = self.herdr(target, argv)
+            if argv[1] == "get":
+                # Control writes remain available while the dispatch owner is
+                # outside the state lock performing an external lookup.
+                supervise.request_wake(self.run, "concurrent", self.now + timedelta(seconds=91))
+                try:
+                    self.tick(91)
+                except supervise.RuntimeErrorDetail as error:
+                    errors.append(error.code)
+            return response
+        with patch.object(supervise, "herdr_call", side_effect=compete):
+            self.assertEqual(self.tick(90)["channel_hint"]["status"], "delivered")
+        self.assertEqual(errors, ["already_running"])
+        self.assertIsNone(Engine.read(self.run)["scheduler"].get("pending_action_id"))
+        self.assertEqual(self.tick(95)["status"], "minimum_cadence")
+        self.assertEqual(self.tick(151)["status"], "delivered")
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation"), ("coordinator", "hint"),
+                                       ("coordinator", "reconciliation")])
+
+    def test_completed_reconciliation_during_hint_lookup_rechecks_cadence(self):
+        self.prepare_hint()
+        def complete(target, argv):
+            response = self.herdr(target, argv)
+            if argv[1] == "get":
+                supervise.complete(self.run, "manual", self.now + timedelta(seconds=89))
+            return response
+        with patch.object(supervise, "herdr_call", side_effect=complete):
+            self.tick(90)
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation")])
+        self.assertEqual(self.tick(151)["channel_hint"]["status"], "delivered")
+
+    def test_crash_after_prompt_counts_toward_minimum_cadence(self):
+        self.prepare_hint()
+        class Interrupted(BaseException):
+            pass
+        def interrupt(target, argv):
+            response = self.herdr(target, argv)
+            if argv[1] == "prompt":
+                raise Interrupted()
+            return response
+        with patch.object(supervise, "herdr_call", side_effect=interrupt):
+            with self.assertRaises(Interrupted):
+                self.tick(90)
+        wake = Engine.read(self.run)["communication"]["wakes"]["coordinator"]
+        self.assertIsNone(wake.get("last_hint_at"))
+        self.assertEqual(wake["last_hint_attempt_at"], (self.now + timedelta(seconds=90)).isoformat())
+        self.assertEqual(self.tick(95)["status"], "minimum_cadence")
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation"), ("coordinator", "hint")])
+        self.assertEqual(self.tick(151)["channel_hint"]["status"], "delivered")
+
+    def test_crash_before_lookup_does_not_consume_prompt_cadence(self):
+        self.prepare_hint()
+        with patch.object(supervise, "herdr_call", side_effect=RuntimeError("interrupted before lookup")):
+            with self.assertRaisesRegex(RuntimeError, "interrupted before lookup"):
+                self.tick(90)
+        self.assertEqual(self.tick(95)["channel_hint"]["status"], "delivered")
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation"), ("coordinator", "hint")])
 
 
 if __name__ == "__main__":
