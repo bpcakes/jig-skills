@@ -1,5 +1,7 @@
 """Durable wake delivery uses fake endpoints, never a live Herdr pane."""
 from datetime import datetime, timedelta, timezone
+import io
+import json
 import os
 import subprocess
 import unittest
@@ -66,6 +68,45 @@ class NotifyTests(ChannelFixture, unittest.TestCase):
             write_atomic(path / "state.json", state)
             from storage import initialize
             initialize(path, state["config"])
+
+    def standalone(self, actor):
+        with patch("sys.argv", ["notify.py", "--run-dir", str(self.run), "--actor", actor]), \
+                patch("sys.stdout", new_callable=io.StringIO) as output:
+            notify.main()
+        return json.loads(output.getvalue())
+
+    def test_enforced_standalone_honors_scheduler_stop(self):
+        self.enable()
+        supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
+        for actor in self.sessions:
+            with self.subTest(actor=actor), patch.object(supervise, "herdr_call", side_effect=self.response) as call:
+                self.assertEqual(self.standalone(actor)["status"], "quiet")
+                call.assert_not_called()
+        self.assertEqual(self.pending(), sorted(self.sessions))
+
+    def test_enforced_standalone_rechecks_stop_after_lookup(self):
+        self.enable()
+
+        def stop(endpoint, argv):
+            supervise.scheduler_patch(self.run, lambda _: {"enabled": False})
+            return self.response(endpoint, argv)
+
+        for actor in self.sessions:
+            supervise.scheduler_patch(self.run, lambda _: {"enabled": True})
+            with self.subTest(actor=actor), patch.object(supervise, "herdr_call", side_effect=stop) as call:
+                self.assertEqual(self.standalone(actor)["status"], "ineligible")
+                self.assertEqual([item.args[1][1] for item in call.call_args_list], ["get"])
+        self.assertEqual(self.pending(), sorted(self.sessions))
+
+    def test_enforced_standalone_delivers_without_unconfined_cadence(self):
+        self.enable()
+        supervise.scheduler_patch(self.run, lambda _: {
+            "last_attempt_at": datetime.now(timezone.utc).isoformat(), "pending_action_id": "unconfined-wake"})
+        for actor in self.sessions:
+            with self.subTest(actor=actor), patch.object(supervise, "herdr_call", side_effect=self.response) as call:
+                self.assertEqual(self.standalone(actor)["status"], "delivered")
+                self.assertEqual([item.args[1][1] for item in call.call_args_list], ["get", "prompt"])
+        self.assertEqual(self.pending(), [])
 
     def test_unavailable_recipient_and_new_events_cannot_starve_healthy_recipient(self):
         calls = []

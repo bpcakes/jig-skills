@@ -189,13 +189,12 @@ def main():
         session_id = bind(args.run_dir, args.actor, args.bind_session, json.loads(Path(args.endpoint).read_text()))
         print(json.dumps({"status": "bound", "actor": args.actor, "session_id": session_id}))
         return
-    # A standalone delivery shares dispatch ownership with tick. Unconfined
-    # coordinator hints must obey its current policy even on this entry point.
+    # A standalone delivery shares dispatch ownership and scheduler policy with
+    # tick in both modes, including a stop while the endpoint is being checked.
     from supervise import exclusive, scheduler_config
     with exclusive(args.run_dir, "delivery.lock"):
         state = Engine.read(args.run_dir)
-        settings = (scheduler_config(state["config"], state["scheduler"])
-                    if state["config"].get("communication", {}).get("mode") != "enforced" else None)
+        settings = scheduler_config(state["config"], state["scheduler"])
         print(json.dumps(deliver(args.run_dir, args.actor, scheduler=settings)))
 
 
