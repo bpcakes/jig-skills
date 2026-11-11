@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import copy
 from datetime import datetime, timedelta, timezone
+import secrets
 import subprocess
 
 from state import Engine, locked, read_json, require, scheduler_identity, timestamp, write_atomic
@@ -32,6 +33,7 @@ def bind(run_dir, actor, session_id, endpoint):
         communication = state["communication"]
         require(communication["active"].get(actor) == session_id, "session_revoked", "bind the current launch session")
         communication["sessions"][session_id]["endpoint"] = copy.deepcopy(endpoint)
+        communication["sessions"][session_id]["endpoint_binding"] = secrets.token_hex(16)
         # An explicit host rebind is a recovery action. Ordinary new events do
         # not clear a recipient's backoff or it could monopolize delivery.
         notice = communication["wakes"].setdefault(actor, {"sequence": communication["sequence"]})
@@ -41,7 +43,12 @@ def bind(run_dir, actor, session_id, endpoint):
 
 
 def target(state, name):
-    """Return (session id, endpoint); a scheduler-owned target has no session id."""
+    """Return (binding id, endpoint); scheduler-owned targets have no binding id.
+
+    Enforced targets require their current launch session. Unconfined targets
+    retain a binding only across a validated renewal of the same endpoint.
+    Explicit host rebinding always replaces the delivery identity.
+    """
     communication = state.get("communication", {})
     sid = communication.get("active", {}).get(name)
     session = communication.get("sessions", {}).get(sid, {})
@@ -59,12 +66,12 @@ def target(state, name):
         import channel
         if unconfined and session.get("role") in {"coordinator", "driver"}:
             endpoint = channel.transport_endpoint(state, sid)
-            return (sid, endpoint) if endpoint is not None else None
+            return (session.get("endpoint_binding", sid), endpoint) if endpoint is not None else None
         try:
             channel.check(state, channel.Session(sid, session["digest"]))
         except channel.StateError:
             return None
-        return sid, session["endpoint"]
+        return session.get("endpoint_binding", sid), session["endpoint"]
     return None
 
 
@@ -89,7 +96,7 @@ def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
                 bound.append((name, notice, *selected))
         if not bound:
             return {"status": "unbound", "actors": [name for name, _ in candidates]}
-        for name, notice, sid, endpoint in bound:
+        for name, notice, binding_id, endpoint in bound:
             retry = parse_time(notice.get("retry_at"))
             if retry is None or now >= retry:
                 break
@@ -102,15 +109,13 @@ def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
         # first recipient must not starve all the others after every restart.
         with locked(run_dir) as path:
             current = read_json(path / "state.json")
-            require(sid is None or current["communication"]["active"].get(name) == sid,
-                    "session_revoked", "delivery session changed")
-            if target(current, name) != (sid, endpoint):
+            if target(current, name) != (binding_id, endpoint):
                 return {"status": "binding_changed", "actor": name, "sequence": sequence}
             if current["communication"]["wakes"][name]["delivered"]:
                 return {"status": "acknowledged", "actor": name, "sequence": sequence}
             current["communication"]["wakes"][name].update(
                 last_attempt_at=now.isoformat(), retry_at=retry_at, failures=failures,
-                attempt={"session_id": sid, "sequence": sequence, "status": "dispatching", "at": now.isoformat()})
+                attempt={"binding_id": binding_id, "sequence": sequence, "status": "dispatching", "at": now.isoformat()})
             write_atomic(path / "state.json", current)
         failure = None
         try:
@@ -127,12 +132,10 @@ def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
                     raise RuntimeErrorDetail("agent_" + str(observed), f"{name} is {observed}; inspect its original pane")
                 with locked(run_dir) as path:
                     current = read_json(path / "state.json")
-                    require(sid is None or current["communication"]["active"].get(name) == sid,
-                            "session_revoked", "delivery session changed")
                     retired = current["communication"]["wakes"][name]["delivered"]
                     if retired:
                         status = "acknowledged"
-                    elif (target(current, name) != (sid, endpoint)
+                    elif (target(current, name) != (binding_id, endpoint)
                           or scheduler is not None and not hint_eligible(current, name, scheduler, now)):
                         status = "ineligible"
                     else:
@@ -153,10 +156,10 @@ def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
             failure = {"code": getattr(error, "code", type(error).__name__), "message": str(error)[:512]}
         with locked(run_dir) as path:
             current = read_json(path / "state.json")
-            active = target(current, name) == (sid, endpoint)
+            active = target(current, name) == (binding_id, endpoint)
             wake = current["communication"]["wakes"].get(name)
             if active and wake:
-                wake["attempt"] = {"session_id": sid, "sequence": sequence, "status": status,
+                wake["attempt"] = {"binding_id": binding_id, "sequence": sequence, "status": status,
                                    "at": now.isoformat(), "failure": failure}
                 if status == "delivered":
                     wake["last_hint_at"] = now.isoformat()

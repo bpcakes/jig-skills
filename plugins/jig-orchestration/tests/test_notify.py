@@ -133,6 +133,37 @@ class NotifyTests(ChannelFixture, unittest.TestCase):
         self.assertEqual(result["status"], "session_changed")
         self.assertEqual(call.call_count, 1)
 
+    def test_enforced_session_replacement_during_prompt_fences_confirmation(self):
+        self.enable()
+        self.settle()
+        self.publish(["coordinator"])
+
+        def replace(endpoint, argv):
+            if argv[1] == "prompt":
+                token = channel.issue(self.run, "coordinator")
+                notify.bind(self.run, "coordinator", channel.parse_credential(token).id, endpoint)
+            return self.response(endpoint, argv)
+
+        with patch.object(supervise, "herdr_call", side_effect=replace):
+            delivered = notify.deliver(self.run, "coordinator", now=self.now)
+        self.assertEqual(delivered["status"], "session_changed")
+        self.assertEqual(self.pending(), ["coordinator"])
+
+    def test_enforced_rebind_during_prompt_preserves_new_recovery_hint(self):
+        self.enable()
+        self.settle()
+        self.publish(["coordinator"])
+
+        def rebind(endpoint, argv):
+            if argv[1] == "prompt":
+                notify.bind(self.run, "coordinator", self.sessions["coordinator"].id, endpoint)
+            return self.response(endpoint, argv)
+
+        with patch.object(supervise, "herdr_call", side_effect=rebind):
+            delivered = notify.deliver(self.run, "coordinator", now=self.now)
+        self.assertEqual(delivered["status"], "session_changed")
+        self.assertEqual(self.pending(), ["coordinator"])
+
     def test_acknowledgement_of_new_event_during_prompt_stays_retired(self):
         self.settle()
         self.publish(["coordinator"])

@@ -51,7 +51,7 @@ agents remain as trusted as the rest of that run.
 A hint is the fixed text "Orchestration updates are available. Read your
 authenticated inbox." typed into a registered pane by the scheduler. It carries
 no task content and grants no authority. Each one costs its recipient a model
-turn, so the runtime sends one only when all of these hold:
+turn, so ordinary event hints are sent only when all of these hold:
 
 - Something was addressed to that actor: a message, a change to its task's
   pause, cancellation, holds, delegation, recovery, blocker, ownership, parking
@@ -64,6 +64,11 @@ turn, so the runtime sends one only when all of these hold:
 - The pane's agent is `idle` or `done`. A `working` agent is retried shortly
   without counting a failure. A blocked or unrecognized pane is never typed into
   and is recorded as an unconfirmed delivery.
+
+Explicit host binding or rebinding queues one recovery hint even when the inbox
+is empty. It follows the same pane-state and applicable scheduler rules. A valid
+scoped acknowledgement retires a recovery-only wake; if unread task positions
+remain, they must still be acknowledged before the wake is retired.
 
 An enforced run binds each launch with `notify.py --bind-session`, as described
 under host setup. In an unconfined run the coordinator needs no binding: hints

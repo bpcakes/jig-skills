@@ -122,6 +122,7 @@ class LegacyChannelTests(LegacyChannelFixture, unittest.TestCase):
 
     def test_handoff_keeps_the_remaining_tasks_verified_driver_endpoint(self):
         pane = self.bind_shared_driver()
+        previous_target = notify.target(Engine.read(self.run), "driver-A")
         previous = self.active("driver-A")
         self.handoff("B", "driver-B")
         self.driver("A", op="inbox", task_id="A")
@@ -129,7 +130,7 @@ class LegacyChannelTests(LegacyChannelFixture, unittest.TestCase):
         current = self.active("driver-A")
         self.assertNotEqual(current, previous)
         self.assertEqual(state["communication"]["sessions"][current]["task_ids"], ["A"])
-        self.assertEqual(notify.target(state, "driver-A"), (current, pane))
+        self.assertEqual(notify.target(state, "driver-A"), previous_target)
         self.coordinator(op="message", task_id="A", action_id="continue-A", recipient="driver-A",
                          kind="assignment", body="Continue A")
         prompts = []
@@ -140,6 +141,92 @@ class LegacyChannelTests(LegacyChannelFixture, unittest.TestCase):
         with patch.object(supervise, "herdr_call", side_effect=herdr):
             self.assertEqual(notify.deliver(self.run, actor="driver-A")["status"], "delivered")
         self.assertEqual(prompts, [pane["agent"]["pane_id"]])
+
+    def assert_driver_change_during_hint(self, stage="prompt", change="renewal", unread=False,
+                                         acknowledge=False, old_format=False):
+        pane = self.bind_shared_driver()
+        if old_format:
+            with locked(self.run) as path:
+                state = read_json(path / "state.json")
+                sid = state["communication"]["active"]["driver-A"]
+                state["communication"]["sessions"][sid].pop("endpoint_binding", None)
+                write_atomic(path / "state.json", state)
+        previous = self.active("driver-A")
+        self.handoff("B", "driver-B")
+        self.coordinator(op="message", task_id="A", action_id="continue-A", recipient="driver-A",
+                         kind="assignment", body="Continue A")
+        now = datetime(2026, 11, 11, tzinfo=timezone.utc)
+        prompts, changed = [], False
+
+        def herdr(target, argv):
+            nonlocal changed
+            if argv[1] == "prompt":
+                prompts.append(target["agent"]["pane_id"])
+            if argv[1] == stage and not changed:
+                changed = True
+                if change == "revocation":
+                    channel.revoke(self.run, "driver-A")
+                elif change == "identity":
+                    self.handoff("A", "driver-A")
+                elif change == "replacement":
+                    channel.issue(self.run, "driver-A", task_ids=["A"], endpoint=pane)
+                self.driver("A", op="inbox", task_id="A")
+                if change == "rebind":
+                    notify.bind(self.run, "driver-A", None, pane)
+                if unread or acknowledge:
+                    self.coordinator(op="message", task_id="A", action_id="newer-A", recipient="driver-A",
+                                     kind="update", body="A newer update")
+                if acknowledge:
+                    page = self.driver("A", op="inbox", task_id="A")
+                    self.driver("A", op="ack", task_id="A", action_id="ack-A", cursor=page["cursor"])
+            return {"agent": {**target["agent"], "agent_status": "idle"}}
+
+        with patch.object(supervise, "herdr_call", side_effect=herdr):
+            first = notify.deliver(self.run, "driver-A", now=now)
+            wake = Engine.read(self.run)["communication"]["wakes"]["driver-A"]
+            later = notify.deliver(self.run, "driver-A", now=now + timedelta(seconds=6))
+        self.assertTrue(changed)
+        self.assertNotEqual(self.active("driver-A"), previous)
+        if change == "renewal":
+            self.assertEqual(first["status"], "delivered")
+            self.assertEqual(wake["delivered"], not unread)
+            self.assertEqual(later["status"], "delivered" if unread else "quiet")
+            self.assertEqual(len(prompts), 2 if unread else 1)
+            if unread:
+                self.assertGreater(later["sequence"], first["sequence"])
+        else:
+            self.assertEqual(first["status"], "session_changed")
+            self.assertFalse(wake["delivered"])
+            rebound = change in {"replacement", "rebind"}
+            self.assertEqual(later["status"], "delivered" if rebound else "unbound")
+            self.assertEqual(len(prompts), 2 if rebound else 1)
+
+    def test_driver_renewal_during_lookup_preserves_hint_authority(self):
+        self.assert_driver_change_during_hint(stage="get")
+
+    def test_driver_renewal_during_prompt_does_not_repeat_hint(self):
+        self.assert_driver_change_during_hint()
+
+    def test_driver_renewal_during_prompt_preserves_newer_unread_event(self):
+        self.assert_driver_change_during_hint(unread=True)
+
+    def test_driver_renewal_during_prompt_preserves_newer_acknowledgement(self):
+        self.assert_driver_change_during_hint(acknowledge=True)
+
+    def test_driver_renewal_during_prompt_accepts_older_session_records(self):
+        self.assert_driver_change_during_hint(old_format=True)
+
+    def test_driver_revocation_during_prompt_drops_endpoint(self):
+        self.assert_driver_change_during_hint(change="revocation")
+
+    def test_driver_identity_change_during_prompt_drops_endpoint(self):
+        self.assert_driver_change_during_hint(change="identity")
+
+    def test_explicit_driver_replacement_during_prompt_fences_confirmation(self):
+        self.assert_driver_change_during_hint(change="replacement")
+
+    def test_explicit_driver_rebind_during_prompt_fences_confirmation(self):
+        self.assert_driver_change_during_hint(change="rebind")
 
     def test_retained_task_identity_change_still_drops_the_driver_endpoint(self):
         self.bind_shared_driver()

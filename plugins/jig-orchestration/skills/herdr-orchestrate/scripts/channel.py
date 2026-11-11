@@ -125,6 +125,7 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
             require(parent_session is None, "session", "root agents cannot inherit child authority")
         from protocol import data as protocol_data
         communication = protocol_data(state)
+        endpoint_binding = session_id
         if transport_from is not None:
             require(not enforced and isinstance(transport_from, Session), "session", "invalid transport renewal")
             previous = communication["sessions"].get(transport_from.id, {})
@@ -133,6 +134,10 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
                     "session_revoked", "transport session changed during renewal")
             if previous.get("role") == role:
                 endpoint = transport_endpoint(state, transport_from.id)
+                if endpoint is not None:
+                    # Only a validated renewal preserves delivery authority.
+                    # Older records used their session id as that identity.
+                    endpoint_binding = previous.get("endpoint_binding", transport_from.id)
         generation = communication["generations"].get(actor, 0) + 1
         communication["generations"][actor] = generation
         communication["active"][actor] = session_id
@@ -145,6 +150,7 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
         }
         if endpoint is not None:
             record["endpoint"] = endpoint
+            record["endpoint_binding"] = endpoint_binding
         from storage import ensure, reserve
         ensure(path, state["config"])
         reservations = {}
