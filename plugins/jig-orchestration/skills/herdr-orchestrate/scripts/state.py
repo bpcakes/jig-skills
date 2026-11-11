@@ -673,7 +673,12 @@ class Engine:
             task = state["tasks"].get(request.get("task_id"))
             if task is not None and not communication_operation:
                 task["version"] += 1
-            state_changed(state, request, caller, before)
+            # In enforced runs a local host administrator is distinct from the
+            # coordinator agent. Keep receipt authority unchanged, but notify
+            # that agent too. Guarded runner completions retain their caller.
+            origin = (None if session is None and not internal
+                      and state["config"].get("communication", {}).get("mode") == "enforced" else caller)
+            state_changed(state, request, origin, before)
             result = {"action_id": request["action_id"], "version": state["version"],
                       "policy_version": state["policy_version"], "task_version": task["version"] if task else None,
                       **(details or {})}

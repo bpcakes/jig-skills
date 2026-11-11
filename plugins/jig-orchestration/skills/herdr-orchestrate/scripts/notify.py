@@ -41,7 +41,7 @@ def bind(run_dir, actor, session_id, endpoint):
 
 
 def target(state, name):
-    """Return (session id, endpoint) for an actor that can be hinted, else None."""
+    """Return (session id, endpoint); a scheduler-owned target has no session id."""
     communication = state.get("communication", {})
     sid = communication.get("active", {}).get(name)
     session = communication.get("sessions", {}).get(sid, {})
@@ -49,11 +49,12 @@ def target(state, name):
     if name == "coordinator" and unconfined:
         # An unconfined run already registered its coordinator's exact Herdr
         # identity for scheduled supervision. Hints use that pane, including
-        # before the coordinator has made its first channel request.
+        # before the coordinator has made its first channel request. Its
+        # transport record can change without changing this authority.
         from supervise import scheduler_config
         settings = scheduler_config(state["config"], state["scheduler"])
         if isinstance(settings.get("agent"), dict) and not session.get("revoked"):
-            return sid, settings
+            return None, settings
     if session.get("endpoint") and not session.get("revoked"):
         import channel
         if unconfined and session.get("role") in {"coordinator", "driver"}:
@@ -101,7 +102,7 @@ def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
         # first recipient must not starve all the others after every restart.
         with locked(run_dir) as path:
             current = read_json(path / "state.json")
-            require(current["communication"]["active"].get(name) == sid,
+            require(sid is None or current["communication"]["active"].get(name) == sid,
                     "session_revoked", "delivery session changed")
             if target(current, name) != (sid, endpoint):
                 return {"status": "binding_changed", "actor": name, "sequence": sequence}
@@ -126,7 +127,7 @@ def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
                     raise RuntimeErrorDetail("agent_" + str(observed), f"{name} is {observed}; inspect its original pane")
                 with locked(run_dir) as path:
                     current = read_json(path / "state.json")
-                    require(current["communication"]["active"].get(name) == sid,
+                    require(sid is None or current["communication"]["active"].get(name) == sid,
                             "session_revoked", "delivery session changed")
                     retired = current["communication"]["wakes"][name]["delivered"]
                     if retired:

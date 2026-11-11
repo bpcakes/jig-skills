@@ -912,13 +912,13 @@ def with_transport(run_dir, caller, call):
     """Run one channel call as a caller the transport has already identified."""
     import channel
     for attempt in range(2):
-        session = channel.transport_session(run_dir, caller)
         try:
+            session = channel.transport_session(run_dir, caller)
             return call(session)
         except StateError as exc:
-            # The record was replaced or its task binding changed after it was
-            # resolved. The transport identity is unchanged, so resolve it once
-            # more. Mutations stay idempotent through their action ID.
+            # A concurrent request may replace the record during renewal or
+            # after resolution. The transport identity is unchanged, so resolve
+            # it once more. Mutations stay idempotent through their action ID.
             if exc.code != "session_revoked" or attempt:
                 raise
 

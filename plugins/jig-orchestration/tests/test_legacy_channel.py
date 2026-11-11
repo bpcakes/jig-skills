@@ -67,6 +67,59 @@ class LegacyChannelFixture(ChannelFixture):
 
 
 class LegacyChannelTests(LegacyChannelFixture, unittest.TestCase):
+    def test_concurrent_watch_and_message_share_transport_renewal_after_handoff(self):
+        self.bind_shared_driver()
+        cursor = self.driver("A", op="inbox", task_id="A")["cursor"]
+        previous = self.active("driver-A")
+        self.handoff("B", "driver-B")
+        barrier = threading.Barrier(2)
+        issue = channel.issue
+        results, errors = {}, []
+        message_done = threading.Event()
+
+        def simultaneous(*args, **kwargs):
+            old = kwargs.get("transport_from")
+            if old is not None and old.id == previous:
+                barrier.wait(5)
+            return issue(*args, **kwargs)
+
+        def request(name, **fields):
+            try:
+                results[name] = self.driver("A", **fields)
+            except Exception as error:
+                errors.append(error)
+            finally:
+                if name == "message":
+                    message_done.set()
+
+        message = {"op": "message", "task_id": "A", "action_id": "renewal-question",
+                   "recipient": "coordinator", "kind": "question", "body": "Continue A?"}
+        with patch.object(channel, "issue", side_effect=simultaneous):
+            workers = [threading.Thread(target=request, args=("watch",), kwargs={
+                "op": "watch", "task_id": "A", "view": "inbox", "after": cursor, "timeout_seconds": 5}),
+                threading.Thread(target=request, args=("message",), kwargs=message)]
+            for worker in workers:
+                worker.start()
+            finished = message_done.wait(10)
+            self.coordinator(op="message", task_id="A", action_id="renewal-answer", recipient="driver-A",
+                             kind="assignment", body="Continue A")
+            for worker in workers:
+                worker.join(10)
+            self.assertTrue(finished)
+            self.assertFalse(any(worker.is_alive() for worker in workers))
+        self.assertEqual(errors, [])
+        self.assertTrue(results["watch"]["changed"])
+        self.assertEqual(results["watch"]["events"][-1]["message_id"], "renewal-answer")
+        self.assertNotEqual(self.active("driver-A"), previous)
+        self.assertEqual(self.driver("A", **message), results["message"])
+        inbox = self.coordinator(op="inbox", task_id="A")
+        self.assertEqual(sum(event.get("message_id") == "renewal-question" for event in inbox["events"]), 1)
+
+    def test_transport_resolution_retries_only_once(self):
+        with patch.object(channel, "transport_session", side_effect=StateError("session_revoked", "changed")) as resolve:
+            self.refused("session_revoked", self.driver, "A", op="inbox", task_id="A")
+        self.assertEqual(resolve.call_count, 2)
+
     def test_handoff_keeps_the_remaining_tasks_verified_driver_endpoint(self):
         pane = self.bind_shared_driver()
         previous = self.active("driver-A")
@@ -347,6 +400,39 @@ class LegacyHintTests(LegacyChannelFixture, unittest.TestCase):
     def ask(self, identifier):
         return self.driver("A", op="message", task_id="A", action_id=identifier, recipient="coordinator",
                            kind="question", body="Which interface?")
+
+    def assert_transport_change_during_hint(self, stage, renew):
+        self.prepare_hint()
+        if renew:
+            self.coordinator(op="inbox", task_id="A")
+        previous = self.active("coordinator")
+
+        def change_session(target, argv):
+            if argv[1] == stage:
+                if renew:
+                    channel.revoke(self.run, "coordinator")
+                self.coordinator(op="inbox", task_id="A")
+            return self.herdr(target, argv)
+
+        with patch.object(supervise, "herdr_call", side_effect=change_session):
+            delivered = self.tick(90)
+        self.assertNotEqual(self.active("coordinator"), previous)
+        self.assertEqual(delivered["channel_hint"]["status"], "delivered")
+        self.assertTrue(Engine.read(self.run)["communication"]["wakes"]["coordinator"]["delivered"])
+        self.tick(151)
+        self.assertEqual(self.prompts, [("coordinator", "reconciliation"), ("coordinator", "hint")])
+
+    def test_first_coordinator_transport_during_lookup_does_not_cancel_hint(self):
+        self.assert_transport_change_during_hint("get", False)
+
+    def test_first_coordinator_transport_during_prompt_does_not_repeat_hint(self):
+        self.assert_transport_change_during_hint("prompt", False)
+
+    def test_coordinator_transport_renewal_during_lookup_does_not_cancel_hint(self):
+        self.assert_transport_change_during_hint("get", True)
+
+    def test_coordinator_transport_renewal_during_prompt_does_not_repeat_hint(self):
+        self.assert_transport_change_during_hint("prompt", True)
 
     def notify_cli(self, seconds):
         output = io.StringIO()

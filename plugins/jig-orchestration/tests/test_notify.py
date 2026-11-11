@@ -123,6 +123,7 @@ class NotifyTests(ChannelFixture, unittest.TestCase):
         call.assert_not_called()
 
     def test_session_replacement_during_lookup_prevents_prompt(self):
+        self.enable()
         def call(endpoint, argv):
             channel.issue(self.run, "coordinator")
             return self.response(endpoint, argv)
@@ -131,6 +132,26 @@ class NotifyTests(ChannelFixture, unittest.TestCase):
             result = notify.deliver(self.run, "coordinator", now=self.now)
         self.assertEqual(result["status"], "session_changed")
         self.assertEqual(call.call_count, 1)
+
+    def test_acknowledgement_of_new_event_during_prompt_stays_retired(self):
+        self.settle()
+        self.publish(["coordinator"])
+
+        def acknowledge(endpoint, argv):
+            if argv[1] == "prompt":
+                self.publish(["coordinator"])
+                page = protocol.read(self.run, self.sessions["coordinator"], {"op": "inbox", "task_id": "B"})
+                self.act("coordinator", op="ack", task_id="B", action_id="ack-during-prompt", cursor=page["cursor"])
+                self.assertEqual(self.pending(), [])
+            return self.response(endpoint, argv)
+
+        with patch.object(supervise, "herdr_call", side_effect=acknowledge):
+            self.assertEqual(notify.deliver(self.run, "coordinator", now=self.now)["status"], "delivered")
+        self.assertEqual(self.pending(), [])
+        with patch.object(supervise, "herdr_call") as call:
+            later = notify.deliver(self.run, now=self.now + timedelta(seconds=notify.MAX_RETRY_SECONDS))
+        self.assertEqual(later["status"], "quiet")
+        call.assert_not_called()
 
     def test_enforced_tick_honors_scheduler_stop_and_maintains_heartbeat(self):
         with locked(self.run) as path:
@@ -220,6 +241,45 @@ class NotifyTests(ChannelFixture, unittest.TestCase):
         # Both remain in the originator's own inbox history.
         own = protocol.read(self.run, self.sessions["driver-B"], {"op": "inbox", "task_id": "B"})
         self.assertEqual([item.get("origin") for item in own["events"]], ["driver-B", "coordinator"])
+
+    def host_apply(self, **request):
+        state = Engine.read(self.run)
+        request.setdefault("expected_policy", state["policy_version"])
+        if "task_id" in request:
+            request.setdefault("expected_task", state["tasks"][request["task_id"]]["version"])
+        return Engine.apply(self.run, request)
+
+    def test_enforced_host_control_hints_coordinator_without_changing_receipt_identity(self):
+        self.enable()
+        self.settle()
+        result = self.host_apply(op="control", task_id="B", action_id="host-pause", control="pause")
+        self.assertEqual(self.pending(), ["coordinator", "driver-B"])
+        self.assertIsNone(Engine.read(self.run)["communication"]["events"][-1].get("origin"))
+        receipt = Engine.action(self.run, "host-pause")
+        self.assertEqual(receipt["caller"], "coordinator")
+        self.assertEqual(Engine.apply(self.run, receipt["request"]), result)
+        self.settle()
+        self.act("coordinator", op="control", task_id="B", action_id="agent-resume", control="resume")
+        self.assertEqual(self.pending(), ["driver-B"])
+        self.assertEqual(Engine.read(self.run)["communication"]["events"][-1]["origin"], "coordinator")
+
+    def test_enforced_host_recovery_hints_coordinator(self):
+        self.enable()
+        self.settle()
+        task = Engine.read(self.run)["tasks"]["B"]
+        self.host_apply(op="recover_session", task_id="B", action_id="host-recovery",
+                        previous_identity=task["identity"], identity={"native_id": "replacement"},
+                        evidence={**self.proof, "previous_session_stopped": True, "replacement_verified": True,
+                                  "host": "local", "worktree": task["worktree"]})
+        self.assertEqual(self.pending(), ["coordinator", "driver-B"])
+        with patch.object(supervise, "herdr_call", side_effect=self.response):
+            self.assertEqual(notify.deliver(self.run, "coordinator", now=self.now)["status"], "delivered")
+
+    def test_unconfined_host_control_keeps_coordinator_origin(self):
+        self.settle()
+        self.host_apply(op="control", task_id="B", action_id="local-pause", control="pause")
+        self.assertEqual(self.pending(), ["driver-B"])
+        self.assertEqual(Engine.read(self.run)["communication"]["events"][-1]["origin"], "coordinator")
 
     def test_acknowledged_inbox_retires_the_hint_without_a_prompt(self):
         self.settle()
