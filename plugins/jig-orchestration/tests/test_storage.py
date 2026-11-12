@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 import unittest
+import unittest.mock
 
 import test_channel
 from test_channel import ChannelFixture, Engine, StateError, channel, communicate
@@ -275,6 +276,53 @@ channel.apply(sys.argv[2], channel.parse_credential(sys.argv[3]),
             save_snapshot(self.run, "another", {"large": "y" * 200000})
         self.assertFalse((self.run / "view-snapshots/another").exists())
 
+    def snapshot(self, index, size=2000):
+        import views
+        body = {"session_id": "fixture", "task_id": "A", "view": {"index": index, "detail": "x" * size}}
+        identifier = hashlib.sha256(canonical(body).encode()).hexdigest()
+        views.save_snapshot(self.run, identifier, body)
+        return identifier
+
+    def snapshots(self):
+        import views
+        reserved = {name.split("/", 1)[1] for name in read_json(self.run / storage.LEDGER)["files"]
+                    if name.startswith("view-snapshots/")}
+        stored = set(views.retained(self.run / "view-snapshots"))
+        self.assertEqual(reserved, stored)  # Storage is returned with each expired snapshot.
+        self.assertEqual(len(list((self.run / "view-snapshots").glob(".write-lock-*"))), len(stored))
+        return stored
+
+    def test_snapshot_cache_keeps_the_most_recent_and_returns_the_rest(self):
+        import views
+        issued = []
+        with unittest.mock.patch.object(views, "SNAPSHOT_LIMIT", 3):
+            for index in range(6):
+                issued.append(self.snapshot(index))
+                # Issue times a clock tick apart, whatever this filesystem's resolution.
+                stamp = time.time_ns() - (60 - index) * 10 ** 9
+                os.utime(self.run / "view-snapshots" / issued[-1], ns=(stamp, stamp))
+            self.assertEqual(self.snapshots(), set(issued[3:]))
+            before = storage.status(self.run)
+            self.assertEqual(self.snapshot(3), issued[3])  # Issued again: recent again, and no new storage.
+            self.assertEqual(storage.status(self.run), before)
+            issued.append(self.snapshot(6))
+            self.assertEqual(self.snapshots(), {issued[3], issued[5], issued[6]})
+        with self.assertRaisesRegex(StateError, "only the view snapshot cache"):
+            storage.retain(self.run, "actions", [])
+
+    def test_snapshot_makes_room_from_older_snapshots_when_storage_is_short(self):
+        older = [self.snapshot(index, 20000) for index in range(2)]
+        for index, identifier in enumerate(older):
+            stamp = time.time_ns() - (60 - index) * 10 ** 9
+            os.utime(self.run / "view-snapshots" / identifier, ns=(stamp, stamp))
+        self.fill()
+        newest = self.snapshot(2, 30000)  # Larger than what the artifacts left free.
+        stored = self.snapshots()
+        self.assertIn(newest, stored)
+        self.assertNotIn(older[0], stored)
+        status = storage.status(self.run)
+        self.assertLessEqual(status["reserved_bytes"], status["limits"]["max_bytes"] - status["limits"]["reserved_bytes"])
+
     def test_repeated_process_crashes_leave_one_reserved_temporary_then_recover(self):
         content = "recover this immutable artifact" * 100
         digest = hashlib.sha256(content.encode()).hexdigest()
@@ -300,6 +348,56 @@ protocol.write_blob(sys.argv[2], sys.argv[3])
         self.assertIn("artifact", stored)
         self.assertFalse(list((self.run / "artifacts").glob(".write-pending-*")))
         self.assertEqual((self.run / "artifacts" / digest).read_text(), content)
+
+    def test_snapshot_reclamation_removes_interrupted_writes_before_returning_storage(self):
+        import views
+        script = '''
+import os, sys
+sys.path.insert(0, sys.argv[1])
+import state, views
+replace = state.os.replace
+def interrupt(source, target):
+    if target.parent.name == "view-snapshots": os._exit(17)
+    return replace(source, target)
+state.os.replace = interrupt
+views.save_snapshot(sys.argv[2], sys.argv[3], {"view": "x" * 20000})
+'''
+        artifact = self.put("retained", "authoritative evidence")["artifact"]["id"]
+        for index in range(3):
+            identifier = hashlib.sha256(str(index).encode()).hexdigest()
+            result = subprocess.run([sys.executable, "-B", "-c", script, str(test_channel.SCRIPTS),
+                                     str(self.run), identifier], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 17, result.stderr)
+            directory = self.run / "view-snapshots"
+            self.assertEqual(len(list(directory.glob(".write-pending-*"))), 1)
+            ledger = read_json(self.run / storage.LEDGER)
+            self.assertIn("view-snapshots/" + identifier, ledger["files"])
+        # There have been no completed snapshots to expire. A successful query
+        # still cleans the last orphan and preserves authoritative evidence.
+        current = self.snapshot(99)
+        self.assertFalse(list(directory.glob(".write-pending-*")))
+        self.assertEqual(len(list(directory.glob(".write-lock-*"))), 1)
+        ledger = read_json(self.run / storage.LEDGER)
+        self.assertEqual({key for key in ledger["files"] if key.startswith("view-snapshots/")},
+                         {"view-snapshots/" + current})
+        self.assertEqual(self.call(self.driver, op="artifact_read", task_id="A", artifact_id=artifact)["content"],
+                         "authoritative evidence")
+
+    def test_snapshot_deletions_are_durable_before_accounting_release(self):
+        import views
+        original = self.snapshot(0)
+        before = read_json(self.run / storage.LEDGER)
+        with unittest.mock.patch.object(views, "SNAPSHOT_LIMIT", 1), \
+                unittest.mock.patch.object(views, "sync_directory", side_effect=OSError("interrupted directory sync")):
+            with self.assertRaisesRegex(OSError, "interrupted directory sync"):
+                self.snapshot(1)
+        self.assertFalse((self.run / "view-snapshots" / original).exists())
+        self.assertEqual(read_json(self.run / storage.LEDGER), before)
+        # Restart after unlink but before durable accounting release.
+        current = self.snapshot(2)
+        ledger = read_json(self.run / storage.LEDGER)
+        self.assertEqual({key for key in ledger["files"] if key.startswith("view-snapshots/")},
+                         {"view-snapshots/" + current})
 
     def test_state_lock_pressure_returns_honest_bounded_error_then_same_control_succeeds(self):
         request = {"op": "control", "control": "pause", "action_id": "pressure-pause", "expected_policy": 1}

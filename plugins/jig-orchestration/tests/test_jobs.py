@@ -1,4 +1,5 @@
 """Real process lifetime, replacement and cancellation under the launch boundary."""
+import errno
 import json
 import fcntl
 import os
@@ -6,6 +7,7 @@ from pathlib import Path
 import subprocess
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -512,6 +514,26 @@ while not Path('finish').exists(): time.sleep(.01)
             if process is not None and process.poll() is None:
                 process.kill()
                 process.communicate(timeout=5)
+
+
+@unittest.skipUnless(sys.platform == "linux", "namespace evidence is read from procfs")
+class NamespaceEvidenceTests(unittest.TestCase):
+    def test_process_that_exits_while_its_namespace_is_inspected_is_gone(self):
+        with tempfile.TemporaryDirectory() as root:
+            evidence = Path(root) / "namespace.json"
+            evidence.write_text(json.dumps({"child-pid": os.getpid(), "pid-namespace": 1}))
+            evidence.chmod(0o600)
+            job = {"directory": root, "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip()}
+            stat = Path.stat
+
+            def exits_first(path, *args, **kwargs):
+                # procfs still lists the process, then fails to follow its link.
+                if str(path).endswith("/ns/pid"):
+                    raise ProcessLookupError(errno.ESRCH, "No such process")
+                return stat(path, *args, **kwargs)
+
+            with patch.object(Path, "stat", exits_first):
+                self.assertIsNone(jobs.namespace(job))
 
 
 if __name__ == "__main__":

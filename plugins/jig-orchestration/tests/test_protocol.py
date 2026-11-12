@@ -42,6 +42,16 @@ class ProtocolTests(ChannelFixture, unittest.TestCase):
                            recipient="driver-B", kind="update", body="secret")
         self.assertEqual(denied["error"], "scope")
 
+    def test_sending_returns_no_cursor_that_would_skip_unread_messages(self):
+        assigned = self.call(self.coordinator, op="message", task_id="A", action_id="assignment",
+                             recipient="driver-A", kind="assignment", body="Implement the parser")
+        asked = self.message()  # Sent before this driver has read its assignment.
+        self.assertNotIn("cursor", asked)
+        self.assertGreater(asked["sequence"], assigned["sequence"])
+        unread = self.call(self.drivers["A"], op="inbox", task_id="A")
+        self.assertEqual([(item["message_id"], item["sequence"]) for item in unread["events"]],
+                         [("assignment", assigned["sequence"]), ("question", asked["sequence"])])
+
     def test_acknowledgement_survives_restart_without_claiming_effect(self):
         result = self.message()
         self.assertTrue(result.get("accepted"), result)
@@ -98,6 +108,30 @@ class ProtocolTests(ChannelFixture, unittest.TestCase):
         self.assertEqual([item["message_id"] for item in replies[0]["events"]], ["third"])
         # Messages are deliberately independent of authoritative task versions.
         self.assertEqual(self.call(self.drivers["A"], op="query", task_id="A")["change_token"], task_token)
+
+    def test_inbox_watch_steps_over_the_watchers_own_history(self):
+        cursor = self.call(self.drivers["A"], op="inbox", task_id="A")["cursor"]
+        # More of the watcher's own events than one inbox page holds.
+        for index in range(20):
+            self.message(action_id=f"own-{index}")
+        started = time.monotonic()
+        quiet = self.call(self.drivers["A"], op="watch", task_id="A", view="inbox", after=cursor, timeout_seconds=1)
+        self.assertFalse(quiet["changed"])
+        self.assertGreaterEqual(time.monotonic() - started, 0.9)
+        replies = []
+        waiter = threading.Thread(target=lambda: replies.append(self.call(
+            self.drivers["A"], op="watch", task_id="A", view="inbox", after=cursor, timeout_seconds=4)))
+        waiter.start()
+        time.sleep(0.3)
+        self.call(self.coordinator, op="message", task_id="A", action_id="answer", recipient="driver-A",
+                  kind="reply", body="Use interface v2", reply_to="own-0")
+        waiter.join(5)
+        self.assertFalse(waiter.is_alive())
+        self.assertTrue(replies[0]["changed"])
+        self.assertEqual([item["message_id"] for item in replies[0]["events"]], ["answer"])
+        # An explicit read still lists the sender's own messages as history.
+        listed = self.call(self.drivers["A"], op="inbox", task_id="A", after=cursor, limit=32)
+        self.assertEqual(len(listed["events"]), 21)
 
     def test_watch_rejects_misspelled_timeout_fields_without_waiting(self):
         token = self.call(self.drivers["A"], op="query", task_id="A")["change_token"]

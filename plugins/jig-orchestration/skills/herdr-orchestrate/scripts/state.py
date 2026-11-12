@@ -220,6 +220,15 @@ def write_bytes_atomic(path, encoded, *, recovery=False, control=False):
         with os.fdopen(fd, "wb") as stream:
             stream.write(encoded)
             stream.flush()
+            if path.name == "state.json":
+                # StateWatch tells one state from the next by this time. Two
+                # writes can share a clock tick, so never repeat the old one.
+                try:
+                    previous = os.stat(path).st_mtime_ns
+                except FileNotFoundError:
+                    previous = None
+                if previous is not None and os.fstat(stream.fileno()).st_mtime_ns <= previous:
+                    os.utime(name, ns=(previous + 1, previous + 1))
             os.fsync(stream.fileno())
         os.replace(name, path)
         sync_directory(path.parent)
@@ -231,6 +240,40 @@ def read_json(path):
     private(path)
     with path.open(encoding="utf-8") as stream:
         return json.load(stream)
+
+
+class StateWatch:
+    """Tell a polling waiter when another locked read could return something new.
+
+    A read takes the run lock and parses the whole state, which every waiter
+    used to repeat on each poll. Nothing a waiter is shown changes without a
+    state write, and each write installs a file with a later modification time
+    or leaves its journal behind, so compare those first. `interval` bounds
+    the delay on a filesystem that cannot store such times; it is not the
+    polling rate, and every waiter pays one read per interval for it.
+    """
+    interval = 5.0
+
+    def __init__(self, run_dir):
+        self.path = Path(run_dir).absolute()
+        self.seen, self.read_at = None, 0.0
+
+    def due(self):
+        """Sample before reading: a write that lands during the read is seen next time."""
+        try:
+            info = os.stat(self.path / "state.json")
+            stamp = (info.st_mtime_ns, info.st_ino, info.st_size, os.path.lexists(self.path / "transaction.json"))
+        except OSError:
+            stamp = None  # Let the read itself report what is wrong.
+        now = time.monotonic()
+        if stamp is not None and stamp == self.seen and now - self.read_at < self.interval:
+            return False
+        self.seen, self.read_at = stamp, now
+        return True
+
+    def retry(self):
+        """The read that followed `due` failed; the next poll must read again."""
+        self.seen = None
 
 
 class ExecutionGuard:
@@ -517,7 +560,7 @@ class Engine:
 
     @staticmethod
     def apply(run_dir, request, caller="coordinator", *, execution=None, session=None, workspace_lease=None):
-        from protocol import MUTATIONS, state_changed, transition as communication_transition
+        from protocol import MUTATIONS, attention, state_changed, transition as communication_transition
         require(isinstance(request, dict) and "caller" not in request, "invalid", "caller is transport identity, not request data")
         require(nonempty(request.get("action_id")) and nonempty(request.get("op")), "invalid", "action_id and op are required")
         communication_operation = request["op"] in MUTATIONS
@@ -593,6 +636,8 @@ class Engine:
                     require(request.get("expected_task") == task["version"], "stale_task", "current task version is required")
                 Engine._authorize(state, request, caller, task)
             pending = task.get("pending_intent") if task else None
+            # Compared after the transition to decide who is hinted about it.
+            before = attention(state)
             if pending and pending.get("execution"):
                 if request["op"] == "dispatch":
                     require(caller == pending["executor"], "forbidden", "only the prepared executor may issue this operation")
@@ -628,7 +673,12 @@ class Engine:
             task = state["tasks"].get(request.get("task_id"))
             if task is not None and not communication_operation:
                 task["version"] += 1
-            state_changed(state, request)
+            # In enforced runs a local host administrator is distinct from the
+            # coordinator agent. Keep receipt authority unchanged, but notify
+            # that agent too. Guarded runner completions retain their caller.
+            origin = (None if session is None and not internal
+                      and state["config"].get("communication", {}).get("mode") == "enforced" else caller)
+            state_changed(state, request, origin, before)
             result = {"action_id": request["action_id"], "version": state["version"],
                       "policy_version": state["policy_version"], "task_version": task["version"] if task else None,
                       **(details or {})}

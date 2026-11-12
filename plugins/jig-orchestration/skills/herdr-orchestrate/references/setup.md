@@ -2,7 +2,7 @@
 
 Read at startup, adoption, or a host/profile change. Save capability receipts in the private run directory and record their paths in configuration; do not repeat full preflight on every tick.
 
-For an enforced run, follow [authenticated communication](communication.md):
+Isolation is opt-in. For an enforced run, follow [agent communication](communication.md#enforced-runs):
 register the supported local Linux execution host, run `verify-host`, and use
 separate clones with private Git metadata. Host dependencies below belong to the
 trusted runtime; their installation does not grant the model access to Herdr,
@@ -76,7 +76,7 @@ The SSH `serve` route rejects enforced runs. Verify actual query, message and
 required action access with the selected client; a connection flag is insufficient.
 The remaining SSH guidance in this section is for legacy runs.
 
-Coordinator-to-worker SSH does not prove worker-to-coordinator access. Verify the reverse route separately against isolated state before delegating consequential transitions. Bind caller identity outside the request payload and allow only its assigned task operations. Establish the driver's standing grant at admission so routine stages, including final helper closure, do not wait for the coordinator. The bundled `serve` command supports a restricted SSH forced-command entry point; [runtime](runtime.md) describes the protocol. Do not give workers the coordinator's unrestricted local `apply` command or arbitrary shell access as a substitute for this boundary.
+Coordinator-to-worker SSH does not prove worker-to-coordinator access. Verify the reverse route separately against isolated state before delegating consequential transitions. That route also carries the driver's [messages and inbox](communication.md#unconfined-runs); a driver without it cannot use the protocol. Bind caller identity outside the request payload and allow only its assigned task operations. Establish the driver's standing grant at admission so routine stages, including final helper closure, do not wait for the coordinator. The bundled `serve` command supports a restricted SSH forced-command entry point; [runtime](runtime.md) describes the protocol. Do not give workers the coordinator's unrestricted local `apply` command or arbitrary shell access as a substitute for this boundary.
 
 Without a verified return route, record coordinator-mediated transitions: workers can implement/review and leave durable evidence, while the coordinator checks current gates and performs authorized merges/resource transfers. Do not invent a new transport or claim direct progress on that host.
 

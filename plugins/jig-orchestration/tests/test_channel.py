@@ -87,7 +87,9 @@ class ChannelFixture:
             context.__exit__(None, None, None)
 
     def call(self, token, **payload):
-        return communicate.request(payload, socket_path=str(self.run / "endpoint/gateway.sock"), credential=token, timeout=5)
+        # Functional checks use the documented client deadlines. Deadline tests
+        # supply their own limits; slow durable writes need not finish in 5s.
+        return communicate.request(payload, socket_path=str(self.run / "endpoint/gateway.sock"), credential=token)
 
 
 class ChannelTests(ChannelFixture, unittest.TestCase):
@@ -192,6 +194,31 @@ class ChannelTests(ChannelFixture, unittest.TestCase):
         paused = self.call(token, op="control", control="pause", action_id="pause", expected_policy=1)
         self.assertNotIn("error", paused)
         self.assertTrue(Engine.read(self.run)["controls"]["paused"])
+
+    def test_running_coordinator_covers_a_task_added_after_its_launch(self):
+        self.socket_server()
+        token = channel.issue(self.run, "coordinator")
+        driver = channel.issue(self.run, "driver-A")
+        state = Engine.read(self.run)
+        actors = {**state["config"]["actors"],
+                  "driver-C": {"role": "driver", "task_ids": ["C"], "host": "local", "helper_route": True}}
+        # Only host administration widens the run; the session cannot do this itself.
+        Engine.apply(self.run, {"op": "configure", "action_id": "add-C", "expected_policy": state["policy_version"],
+                                "fields": {"scope": {"task_ids": ["A", "B", "C"]}, "actors": actors},
+                                "evidence": self.proof})
+        (self.trees / "C").mkdir()
+        admitted = self.call(token, op="admit", action_id="admit-C", task_id="C", driver="driver-C", host="local",
+                             expected_policy=Engine.read(self.run)["policy_version"],
+                             identity={"native_id": "native-C"}, worktree=str(self.trees / "C"), branch="task/C",
+                             claim={**self.proof, "authority": "fixture", "task_id": "C", "owner": "driver-C",
+                                    "confirmed": True, "ready": True, "unpublished": False})
+        self.assertNotIn("error", admitted)
+        self.assertEqual(set(self.call(token, op="query")["tasks"]), {"A", "B", "C"})
+        sent = self.call(token, op="message", task_id="C", action_id="assign-C", recipient="driver-C",
+                         kind="assignment", body="Implement the consumer")
+        self.assertTrue(sent.get("accepted"), sent)
+        # A driver keeps the tasks it was launched for.
+        self.assertEqual(self.call(driver, op="query", task_id="C")["error"], "wrong_task")
 
     def test_reviewer_can_read_its_task_but_cannot_mutate(self):
         self.socket_server()

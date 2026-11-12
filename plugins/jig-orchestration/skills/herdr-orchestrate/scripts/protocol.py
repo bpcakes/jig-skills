@@ -27,30 +27,71 @@ def data(state):
     return current
 
 
-def event(state, task_id, kind, readers, **fields):
+def event(state, task_id, kind, readers, *, origin=None, wake=None, **fields):
+    """Record one notice. Readers can list it; only `wake` recipients get a hint.
+
+    A hint costs its recipient a model turn. The actor who caused an event
+    already knows about it, so `origin` is never hinted. `wake` defaults to
+    every other reader; pass an empty selection for routine notices.
+    """
     current = data(state)
     current["sequence"] += 1
     record = {"sequence": current["sequence"], "task_id": task_id, "kind": kind,
               "readers": sorted(set(readers)), **fields}
+    if origin is not None:
+        record["origin"] = origin
     current["events"].append(record)
     if len(current["events"]) > EVENT_LIMIT:
         current["floor"] = current["events"].pop(0)["sequence"]
-    for reader in record["readers"]:
+    selected = set(record["readers"]) if wake is None else set(wake) & set(record["readers"])
+    for reader in sorted(selected - {origin}):
         previous = current["wakes"].get(reader, {})
+        # Per-task positions let a later acknowledgement retire this hint.
         current["wakes"][reader] = {**previous, "sequence": record["sequence"], "delivered": False,
+                                   "tasks": {**previous.get("tasks", {}), task_id: record["sequence"]},
                                    "pending_since": (previous.get("pending_since")
                                                      if not previous.get("delivered", True) else None) or timestamp()}
     return record
 
 
-def state_changed(state, request):
+# A task change asks its other party to act only when one of these differs,
+# when the task parks or when it crosses closure. Reservations, counters,
+# references and intents stay in the inbox and in task watches without a hint.
+ATTENTION = ("paused", "cancel_requested", "holds", "delegation", "recovery_open", "blocker", "driver", "identity")
+RUN_ATTENTION = ("paused", "cancel_requested", "holds")
+
+
+def attention(state):
+    """Snapshot taken before a transition; `state_changed` compares it afterwards."""
+    if "communication" not in state:
+        return None
+    return {"controls": canonical({key: state["controls"].get(key) for key in RUN_ATTENTION}),
+            "tasks": {task_id: {**{key: canonical(task.get(key)) for key in ATTENTION},
+                                "parked": bool(task.get("parked")), "closed": task.get("phase") == "closed"}
+                      for task_id, task in state["tasks"].items()}}
+
+
+def needs_attention(before, after, task_id):
+    if before is None:
+        return True  # No earlier view was supplied; an unnecessary hint is safer than a missing one.
+    previous, current = before["tasks"].get(task_id), after["tasks"][task_id]
+    if previous is None or before["controls"] != after["controls"]:
+        return True
+    return (any(previous[key] != current[key] for key in ATTENTION)
+            or current["parked"] and not previous["parked"] or current["closed"] != previous["closed"])
+
+
+def state_changed(state, request, caller=None, before=None):
     """Called before the state/action journal is committed, not after delivery."""
     if "communication" not in state or request["op"] in MUTATIONS | {"scheduler"}:
         return
+    after = attention(state)
     task_id = request.get("task_id")
     tasks = [state["tasks"][task_id]] if task_id in state["tasks"] else list(state["tasks"].values())
     for task in tasks:
-        event(state, task["id"], "state_changed", ["coordinator", task["driver"]],
+        readers = ["coordinator", task["driver"]]
+        event(state, task["id"], "state_changed", readers, origin=caller,
+              wake=readers if needs_attention(before, after, task["id"]) else (),
               action_id=request["action_id"], task_version=task["version"], policy_version=state["policy_version"])
 
 
@@ -150,7 +191,10 @@ def transition(state, request, principal, session, run_dir):
                   "readers": sorted(set(readers) | {actor}), "sha256": digest, "bytes": length,
                   "created_at": timestamp()}
         current["artifacts"][artifact_id] = record
-        notice = event(state, task_id, "artifact_ready", record["readers"], artifact_id=artifact_id)
+        # Evidence is listed for its readers without a hint. A sender who needs
+        # someone to act attaches the artifact to a message.
+        notice = event(state, task_id, "artifact_ready", record["readers"], origin=actor, wake=(),
+                       artifact_id=artifact_id)
         record["sequence"] = notice["sequence"]
         return {"artifact": {key: record[key] for key in ("id", "sha256", "bytes", "task_id")}}
     if operation == "message":
@@ -159,6 +203,10 @@ def transition(state, request, principal, session, run_dir):
                 "scope", "messages require distinct coordinator/driver participants in the same task")
         require(isinstance(kind, str) and kind in {"question", "reply", "update", "assignment"}, "invalid", "unsupported message kind")
         require(kind != "assignment" or actor == "coordinator", "forbidden", "only coordinator can assign work")
+        if recipient == state["tasks"][task_id]["driver"] and recipient != "coordinator":
+            # Without its return route this driver could never read the inbox.
+            require(state["config"].get("actors", {}).get(recipient, {}).get("helper_route") is True,
+                    "unreachable", "recipient has no verified return route; the coordinator mediates for it")
         if kind == "question":
             require(len(open_questions(current, actor, task_id)) < 64,
                     "capacity", "answer existing questions before opening more than 64 per task")
@@ -184,15 +232,42 @@ def transition(state, request, principal, session, run_dir):
                    "recipient": recipient, "kind": kind, "body": body, "artifacts": attachments,
                    "reply_to": reply_to, "created_at": timestamp()}
         current["messages"][message["id"]] = message
-        notice = event(state, task_id, "message", [actor, recipient], message_id=message["id"])
+        notice = event(state, task_id, "message", [actor, recipient], origin=actor, message_id=message["id"])
         message["sequence"] = notice["sequence"]
-        return {"message_id": message["id"], "cursor": cursor(current, notice["sequence"]), "accepted": True}
+        # Its position, not a cursor: continuing an inbox from here would step
+        # over whatever the sender has not read yet.
+        return {"message_id": message["id"], "sequence": notice["sequence"], "accepted": True}
     if operation == "ack":
         sequence = position(current, request.get("cursor"))
         key = canonical([actor, task_id])
         current["acknowledgements"][key] = max(sequence, current["acknowledgements"].get(key, 0))
+        # Once no hinted position lies beyond this reader's acknowledged
+        # cursors, it has retrieved everything a pending hint would point at.
+        wake = current["wakes"].get(actor)
+        if wake is not None:
+            scope = set(principal["task_ids"]) & set(state["config"]["scope"]["task_ids"])
+            wake["tasks"] = {name: position for name, position in wake.get("tasks", {}).items()
+                             if name in scope
+                             and position > current["acknowledgements"].get(canonical([actor, name]), 0)}
+            if not wake["tasks"]:
+                wake["delivered"] = True
         return {"acknowledged": cursor(current, current["acknowledgements"][key]), "effect_confirmed": False}
     raise AssertionError("unhandled communication mutation")
+
+
+def inbox_wait(run_dir, session, actor, task_id, after):
+    """One poll for a waiter: (page, changed, cursor to poll from next).
+
+    The waiter's own messages and actions are history, not news. Step past
+    every page of them now, so they neither end the wait nor hide a later
+    page: the waiter does not read again until something is written.
+    """
+    while True:
+        view = read(run_dir, session, {"op": "inbox", "task_id": task_id, "after": after})
+        changed = bool(view["resync_required"] or any(item.get("origin") != actor for item in view["events"]))
+        if changed or not view["more"]:
+            return view, changed, after if changed else view["cursor"]
+        after = view["cursor"]
 
 
 def open_questions(current, actor, task_id):
@@ -205,16 +280,16 @@ def retained_notices(current, actor, task_id, principal, session, after):
     """Durable deliveries outlive the bounded state-change notification window."""
     records = []
     if principal["role"] != "reviewer":
-        records.extend((message, "message", "message_id") for message in current["messages"].values()
+        records.extend((message, "message", "message_id", "sender") for message in current["messages"].values()
                        if message["task_id"] == task_id and actor in {message["sender"], message["recipient"]})
-    records.extend((record, "artifact_ready", "artifact_id") for record in current["artifacts"].values()
+    records.extend((record, "artifact_ready", "artifact_id", "owner") for record in current["artifacts"].values()
                    if record["task_id"] == task_id and artifact_visible(record, principal, session))
-    for record, kind, key in records:
+    for record, kind, key, author in records:
         sequence = record.get("sequence")
         require(type(sequence) is int and 0 < sequence <= current["sequence"], "incompatible",
                 "retained communication lacks its delivery position; use its compatible runtime")
         if after < sequence <= current["floor"]:
-            yield {"sequence": sequence, "task_id": task_id, "kind": kind, key: record["id"]}
+            yield {"sequence": sequence, "task_id": task_id, "kind": kind, key: record["id"], "origin": record[author]}
 
 
 def read(run_dir, session, request):

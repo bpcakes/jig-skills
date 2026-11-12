@@ -18,6 +18,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 
 from state import (Engine, LOADED_RUNTIME_SHA256, canonical, locked, private, read_json,
                    require, runtime_fingerprint, timestamp, write_atomic)
@@ -212,17 +213,34 @@ def checkout(state, host, value, run_dir, *, excluding=None):
     require(not any(workspace == other or workspace in other.parents or other in workspace.parents for other in protected),
             "ownership", "enforced checkout overlaps private state or another checkout")
     metadata = workspace / ".git"
-    require(metadata.is_dir() and not metadata.is_symlink() and (metadata / "HEAD").is_file()
-            and not (metadata / "commondir").exists() and not (metadata / "objects/info/alternates").exists(),
-            "shared_git", "enforced tasks require a separate clone with private Git metadata and no alternates")
     # Git's local-clone optimization can share mutable object inodes. Reject it,
     # and reject symlinked metadata before trusted Git can follow it on the host.
-    for directory, folders, files in os.walk(metadata, followlinks=False):
-        for name in folders + files:
-            path = Path(directory) / name
-            info = path.lstat()
-            require(not stat.S_ISLNK(info.st_mode) and (not stat.S_ISREG(info.st_mode) or info.st_nlink == 1),
-                    "shared_git", "Git metadata must not contain symlinks or shared hardlinks; clone with --no-hardlinks")
+    # Host controller claims briefly have two links while being published. The
+    # source lease excludes worker writes, but not these host-owned records.
+    # Retry the whole scan after transient links/disappearances; never accept a
+    # scan that observed shared inodes or silently skipped a vanished directory.
+    deadline = time.monotonic() + 1
+    def walk_error(error):
+        raise error
+    while True:
+        require(metadata.is_dir() and not metadata.is_symlink() and (metadata / "HEAD").is_file()
+                and not (metadata / "commondir").exists() and not (metadata / "objects/info/alternates").exists(),
+                "shared_git", "enforced tasks require a separate clone with private Git metadata and no alternates")
+        unsettled = False
+        try:
+            for directory, folders, files in os.walk(metadata, followlinks=False, onerror=walk_error):
+                for name in folders + files:
+                    info = (Path(directory) / name).lstat()
+                    require(not stat.S_ISLNK(info.st_mode), "shared_git",
+                            "Git metadata must not contain symlinks or shared hardlinks; clone with --no-hardlinks")
+                    unsettled |= stat.S_ISREG(info.st_mode) and info.st_nlink != 1
+        except FileNotFoundError:
+            unsettled = True
+        if not unsettled:
+            break
+        require(time.monotonic() < deadline, "shared_git",
+                "Git metadata did not settle without shared hardlinks; clone with --no-hardlinks")
+        time.sleep(0.01)
     return str(workspace)
 
 

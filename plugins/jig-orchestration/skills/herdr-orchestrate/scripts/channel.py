@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import secrets
 
-from state import Engine, canonical, locked, private, read_json, require, timestamp, write_atomic
+from state import Engine, StateError, canonical, locked, private, read_json, require, timestamp, write_atomic
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ def contract(run_dir, principal):
 
 
 def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egress_hosts=None,
-          parent_session=None, expected_bindings=None):
+          parent_session=None, expected_bindings=None, endpoint=None, transport_from=None):
     """Host-only provisioning. Return the secret once; never include it in views."""
     from egress import destination
     egress_hosts = [] if egress_hosts is None else egress_hosts
@@ -125,6 +125,19 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
             require(parent_session is None, "session", "root agents cannot inherit child authority")
         from protocol import data as protocol_data
         communication = protocol_data(state)
+        endpoint_binding = session_id
+        if transport_from is not None:
+            require(not enforced and isinstance(transport_from, Session), "session", "invalid transport renewal")
+            previous = communication["sessions"].get(transport_from.id, {})
+            require(communication["active"].get(actor) == transport_from.id
+                    and previous.get("digest") == transport_from.digest,
+                    "session_revoked", "transport session changed during renewal")
+            if previous.get("role") == role:
+                endpoint = transport_endpoint(state, transport_from.id)
+                if endpoint is not None:
+                    # Only a validated renewal preserves delivery authority.
+                    # Older records used their session id as that identity.
+                    endpoint_binding = previous.get("endpoint_binding", transport_from.id)
         generation = communication["generations"].get(actor, 0) + 1
         communication["generations"][actor] = generation
         communication["active"][actor] = session_id
@@ -135,6 +148,9 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
             "egress_hosts": egress_hosts,
             "parent_session": parent_session.id if parent_session is not None else None,
         }
+        if endpoint is not None:
+            record["endpoint"] = endpoint
+            record["endpoint_binding"] = endpoint_binding
         from storage import ensure, reserve
         ensure(path, state["config"])
         reservations = {}
@@ -160,6 +176,67 @@ def issue(run_dir, actor, *, role=None, task_ids=None, review_contract=None, egr
                 write_atomic(contract_path, review_contract)
         write_atomic(path / "state.json", state)
     return credential
+
+
+def transport_endpoint(state, session_id):
+    """An unconfined endpoint survives only unchanged retained authority.
+
+    Use the same rule before renewal and during delivery: dropping one task
+    need not replace the agent, but a changed binding for a retained task does.
+    """
+    communication = state.get("communication", {})
+    record = communication.get("sessions", {}).get(session_id, {})
+    actor = record.get("actor")
+    if record.get("revoked") or communication.get("active", {}).get(actor) != session_id:
+        return None
+    if record.get("role") == "coordinator" and actor == "coordinator":
+        return record.get("endpoint")
+    route = state["config"].get("actors", {}).get(actor, {})
+    if record.get("role") != "driver" or route.get("helper_route") is not True:
+        return None
+    scope = set(route.get("task_ids", [])) & set(state["config"]["scope"]["task_ids"])
+    retained = {task_id: task_binding(task) for task_id in scope
+                if (task := state["tasks"].get(task_id)) is not None and task["driver"] == actor
+                and task_id in record.get("bindings", {})}
+    if retained and all(record["bindings"][task_id] == binding for task_id, binding in retained.items()):
+        return record.get("endpoint")
+    return None
+
+
+def transport_session(run_dir, actor):
+    """Session for a caller whose transport already identified it.
+
+    An unconfined run knows its coordinator by the local command and a driver
+    by its SSH forced command. Both get the gateway's session record, so scope,
+    task bindings, cursors and hints follow one set of rules. The secret never
+    leaves this function: the transport is the credential, not this record.
+    """
+    state = Engine.read(run_dir)
+    require(state["config"].get("communication", {}).get("mode") != "enforced",
+            "authenticated_channel_required", "enforced agents must use the authenticated gateway")
+    requested = None  # A coordinator's record always covers the run's current scope.
+    if actor != "coordinator":
+        binding = state["config"].get("actors", {}).get(actor) or {}
+        requested = [task_id for task_id in binding.get("task_ids", [])
+                     if state["tasks"].get(task_id, {}).get("driver") == actor]
+        require(requested, "wrong_task", "no admitted task is assigned to this caller")
+    communication = state.get("communication", {})
+    identifier = communication.get("active", {}).get(actor)
+    previous = communication.get("sessions", {}).get(identifier, {})
+    session = None
+    if previous.get("role") in {"coordinator", "driver"}:
+        session = Session(identifier, previous["digest"])
+        try:
+            check(state, session)
+        except StateError as error:
+            # Renew the task scope; issue rechecks whether the same agent's
+            # endpoint can be retained for the remaining tasks.
+            if error.code != "session_revoked":
+                raise
+        else:
+            if requested is None or previous["task_ids"] == requested:
+                return session
+    return parse_credential(issue(run_dir, actor, task_ids=requested, transport_from=session))
 
 
 def revoke(run_dir, actor):
@@ -205,7 +282,13 @@ def check(state, session, *, operation=None, task_id=None):
     if record.get("parent_session") is not None:
         for bound_id in record["task_ids"]:
             authorizing_session(state, record["parent_session"], bound_id)
-    scope = set(record["task_ids"]) & set(state["config"]["scope"]["task_ids"])
+    configured = state["config"]["scope"]["task_ids"]
+    if record["role"] == "coordinator":
+        # The coordinator answers for the whole run, and only host
+        # administration changes that scope. A task added or split after its
+        # launch reaches it without a relaunch that would discard its context.
+        record = {**record, "task_ids": list(configured)}
+    scope = set(record["task_ids"]) & set(configured)
     if task_id is not None:
         require(isinstance(task_id, str), "invalid", "task id must be a string")
         require(task_id in scope, "wrong_task", "session cannot access this task")

@@ -15,14 +15,22 @@ from state import locked, read_json, write_atomic
 import jobs
 
 
-ADAPTER = '''import json, pathlib, sys
+ADAPTER = '''import json, pathlib, sys, time
 sys.path.insert(0, '/opt/orchestration')
 import communicate
 p = json.load(sys.stdin)
 root = pathlib.Path.cwd()
 assert not pathlib.Path(sys.argv[1]).exists(), 'host canary exposed'
 assert not pathlib.Path(sys.argv[2]).exists(), 'run state exposed'
-assert communicate.request({'op': 'query', 'task_id': 'B'})['error'] == 'wrong_task'
+# A concurrent control may hold the state lock while this inspector starts.
+# Retry only that documented transient response; retain the scope assertion.
+deadline = time.monotonic() + 10
+while True:
+    denied = communicate.request({'op': 'query', 'task_id': 'B'})
+    if denied.get('error') != 'state_busy' or time.monotonic() >= deadline:
+        break
+    time.sleep(.05)
+assert denied['error'] == 'wrong_task', denied
 effect = root / 'effect'
 if p['mode'] == 'dispatch':
     if p['kind'] == 'review':
@@ -171,7 +179,9 @@ print"""))
                 self.assertTrue(jobs.namespace(inspector), "pause must let the existing inspector finish")
         worker.join(5)
         self.assertFalse(worker.is_alive())
-        self.assertEqual(replies[0].get("outcome"), "unknown" if second_control == "cancel" else "succeeded", replies)
+        stderr = replies[0].get("receipt", {}).get("stderr_ref")
+        diagnostic = {"replies": replies, "stderr": Path(stderr).read_text() if stderr else None}
+        self.assertEqual(replies[0].get("outcome"), "unknown" if second_control == "cancel" else "succeeded", diagnostic)
         if second_control == "cancel":
             self.assertEqual(self.call(self.token, **retry).get("outcome"), "succeeded")
         if task_control:
@@ -497,7 +507,7 @@ print(json.dumps({'status':'unknown' if p['mode']=='dispatch' else 'succeeded',
         self.assertNotIn("private-fixture-secret", json.dumps([prepared, view, detail, recorded]))
         self.assertIn("sha256", prepared["intent"]["execution"]["adapter_binding"])
 
-    def test_cli_initialization_defaults_to_enforced_and_legacy_requires_explicit_selection(self):
+    def test_cli_initialization_requires_explicit_enforcement_which_refuses_the_ssh_route(self):
         import supervise
         config = self.root / "config.json"
         config.write_text(json.dumps(self.config))
@@ -505,8 +515,8 @@ print(json.dumps({'status':'unknown' if p['mode']=='dispatch' else 'succeeded',
             run = self.root / ("fresh-" + mode)
             argv = [sys.executable, "-B", str(test_channel.SCRIPTS / "supervise.py"), "init",
                     "--run-dir", str(run), "--config", str(config)]
-            if mode == "legacy":
-                argv += ["--communication-mode", "legacy"]
+            if mode == "enforced":
+                argv += ["--communication-mode", "enforced"]
             result = subprocess.run(argv, capture_output=True, text=True, check=True)
             self.assertEqual(json.loads(result.stdout)["communication_mode"], mode)
             self.assertEqual(Engine.read(run)["config"]["communication"]["mode"], mode)

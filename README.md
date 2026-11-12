@@ -79,7 +79,7 @@ Plugin: `jig-orchestration` · [Browse files](plugins/jig-orchestration)
 
 The coordinator runs in Codex or Claude Code inside a genuine Herdr session. Each machine and agent profile needs the skills and authenticated tools for its assigned roles; SSH does not share the coordinator's installation. Review drivers in either host require the matching `jig-review` pair and its [host requirements](#requirements). The coordinator owns one authoritative state location. See [cross-machine installation](#cross-machine-orchestration-setup) before starting a run. Startup checks installations without upgrading them, and no background supervisor starts merely because the plugin is installed.
 
-New CLI-initialized runs use authenticated communication by default. The current enforced backend supports one local Linux execution host, Bubblewrap isolation, separate task clones with private Git metadata, and one gateway for agent instructions and lifecycle actions. The trusted host owns administration and Herdr wake delivery. See [enforced setup and recovery](plugins/jig-orchestration/skills/herdr-orchestrate/references/communication.md). Existing legacy runs retain their interface; remote SSH execution remains explicitly legacy and cannot inherit an enforcement claim from a local probe.
+Every run has a durable [message protocol](plugins/jig-orchestration/skills/herdr-orchestrate/references/communication.md) for coordinator and driver questions, replies, assignments and evidence. Inbox hints notify idle or done agents about unread addressed items; explicit host binding or rebinding also queues a recovery hint, even with an empty inbox. Isolation is a separate opt-in (`init --communication-mode enforced`): its backend supports one local Linux execution host, Bubblewrap, separate task clones with private Git metadata, and one gateway as the only agent route, with the trusted host owning administration and Herdr delivery. Remote SSH execution and macOS stay unconfined and cannot inherit an enforcement claim from a local probe.
 
 ### Jig Rust
 
@@ -220,7 +220,7 @@ The installer preserves automatic dependencies even with `--force`. To replace a
 
 ### Cross-machine Orchestration Setup
 
-The remote execution instructions in this section apply to explicitly legacy runs. For a new enforced run, follow [authenticated communication](plugins/jig-orchestration/skills/herdr-orchestrate/references/communication.md), verify the local Linux host, and provision every model inside its assigned boundary. Unsupported hosts stop before admission; the runtime does not silently switch to the legacy route.
+The remote execution instructions in this section apply to unconfined runs, the default. For an enforced run, follow [agent communication](plugins/jig-orchestration/skills/herdr-orchestrate/references/communication.md#enforced-runs), verify the local Linux host, and provision every model inside its assigned boundary. Unsupported hosts stop before admission; the runtime does not silently switch to the unconfined route.
 
 Install the Herdr binary using its own setup on the machines that run it. This installer does not download or install the binary; it exports the matching skill from the local `herdr --skill` command into the selected agent profile. The coordinator and any worker that controls Herdr need that skill. An implementation worker that only performs its assigned coding task does not.
 
@@ -267,7 +267,7 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 |---|---|
 | Planning canonical-schema validator (optional) | Python ≥ 3.10 |
 | Herdr orchestration | Python ≥ 3.10 on POSIX, a Codex or Claude Code coordinator, installed Herdr CLI and its matching skill on controlling profiles, Herdr's integration for each coordinator and worker agent, genuine managed Herdr sessions, Git and authenticated GitHub CLI, Beads Rust (`br`) or working Python Beadroll (`bead`), registered SSH routes for remote hosts, and the review requirements below on review drivers. |
-| Enforced orchestration (default for new CLI runs) | One local Linux execution host, Bubblewrap with working user/mount/network/PID namespaces, a successful `verify-host` receipt, private task clones, explicit provider/tool profiles and the matching review pair. macOS and remote execution remain legacy. |
+| Enforced orchestration (opt-in) | One local Linux execution host, Bubblewrap with working user/mount/network/PID namespaces, a successful `verify-host` receipt, private task clones, explicit provider/tool profiles and the matching review pair. macOS and remote execution remain unconfined. |
 | Rust abstraction-police collector | Python ≥ 3.11 |
 | Rust Fowler and duplication scanners | Python ≥ 3.10 |
 | Ruby/Rails scanner | Ruby; Minitest for its smoke tests |
@@ -287,11 +287,13 @@ Run skills from the project you want assessed. Name the scope in your request: c
 
 Enter these examples in Codex with the relevant plugins installed. In Claude Code, replace the leading `$` with `/`. Replace sample paths and branch names with yours.
 
-Deliver a selected batch on a verified enforced host:
+Deliver a selected batch across registered machines:
 
 ```text
-$jig-orchestration:herdr-orchestrate Use Herdr to deliver tasks APP-12 and APP-13 through GitHub PRs to main. Use two execution slots on the verified local Linux host with enforced communication. Keep merges subject to our existing review policy; do not deploy.
+$jig-orchestration:herdr-orchestrate Use Herdr to deliver tasks APP-12 and APP-13 through GitHub PRs to main. Use one execution slot on each of the registered local and remote profiles. Keep merges subject to our existing review policy; do not deploy.
 ```
+
+Add "with enforced isolation on the verified local Linux host" to confine every agent on a single supported host.
 
 Run controls are distinct: “finish current” freezes admissions, “pause” fences new stages while active jobs settle, and “cancel active executions” requests and verifies termination. Resume preserves holds and consumed limits. Execution slots limit task pipelines; reviewer fanout is separate, and an optional unfinished-task cap also counts parked tasks. Dollar and token checkpoints cannot promise a hard spending ceiling.
 

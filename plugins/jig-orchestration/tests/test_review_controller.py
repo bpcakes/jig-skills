@@ -52,7 +52,16 @@ class ReviewControllerTests(ReviewBoundaryFixture, unittest.TestCase):
                                    credential=self.token, timeout=120)
 
     def assert_completed(self, result):
-        self.assertEqual(result.get("outcome"), "succeeded", result)
+        if result.get("outcome") != "succeeded":
+            # The fixture directory is deleted before anyone reads this report,
+            # so carry the retained logs that the receipt only points to.
+            receipt, logs = result.get("receipt"), {}
+            for key in ("ref", "stderr_ref"):
+                try:
+                    logs[key] = Path(receipt[key]).read_text(errors="replace")[-8000:]
+                except (KeyError, OSError, TypeError):
+                    pass
+            self.fail(json.dumps({"result": result, "logs": logs}, indent=1, default=str))
         controller = result["receipt"]["controller"]
         self.assertEqual(controller["phase"], "CONVERGED")
         self.assertTrue(result["receipt"]["all_jobs_settled"])

@@ -1419,3 +1419,154 @@ the real owner-replacement/adoption path with diagnostic survival after cleanup,
 normal authenticated review/repair/commit/replay, and existing retention and scoped
 evidence-read checks. All 69 installed runtime files match source. Full required
 validation and both complete independent reviews remain pending for this candidate.
+
+## Protocol decoupled from isolation; wake semantics — 2026-11-09
+
+A design review of the candidate above found that the message protocol reached
+only enforced runs, although it does not depend on the sandbox, and that hint
+delivery prompted agents about their own actions and about items they had
+already read. This entry changes the contract's scope; it does not close P1–P3.
+
+**Decision.** `communication.mode` now selects only the execution boundary and
+its transport. `supervise.py init` no longer injects `enforced`: isolation is an
+explicit choice, because it supports one local Linux host and a run whose host
+cannot verify would initialize and then never admit work. Unconfined runs keep
+their interface and gain the same protocol through it. This supersedes "existing
+unconfined runs retain their current interface" in the contract only by addition.
+
+**Unconfined transports.** The coordinator uses the new local `supervise.py
+channel` command; a registered driver sends the same requests through its SSH
+`serve` route. Both resolve a transport session: the gateway's session record,
+created on first use for the caller the transport already identified, so scope,
+task bindings, cursors, artifacts and wake state share one implementation. No
+gateway or credential file is involved. The record follows the caller's current
+scope, so a newly scoped or admitted task needs no relaunch there. The enforced
+coordinator's scope is still fixed at issue; that finding remains open. Enforced
+runs refuse both transports. In either mode a message to a driver without a
+verified return route is now refused as `unreachable` instead of waiting in an
+inbox nobody can read.
+
+**Wake semantics, both modes.**
+
+- An event records its `origin`. The originator is never hinted and its own
+  events do not end its inbox `watch`, which also steps over pages holding only
+  its own history. Explicit inbox reads still list them.
+- `state_changed` hints the other party only when pause, cancellation, holds,
+  delegation, recovery, blocker, driver or identity change, when the task parks
+  or crosses closure, when a run-wide pause/cancel/hold changes, or when a task
+  is first admitted. Other lifecycle steps and artifact publication are listed
+  without a hint. Actionable integration notices are unchanged.
+- A wake keeps the per-task position that caused it. `ack` retires the hint once
+  no position lies beyond the actor's acknowledged cursors. Retirement follows
+  explicit acknowledgement, not reads: a read persists nothing and a lost
+  response must not suppress the only prompt.
+- Delivery prompts only an `idle` or `done` agent. `working` defers without a
+  failure count. Any other status is never typed into and is recorded as an
+  unconfirmed delivery: a blocked pane may be showing an approval prompt.
+- In an unconfined run the scheduler tick delivers at most one hint after its
+  scheduled pass. A coordinator hint uses the registered scheduler identity,
+  waits for a pending reconciliation wake to complete, and keeps
+  `minimum_cadence_seconds` from the previous wake or hint; that hint in turn
+  spaces the next wake. Drivers are hinted only through an explicitly bound
+  endpoint.
+
+Verification on Linux with Bubblewrap available, source tree, deterministic
+providers and a fake Herdr throughout. `tests/test_legacy_channel.py` adds 12
+checks of both transports, scope following, enforced refusal, the inbox watch,
+the CLI and scheduled hints; `test_notify.py` gains six for origin, attention,
+acknowledgement, artifacts and agent status, and `test_protocol.py` one for the
+gateway watch. An untouched export of the preceding commit ran 489 tests with
+one error: `jobs.namespace` raised `ProcessLookupError` reading `/proc/<pid>/ns/pid`
+for an exiting process, which it does not treat as gone. The modified tree ran
+508 tests with one failing: the first controller run in
+`test_upstream_recovery_after_owner_replacement_and_history_change` returned
+`unknown` with an empty stdout and a 3,195-byte stderr that cleanup deleted. That
+test then passed alone, in its 24-test suite, and in about 50 further repetitions,
+with one more failure of the same shape; 29 runs on the export never failed. Two
+failures in roughly 54 runs against none in 29 does not separate the trees, and
+the cause is unknown. The installation, orchestration-fixture and host-parity
+checks passed (57), as did the evaluation fixture suites (164) and `git diff
+--check`. No live pane, model or installation was exercised or changed.
+
+Still open from the review and not addressed here: no exercise against a real
+Herdr pane or an LLM coordinator, including whether a sandboxed agent can report
+the `agent_session` that binding requires; the unnamed host-operator role;
+polling reads under one state lock; permanent view snapshots and receipts; and
+the cursor returned by `message`, which lies past the sender's own event.
+
+## Waiting cost, snapshot cache and coordinator scope — 2026-11-10
+
+Code follow-up to the open items listed above. Nothing here changes the
+acceptance contract or closes P1–P3.
+
+**Waiting.** The gateway's `watch`, the restricted route's task and inbox
+waits and the gateway's maintenance pass each took the run lock and parsed the
+whole state on every poll: twenty times a second per gateway waiter, four per
+restricted waiter (twice each for an inbox wait) and eight for maintenance.
+`state.StateWatch` now samples the state file's modification time, inode and
+size, and whether an interrupted transaction is present, before a read. A
+waiter reads again only when they differ. `write_bytes_atomic` gives each
+replacement state file a modification time later than its predecessor's, so two
+writes inside one clock tick cannot look alike. A waiter still reads once per
+`StateWatch.interval` (5 s), which bounds the delay on a filesystem that cannot
+store such times. Maintenance keeps the unsettled jobs from its last pass and
+repeats the pass after a write or once one of them is no longer verifiably
+live. Skipping unchanged polls exposed that the inbox wait had relied on its
+next poll to step past a second page of the waiter's own history;
+`protocol.inbox_wait` now steps past every such page in one call.
+
+Measured once per tree on a shared machine, with the fixture run holding 700
+retained 2 KiB messages (1.6 MB of state) and three idle inbox waiters on the
+gateway. Over four seconds the merged commit parsed the state 260 times and
+used 1.10 CPU-seconds; this tree parsed it 17 times and used 0.12. Across 12
+pause/resume requests with the same waiters, median control latency fell from
+195 ms to 150 ms and the maximum from 327 ms to 268 ms, and waiter `busy`
+errors went from three to none. Without waiters the two trees measured 98 ms
+and 109 ms, which is noise.
+
+**View snapshots.** A compact query of a changed large view wrote a full
+snapshot that was never removed, and its reservation was never returned.
+Snapshots repeat state that is retained elsewhere, so `views.save_snapshot` now
+treats them as a cache: the run keeps its 64 most recently issued, a snapshot
+issued again counts as recent, and a query that meets `storage_capacity`
+expires older snapshots before it gives up. `storage.retain` returns the
+reservations of expired entries and accepts no other directory; receipts,
+artifacts and contracts are still never reclaimed. A detail read of an expired
+snapshot answers `snapshot` with "query again for a current one".
+
+**Coordinator scope.** `channel.check` now gives a coordinator session the
+run's configured scope at the time of each request instead of the scope
+recorded when it was issued. Only host administration changes that scope, and
+a coordinator has no task checkout, so a task added or split after launch no
+longer costs a relaunch and the coordinator's context. Driver, executor and
+reviewer sessions keep their launch scope. The unconfined transport therefore
+no longer replaces the coordinator's record on a scope change.
+
+**Smaller fixes.** `message` reports the message's inbox `sequence` and no
+longer a `cursor`: that cursor lay past the sender's own event, and continuing
+from it skipped an unread assignment. `jobs.namespace` treats
+`ProcessLookupError` from a process that exits while its namespace link is
+followed as gone, which was the one error in the untouched export's suite.
+`supervise.serve` reads the state once instead of twice.
+
+Verification on Linux with Bubblewrap available, source tree, deterministic
+providers and a fake Herdr throughout. Twelve tests are new:
+`tests/test_waiting.py` (six) counts state parses during idle waits and
+maintenance, requires waits to end on a write with the periodic read disabled,
+and settles a job that exits while the state is quiet; the others cover the
+snapshot bound and its storage, an expired detail read, a coordinator
+admitting and messaging a task added after its launch, the `message` result
+and the namespace race. Each fix was reverted in a scratch copy of the scripts
+and its tests failed there. The orchestration suite ran 520 tests without a
+failure; the installation, orchestration-fixture and host-parity checks passed
+(57), as did the evaluation fixture suites (164) and `git diff --check`. The
+intermittent controller failure recorded above did not recur in this run, and
+`assert_completed` now reports the retained logs that the earlier failure's
+cleanup deleted. No live pane, model or installation was exercised or changed.
+
+Still open: every `ack` leaves a permanent receipt, and `test_storage.py` uses
+acknowledgements as its receipt filler, so changing that needs those tests
+reworked; message bodies are kept in both the state and their receipts; a
+gateway request parses the state three times and a mutation several more; the
+host-operator role is unnamed; and nothing has run against a real pane or an
+LLM coordinator.

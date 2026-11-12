@@ -1,9 +1,15 @@
-"""Host-only generic Herdr hints for already committed protocol events."""
+"""Host-only generic Herdr hints for already committed protocol events.
+
+A hint spends one model turn of its recipient. It is sent only for a pending
+wake that no acknowledgement has retired, only to an agent that is not working,
+and never into a pane in any other state.
+"""
 from __future__ import annotations
 
 import argparse
 import copy
 from datetime import datetime, timedelta, timezone
+import secrets
 import subprocess
 
 from state import Engine, locked, read_json, require, scheduler_identity, timestamp, write_atomic
@@ -15,26 +21,69 @@ MAX_RETRY_SECONDS = 60
 
 def bind(run_dir, actor, session_id, endpoint):
     scheduler_identity({**endpoint, "enabled": True})
+    if session_id is None:
+        # An unconfined run has no launch credential to name: its transport
+        # identifies the actor. Enforced bindings always name their launch.
+        import channel
+        require(Engine.read(run_dir)["config"].get("communication", {}).get("mode") != "enforced",
+                "invalid", "an enforced binding must name its launch session")
+        session_id = channel.transport_session(run_dir, actor).id
     with locked(run_dir) as path:
         state = read_json(path / "state.json")
         communication = state["communication"]
         require(communication["active"].get(actor) == session_id, "session_revoked", "bind the current launch session")
         communication["sessions"][session_id]["endpoint"] = copy.deepcopy(endpoint)
+        communication["sessions"][session_id]["endpoint_binding"] = secrets.token_hex(16)
         # An explicit host rebind is a recovery action. Ordinary new events do
         # not clear a recipient's backoff or it could monopolize delivery.
         notice = communication["wakes"].setdefault(actor, {"sequence": communication["sequence"]})
         notice.update(delivered=False, failures=0, retry_at=None, pending_since=timestamp())
         write_atomic(path / "state.json", state)
+    return session_id
 
 
-def deliver(run_dir, actor=None, *, now=None):
-    from supervise import exclusive, herdr_call, parse_time, verify_identity, RuntimeErrorDetail
+def target(state, name):
+    """Return (binding id, endpoint); scheduler-owned targets have no binding id.
+
+    Enforced targets require their current launch session. Unconfined targets
+    retain a binding only across a validated renewal of the same endpoint.
+    Explicit host rebinding always replaces the delivery identity.
+    """
+    communication = state.get("communication", {})
+    sid = communication.get("active", {}).get(name)
+    session = communication.get("sessions", {}).get(sid, {})
+    unconfined = state["config"].get("communication", {}).get("mode") != "enforced"
+    if name == "coordinator" and unconfined:
+        # An unconfined run already registered its coordinator's exact Herdr
+        # identity for scheduled supervision. Hints use that pane, including
+        # before the coordinator has made its first channel request. Its
+        # transport record can change without changing this authority.
+        from supervise import scheduler_config
+        settings = scheduler_config(state["config"], state["scheduler"])
+        if isinstance(settings.get("agent"), dict) and not session.get("revoked"):
+            return None, settings
+    if session.get("endpoint") and not session.get("revoked"):
+        import channel
+        if unconfined and session.get("role") in {"coordinator", "driver"}:
+            endpoint = channel.transport_endpoint(state, sid)
+            return (session.get("endpoint_binding", sid), endpoint) if endpoint is not None else None
+        try:
+            channel.check(state, channel.Session(sid, session["digest"]))
+        except channel.StateError:
+            return None
+        return session.get("endpoint_binding", sid), session["endpoint"]
+    return None
+
+
+def deliver(run_dir, actor=None, *, now=None, exclude=(), scheduler=None):
+    from supervise import exclusive, herdr_call, hint_eligible, parse_time, verify_identity, RuntimeErrorDetail
     now = now or datetime.now(timezone.utc)
     with exclusive(run_dir, "channel-delivery.lock"):
         state = Engine.read(run_dir)
         communication = state.get("communication", {})
         candidates = [(name, notice) for name, notice in communication.get("wakes", {}).items()
-                      if not notice["delivered"] and (actor is None or actor == name)]
+                      if not notice["delivered"] and (actor is None or actor == name) and name not in exclude
+                      and (scheduler is None or hint_eligible(state, name, scheduler, now))]
         if not candidates:
             return {"status": "quiet"}
         # Oldest attempted recipient first. Keep this state in the outbox so
@@ -42,19 +91,17 @@ def deliver(run_dir, actor=None, *, now=None):
         candidates.sort(key=lambda item: (item[1].get("last_attempt_at", ""), item[0]))
         bound = []
         for name, notice in candidates:
-            sid = communication.get("active", {}).get(name)
-            session = communication.get("sessions", {}).get(sid, {})
-            if session.get("endpoint") and not session.get("revoked"):
-                bound.append((name, notice, sid, session))
+            selected = target(state, name)
+            if selected is not None:
+                bound.append((name, notice, *selected))
         if not bound:
             return {"status": "unbound", "actors": [name for name, _ in candidates]}
-        for name, notice, sid, session in bound:
+        for name, notice, binding_id, endpoint in bound:
             retry = parse_time(notice.get("retry_at"))
             if retry is None or now >= retry:
                 break
         else:
             return {"status": "backoff", "retry_at": min(item[1]["retry_at"] for item in bound)}
-        endpoint = session["endpoint"]
         sequence = notice["sequence"]
         failures = notice.get("failures", 0) + 1
         retry_at = (now + timedelta(seconds=min(MAX_RETRY_SECONDS, RETRY_SECONDS * 2 ** min(failures - 1, 4)))).isoformat()
@@ -62,36 +109,67 @@ def deliver(run_dir, actor=None, *, now=None):
         # first recipient must not starve all the others after every restart.
         with locked(run_dir) as path:
             current = read_json(path / "state.json")
-            require(current["communication"]["active"].get(name) == sid,
-                    "session_revoked", "delivery session changed")
+            if target(current, name) != (binding_id, endpoint):
+                return {"status": "binding_changed", "actor": name, "sequence": sequence}
+            if current["communication"]["wakes"][name]["delivered"]:
+                return {"status": "acknowledged", "actor": name, "sequence": sequence}
             current["communication"]["wakes"][name].update(
                 last_attempt_at=now.isoformat(), retry_at=retry_at, failures=failures,
-                attempt={"session_id": sid, "sequence": sequence, "status": "dispatching", "at": now.isoformat()})
+                attempt={"binding_id": binding_id, "sequence": sequence, "status": "dispatching", "at": now.isoformat()})
             write_atomic(path / "state.json", current)
         failure = None
         try:
             actual = herdr_call(endpoint, ["agent", "get", endpoint["agent"]["name"]])["agent"]
             verify_identity(actual, endpoint["agent"])
-            with locked(run_dir) as path:
-                current = read_json(path / "state.json")
-                require(current["communication"]["active"].get(name) == sid,
-                        "session_revoked", "delivery session changed")
-            delivered = herdr_call(endpoint, ["agent", "prompt", endpoint["agent"]["pane_id"], HINT])["agent"]
-            verify_identity(delivered, endpoint["agent"])
-            status = "delivered"
+            observed = actual.get("agent_status", "unknown")
+            if observed == "working":
+                # It will end its turn, or is already waiting on its inbox.
+                status = "busy"
+            else:
+                if observed not in {"idle", "done"}:
+                    # A blocked pane may be showing an approval prompt, which
+                    # typed text could answer. Never prompt an unknown state.
+                    raise RuntimeErrorDetail("agent_" + str(observed), f"{name} is {observed}; inspect its original pane")
+                with locked(run_dir) as path:
+                    current = read_json(path / "state.json")
+                    retired = current["communication"]["wakes"][name]["delivered"]
+                    if retired:
+                        status = "acknowledged"
+                    elif (target(current, name) != (binding_id, endpoint)
+                          or scheduler is not None and not hint_eligible(current, name, scheduler, now)):
+                        status = "ineligible"
+                    else:
+                        # The next call may reach the pane even if this process
+                        # dies before recording its reply. Cadence uses intent,
+                        # while last_hint_at remains confirmed delivery.
+                        wake = current["communication"]["wakes"][name]
+                        wake["last_hint_attempt_at"] = now.isoformat()
+                        wake["attempt"]["status"] = "prompting"
+                        write_atomic(path / "state.json", current)
+                        status = "prompting"
+                if status == "prompting":
+                    delivered = herdr_call(endpoint, ["agent", "prompt", endpoint["agent"]["pane_id"], HINT])["agent"]
+                    verify_identity(delivered, endpoint["agent"])
+                    status = "delivered"
         except (RuntimeErrorDetail, ValueError, OSError, subprocess.TimeoutExpired) as error:
             status = "unconfirmed"
             failure = {"code": getattr(error, "code", type(error).__name__), "message": str(error)[:512]}
         with locked(run_dir) as path:
             current = read_json(path / "state.json")
-            active = current["communication"]["active"].get(name) == sid
+            active = target(current, name) == (binding_id, endpoint)
             wake = current["communication"]["wakes"].get(name)
             if active and wake:
-                wake["delivered"] = status == "delivered" and wake["sequence"] == sequence
-                wake["attempt"] = {"session_id": sid, "sequence": sequence, "status": status,
+                wake["attempt"] = {"binding_id": binding_id, "sequence": sequence, "status": status,
                                    "at": now.isoformat(), "failure": failure}
                 if status == "delivered":
+                    wake["last_hint_at"] = now.isoformat()
+                    # An acknowledgement may have retired it during the prompt;
+                    # a newer event keeps it pending for the next interval.
+                    wake["delivered"] = wake["delivered"] or wake["sequence"] == sequence
                     wake.update(failures=0, retry_at=(now + timedelta(seconds=RETRY_SECONDS)).isoformat())
+                elif status in {"busy", "acknowledged", "ineligible"}:
+                    # Neither is a transport failure: keep the short interval.
+                    wake.update(failures=failures - 1, retry_at=(now + timedelta(seconds=RETRY_SECONDS)).isoformat())
                 write_atomic(path / "state.json", current)
         return {"status": status if active else "session_changed", "actor": name, "sequence": sequence}
 
@@ -101,16 +179,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--actor")
-    parser.add_argument("--bind-session", help="host-only: bind this launch session to --endpoint")
+    parser.add_argument("--bind-session", help="host-only: bind this launch session to --endpoint; "
+                        "omit in an unconfined run to bind the actor's transport session")
     parser.add_argument("--endpoint", help="host-owned JSON endpoint to bind, including exact native identity")
     args = parser.parse_args()
     if args.bind_session or args.endpoint:
-        require(args.actor and args.bind_session and args.endpoint, "invalid", "binding requires actor, session and endpoint")
+        require(args.actor and args.endpoint, "invalid", "binding requires actor and endpoint")
         from pathlib import Path
-        bind(args.run_dir, args.actor, args.bind_session, json.loads(Path(args.endpoint).read_text()))
-        print(json.dumps({"status": "bound", "actor": args.actor, "session_id": args.bind_session}))
+        session_id = bind(args.run_dir, args.actor, args.bind_session, json.loads(Path(args.endpoint).read_text()))
+        print(json.dumps({"status": "bound", "actor": args.actor, "session_id": session_id}))
         return
-    print(json.dumps(deliver(args.run_dir, args.actor)))
+    # A standalone delivery shares dispatch ownership and scheduler policy with
+    # tick in both modes, including a stop while the endpoint is being checked.
+    from supervise import exclusive, scheduler_config
+    with exclusive(args.run_dir, "delivery.lock"):
+        state = Engine.read(args.run_dir)
+        settings = scheduler_config(state["config"], state["scheduler"])
+        print(json.dumps(deliver(args.run_dir, args.actor, scheduler=settings)))
 
 
 if __name__ == "__main__":
