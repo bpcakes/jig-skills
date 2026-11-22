@@ -28,6 +28,7 @@ Enter these prompts in Codex from the repository being reviewed. In Claude Code,
 | Use Codex and Cursor | `$jig-review:panel-review --reviewers codex,cursor` |
 | Review a branch against a named base | `$jig-review:panel-review --base main` |
 | Review a branch together with local changes | `$jig-review:panel-review --base main --include-working-tree` |
+| Choose a Cursor model by ID | `$jig-review:panel-review --reviewers cursor --cursor-model sonnet-4-thinking` |
 | Choose Cursor effort | `$jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh` |
 | Enable Cursor fast mode | `$jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
 | Set native Codex effort | `$jig-review:panel-review --reviewers codex --codex-runtime native --codex-effort high` |
@@ -111,7 +112,9 @@ $jig-review:panel-review --claude-file-access host
 
 Cursor runs with `--mode ask --sandbox enabled --trust --workspace <repository>`. Workspace trust allows non-interactive startup, but ask mode and sandboxing do not establish isolation for project hooks. This is an accepted limitation; future hook isolation is tracked as `jig-skills-h18` in [Beads](../.beads/issues.jsonl). The current adapter does not disable project hooks.
 
-Cursor uses standard Grok 4.6 models by default. Pass `--cursor-speed fast` to select the `-fast` variant for the chosen `--cursor-effort`:
+Use `cursor-agent --list-models` to see the IDs available to your account. Pass an ID with `--cursor-model <model-id>`. Combining it with `--cursor-effort` or `--cursor-speed` is an error.
+
+With the preset flags, Cursor defaults to `cursor-grok-4.6-high`. For example, this selects `cursor-grok-4.6-xhigh-fast`.
 
 ```text
 $jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast

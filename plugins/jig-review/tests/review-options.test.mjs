@@ -105,6 +105,9 @@ test("reviewers and namespaced model settings are normalized", () => {
 });
 
 test("single-reviewer selection does not configure or require other CLIs", () => {
+  assert.deepEqual(parseArgs(["--reviewers", "cursor"]).cursor, {
+    model: "cursor-grok-4.6-high", effort: "high", speed: "standard",
+  });
   assert.deepEqual(parseArgs(["--reviewers", "cursor", "--cursor-effort", "low"]), {
     host: "codex",
     reviewers: ["cursor"],
@@ -117,6 +120,16 @@ test("single-reviewer selection does not configure or require other CLIs", () =>
     },
     excludePaths: [],
   });
+});
+
+test("an explicit Cursor model selects the exact ID and excludes Grok preset flags", () => {
+  const model = "Custom-Model[context=1m,effort=high]";
+  const args = ["--reviewers", "cursor", "--cursor-model", model];
+  assert.deepEqual(parseArgs(args).cursor, { model, effort: null, speed: null });
+  assert.throws(() => parseArgs([...args, "--cursor-effort", "high"]), /cannot be combined/);
+  assert.throws(() => parseArgs([...args, "--cursor-speed", "standard"]), /cannot be combined/);
+  assert.throws(() => parseArgs(["--cursor-model", model]), /requires selecting cursor/);
+  assert.throws(() => parseArgs(["--reviewers", "cursor", "--cursor-model", "  "]), /blank/);
 });
 
 test("review exclusions are repeatable, normalized, and deduplicated", () => {

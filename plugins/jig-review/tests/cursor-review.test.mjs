@@ -21,6 +21,7 @@ import {
   parseCursorResult,
   runCursorReview,
 } from "../skills/panel-review/scripts/cursor-review.mjs";
+import { parseArgs as parseReviewOptions } from "../skills/panel-review/scripts/review-options.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
 const cursorScript = fileURLToPath(new URL(
@@ -113,6 +114,7 @@ test("Cursor adapter accepts only its supported effort and speed values", () => 
       includeWorkingTree: false,
       effort: "low",
       speed: "standard",
+      model: "cursor-grok-4.6-low",
       expectedFingerprint: "a".repeat(64),
       timeoutMs: 28 * 60 * 1000,
       excludePaths: [],
@@ -125,7 +127,7 @@ test("Cursor adapter accepts only its supported effort and speed values", () => 
     "max",
     "--expected-fingerprint",
     "a".repeat(64),
-  ]), /Unsupported effort/);
+  ]), /Unsupported --effort/);
   assert.throws(() => parseArgs([
     "--scope",
     "working-tree",
@@ -133,9 +135,17 @@ test("Cursor adapter accepts only its supported effort and speed values", () => 
     "turbo",
     "--expected-fingerprint",
     "a".repeat(64),
-  ]), /Unsupported speed/);
-  assert.throws(() => parseArgs(["--scope", "working-tree", "--model", "auto"]), /Unsupported argument/);
+  ]), /Unsupported --speed/);
   assert.throws(() => parseArgs(["--scope", "working-tree"]), /expected-fingerprint/);
+});
+
+test("Cursor adapter rejects ambiguous or missing model selections", () => {
+  const args = ["--scope", "working-tree", "--expected-fingerprint", "a".repeat(64), "--model"];
+  assert.throws(() => parseArgs(args), /Missing value/);
+  assert.throws(() => parseArgs([...args, "  "]), /blank/);
+  assert.throws(() => parseArgs([...args, "--trust"]), /model/);
+  assert.throws(() => parseArgs([...args, "auto", "--effort", "high"]), /cannot be combined/);
+  assert.throws(() => parseArgs([...args, "auto", "--speed", "standard"]), /cannot be combined/);
 });
 
 test("Cursor adapter accepts repeatable review exclusions", () => {
@@ -193,11 +203,12 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
   });
 
   const expectedFingerprint = await workingTreeFingerprint(repo);
+  const model = "Custom-Model[context=1m,effort=high]";
+  const review = parseReviewOptions(["--reviewers", "cursor", "--cursor-model", model]);
   const options = parseArgs([
     "--cwd", repo,
     "--scope", "working-tree",
-    "--effort", "medium",
-    "--speed", "fast",
+    "--model", review.cursor.model,
     "--expected-fingerprint", expectedFingerprint,
     "--task-brief", taskBrief,
     "--task-brief-hash", pinnedBrief.hash,
@@ -213,10 +224,7 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
   assert.ok(captured.prompt.includes(reviewGuidance(pinnedBrief)));
 
   assert.equal(report, "No actionable findings from Cursor.");
-  assert.equal(
-    captured.argv[captured.argv.indexOf("--model") + 1],
-    "cursor-grok-4.6-medium-fast",
-  );
+  assert.equal(captured.argv[captured.argv.indexOf("--model") + 1], model);
   assert.match(captured.prompt, /Target: working tree at [0-9a-f]{40}/);
   assert.match(captured.prompt, /\+export const value = 2;/);
   assert.match(captured.prompt, /untracked\.js/);
@@ -317,7 +325,7 @@ test("Cursor process is terminated at the adapter deadline and its prompt is rem
         expectedFingerprint,
         timeoutMs: 5_000,
       },
-      { cursorBin: fakeCursor, providerTimeout: () => 100 },
+      { cursorBin: fakeCursor, providerTimeout: () => 1_000 },
     ),
     (error) => error.timedOut === true,
   );

@@ -13,11 +13,7 @@ import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment } from "./provider-launch.mjs";
 
-import {
-  CURSOR_MODELS,
-  CURSOR_SPEEDS,
-  cursorModel,
-} from "./review-options.mjs";
+import { resolveCursorOptions } from "./review-options.mjs";
 import {
   buildReviewPrompt,
   collectReviewContext,
@@ -41,8 +37,6 @@ function parseArgs(argv) {
     scope: null,
     base: null,
     includeWorkingTree: false,
-    effort: "high",
-    speed: "standard",
     expectedFingerprint: null,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     excludePaths: [],
@@ -52,6 +46,7 @@ function parseArgs(argv) {
     "--scope",
     "--base",
     "--include-working-tree",
+    "--model",
     "--effort",
     "--speed",
     "--task-brief",
@@ -115,19 +110,7 @@ function parseArgs(argv) {
   }
   options.expectedFingerprint = options.expectedFingerprint.toLowerCase();
   options.excludePaths = normalizeExcludePaths(options.excludePaths);
-  options.effort = String(options.effort).trim().toLowerCase();
-  if (!Object.hasOwn(CURSOR_MODELS, options.effort)) {
-    throw new Error(
-      `Unsupported effort "${options.effort}". Use ${Object.keys(CURSOR_MODELS).join(", ")}.`,
-    );
-  }
-  options.speed = String(options.speed).trim().toLowerCase();
-  if (!CURSOR_SPEEDS.has(options.speed)) {
-    throw new Error(
-      `Unsupported speed "${options.speed}". Use ${[...CURSOR_SPEEDS].join(", ")}.`,
-    );
-  }
-  return options;
+  return { ...options, ...resolveCursorOptions(options, "--") };
 }
 
 function buildCursorArgs(options, scope, promptDirectory, promptPath) {
@@ -143,7 +126,7 @@ function buildCursorArgs(options, scope, promptDirectory, promptPath) {
     "--add-dir",
     promptDirectory,
     "--model",
-    cursorModel(options.effort, options.speed),
+    options.model ?? resolveCursorOptions(options, "--").model,
     "--output-format",
     "text",
     [

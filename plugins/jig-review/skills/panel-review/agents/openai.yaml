@@ -1,6 +1,6 @@
 interface:
   display_name: "Panel Review"
-  short_description: "Configure Claude, Codex, and Grok reviews"
+  short_description: "Configure Claude, Codex, and Cursor reviews"
   default_prompt: "Use $panel-review to review my changes with the default Claude and Codex passes."
 
 policy:

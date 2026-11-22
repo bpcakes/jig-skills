@@ -35,6 +35,7 @@ const REVIEW_VALUE_FLAGS = new Map([
   ["--codex-effort", "codexEffort"],
   ["--codex-runtime", "codexRuntime"],
   ["--codex-launcher", "codexLauncher"],
+  ["--cursor-model", "cursorModel"],
   ["--cursor-effort", "cursorEffort"],
   ["--cursor-speed", "cursorSpeed"],
   ["--exclude-path", "excludePaths"],
@@ -71,6 +72,20 @@ function effort(flag, value, supported) {
     throw new Error(`Unsupported ${flag} value "${normalized}". Use ${[...supported].join(", ")}.`);
   }
   return normalized;
+}
+
+function resolveCursorOptions({ model, effort: effortLevel, speed }, prefix) {
+  if (model != null) {
+    if (effortLevel != null || speed != null) {
+      throw new Error(`${prefix}model cannot be combined with ${prefix}effort or ${prefix}speed.`);
+    }
+    const id = nonblank(`${prefix}model`, model);
+    if (id.startsWith("-")) throw new Error(`${prefix}model requires a model ID, got "${id}".`);
+    return { effort: null, speed: null, model: id };
+  }
+  const cursorEffort = effort(`${prefix}effort`, effortLevel ?? "high", new Set(Object.keys(CURSOR_MODELS)));
+  const cursorSpeed = effort(`${prefix}speed`, speed ?? "standard", CURSOR_SPEEDS);
+  return { effort: cursorEffort, speed: cursorSpeed, model: cursorModel(cursorEffort, cursorSpeed) };
 }
 
 function parseReviewers(value) {
@@ -170,8 +185,9 @@ function parseArgs(argv, parseOptions = {}) {
     codexEffort: null,
     codexRuntime: null,
     codexLauncher: null,
-    cursorEffort: "high",
-    cursorSpeed: "standard",
+    cursorModel: null,
+    cursorEffort: null,
+    cursorSpeed: null,
     excludePaths: [],
   };
   const provided = new Set();
@@ -211,7 +227,7 @@ function parseArgs(argv, parseOptions = {}) {
       "--claude-launcher",
     ],
     codex: ["--codex-model", "--codex-effort", "--codex-runtime", "--codex-launcher"],
-    cursor: ["--cursor-effort", "--cursor-speed"],
+    cursor: ["--cursor-model", "--cursor-effort", "--cursor-speed"],
   };
   for (const [reviewer, configurationFlags] of Object.entries(reviewerFlags)) {
     if (selected.has(reviewer)) continue;
@@ -238,20 +254,9 @@ function parseArgs(argv, parseOptions = {}) {
     throw new Error("--claude-config-dir cannot be combined with --claude-launcher; the launcher selects the Claude home.");
   }
   const codex = selected.has("codex") ? codexOptions(raw, provided, host, { deferCodexEffort: true }) : null;
-  let cursor = null;
-  if (selected.has("cursor")) {
-    const cursorEffort = effort(
-      "--cursor-effort",
-      raw.cursorEffort,
-      new Set(Object.keys(CURSOR_MODELS)),
-    );
-    const speed = effort("--cursor-speed", raw.cursorSpeed, CURSOR_SPEEDS);
-    cursor = {
-      effort: cursorEffort,
-      speed,
-      model: cursorModel(cursorEffort, speed),
-    };
-  }
+  const cursor = selected.has("cursor")
+    ? resolveCursorOptions({ model: raw.cursorModel, effort: raw.cursorEffort, speed: raw.cursorSpeed }, "--cursor-")
+    : null;
 
   const review = {
     ...(provided.has("--log-to-beads") ? { logToBeads: true } : {}),
@@ -297,6 +302,7 @@ export {
   defaultLauncherCandidates,
   parseArgs,
   readOptionValue,
+  resolveCursorOptions,
   reviewOptionTakesValue,
   withDefaultLaunchers,
 };
