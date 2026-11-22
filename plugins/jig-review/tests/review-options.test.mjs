@@ -122,6 +122,12 @@ test("single-reviewer selection does not configure or require other CLIs", () =>
   });
 });
 
+test("Cursor file access requires a selected Cursor reviewer and an explicit supported policy", () => {
+  assert.equal(parseArgs(["--reviewers", "cursor", "--cursor-file-access", "host"]).cursor.fileAccess, "host");
+  assert.throws(() => parseArgs(["--reviewers", "claude", "--cursor-file-access", "host"]), /requires selecting cursor/);
+  assert.throws(() => parseArgs(["--reviewers", "cursor", "--cursor-file-access", "all"]), /Unsupported/);
+});
+
 test("an explicit Cursor model selects the exact ID and excludes Grok preset flags", () => {
   const model = "Custom-Model[context=1m,effort=high]";
   const args = ["--reviewers", "cursor", "--cursor-model", model];

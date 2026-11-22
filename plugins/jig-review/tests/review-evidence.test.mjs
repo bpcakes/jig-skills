@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { fixtureCursorKey } from "./fixtures/provider-evidence.mjs";
 import { ReviewEvidence } from "../skills/panel-review/scripts/review-evidence.mjs";
 import { buildReviewPrompt, collectReviewContext, resolveScope } from "../skills/panel-review/scripts/review-context.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
@@ -53,6 +54,30 @@ function aggregateFixture(t) {
   for (const name of ["one.txt", "two.txt"]) writeFileSync(path.join(repo, name), "u".repeat(60_000));
   return repo;
 }
+
+test("restricted Cursor evidence omits tracked, renamed and untracked .env contents", async t => {
+  const repo = repository(t);
+  mkdirSync(path.join(repo, "config"));
+  const oldValues = Array.from({ length: 12 }, (_, index) => `fixture-old-value-${index}\n`).join("");
+  writeFileSync(path.join(repo, "config/.env.old"), oldValues);
+  writeFileSync(path.join(repo, ".env"), "fixture-previous-value\n");
+  git(repo, "add", "-f", ".");
+  git(repo, "commit", "-qm", "base");
+  git(repo, "mv", "config/.env.old", "config/renamed.txt");
+  writeFileSync(path.join(repo, "config/renamed.txt"), oldValues + "fixture-staged-value\n");
+  git(repo, "add", "config/renamed.txt");
+  writeFileSync(path.join(repo, ".env"), "fixture-modified-value\n");
+  writeFileSync(path.join(repo, "config/.env.new"), "fixture-untracked-value\n");
+  writeFileSync(path.join(repo, "visible.txt"), "included public change\n");
+  const scope = await resolveScope({ cwd: repo, scope: "working-tree" });
+  const evidence = store(t, { requireReceipts: true, omitEnvFiles: true });
+  const context = await collectReviewContext(scope, { evidence });
+  assert.equal(context.incomplete, true);
+  assert.match(context.limitations.join(" "), /credential-file patch excluded/);
+  const contents = pages(evidence).map(page => page.textFragments.join("")).join("\n") + buildReviewPrompt(scope, context);
+  assert.match(contents, /included public change/);
+  assert.doesNotMatch(contents, /fixture-(?:old|previous|staged|modified|untracked)-value/);
+});
 
 test("a patch beyond 384 KiB retains deleted and prior code byte-for-byte", async (t) => {
   const repo = repository(t);
@@ -323,6 +348,7 @@ test("evidence capture observes cancellation and deadlines", (t) => {
 
 for (const provider of ["claude", "cursor"]) {
   test(`${provider} adapter exposes evidence through read-only directory access and cleans it`, async (t) => {
+    if (provider === "cursor") fixtureCursorKey(t);
     const repo = aggregateFixture(t);
     const helperDir = mkdtempSync(path.join(os.tmpdir(), "jig-evidence-provider-"));
     t.after(() => rmSync(helperDir, { recursive: true, force: true }));
@@ -338,7 +364,8 @@ const pages = readdirSync(dir).filter(n => /^page-\\d+\\.json$/.test(n)).sort().
 writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({args, dir, manifest, pages}));
 process.stdin.resume();
 const report = 'No findings.\\n<review-coverage>' + JSON.stringify({reviewed: pages.map(({id,receipt}) => ({id,receipt}))}) + '</review-coverage>';
-process.stdout.write(${JSON.stringify(provider)} === 'claude' ? JSON.stringify({result: report}) : report);
+const { sendReport } = await import(${JSON.stringify(import.meta.resolve("./fixtures/provider-evidence.mjs"))});
+sendReport(${JSON.stringify(provider)}, report, 'fixture-model');
 `);
     chmodSync(fake, 0o755);
     const initial = await captureFingerprint({ cwd: repo, scope: "working-tree" });
@@ -363,6 +390,7 @@ process.stdout.write(${JSON.stringify(provider)} === 'claude' ? JSON.stringify({
 
   for (const failure of ["provider error", "deadline", "cancellation", "scope mutation"]) {
     test(`${provider} cleans paged evidence after ${failure}`, async (t) => {
+      if (provider === "cursor") fixtureCursorKey(t);
       const repo = aggregateFixture(t);
       const helperDir = mkdtempSync(path.join(os.tmpdir(), "jig-evidence-failure-"));
       t.after(() => rmSync(helperDir, { recursive: true, force: true }));

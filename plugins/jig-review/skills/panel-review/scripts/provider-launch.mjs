@@ -11,8 +11,8 @@ const DEFAULT_LAUNCHER_BIN = "jig";
 // Session markers that a Claude Code or Codex parent sets for its own child
 // processes. A reviewer is an independent CLI session: inheriting these would
 // attach it to the parent's messaging socket, session identity, effort, or
-// sandbox state. Provider configuration such as CLAUDE_CONFIG_DIR, CODEX_HOME,
-// and credential variables is deliberately retained.
+// sandbox state. The allowlist below keeps these markers out of every
+// provider process and admits only the selected provider’s configuration.
 const PARENT_SESSION_VARIABLES = Object.freeze([
   "CLAUDECODE",
   "CLAUDE_CODE_ENTRYPOINT",
@@ -61,7 +61,7 @@ function supportsAutoLauncher(provider, { inherited = process.env, cwd = process
   assertLauncherProvider(provider);
   try {
     const result = spawnSync(launcherBinary(inherited), [provider, "launch", "--help"], {
-      cwd, env: childEnvironment(inherited), encoding: "utf8", timeout: timeoutMs,
+      cwd, env: childEnvironment(inherited, {}, provider), encoding: "utf8", timeout: timeoutMs,
       killSignal: "SIGKILL", maxBuffer: 64 * 1024, stdio: ["ignore", "pipe", "pipe"],
     });
     const help = result.stdout ?? "";
@@ -100,11 +100,19 @@ function resolveProviderLaunch({ provider, launcher, executable, args, inherited
   };
 }
 
-// Environment for an independent provider process: the parent's session markers
-// removed, explicit overrides applied (null removes a variable).
-function childEnvironment(inherited = process.env, overrides = {}) {
-  const environment = { ...inherited };
-  for (const name of PARENT_SESSION_VARIABLES) delete environment[name];
+// Unknown parent variables, including cloud credentials and loader settings,
+// stay out of the provider process. Only its own authentication is passed.
+const runtimeVariables = ["PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TMP", "TEMP"];
+const providerVariables = {
+  claude: ["CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"],
+  codex: ["CODEX_HOME", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY", "OPENAI_BASE_URL"],
+  cursor: ["CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"],
+};
+
+function childEnvironment(inherited = process.env, overrides = {}, provider) {
+  const names = [...runtimeVariables, ...(providerVariables[provider] ?? [])];
+  const environment = Object.fromEntries(names.filter(name => inherited[name] !== undefined)
+    .map(name => [name, inherited[name]]));
   for (const [name, value] of Object.entries(overrides)) {
     if (value == null) delete environment[name];
     else environment[name] = value;

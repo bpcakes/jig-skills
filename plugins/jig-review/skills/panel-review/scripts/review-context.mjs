@@ -522,6 +522,10 @@ async function formatUntrackedFiles(repoRoot, displayPrefix = "", options = {}) 
       continue;
     }
     const displayPath = displayPrefix ? `${displayPrefix}/${relativePath}` : relativePath;
+    if (options.evidence?.omitEnvFiles && displayPath.split("/").some(part => part.startsWith(".env"))) {
+      omissions.push({ path: displayPath, reason: "credential-file-excluded" });
+      continue;
+    }
     const absolutePath = safeRepositoryPath(repoRoot, relativePath);
     let stat;
     try {
@@ -796,6 +800,10 @@ async function collectSubmoduleContexts(
     const displayPath = displayPrefix ? `${displayPrefix}/${relativePath}` : relativePath;
     const subtree = exclusionsForSubtree(options.excludePaths ?? [], relativePath);
     if (subtree.excluded) continue;
+    if (options.evidence?.omitEnvFiles && displayPath.split("/").some(part => part.startsWith(".env"))) {
+      context.markIncomplete(`credential-file submodule excluded: ${displayPath}`);
+      continue;
+    }
     const submoduleOptions = { ...options, excludePaths: subtree.excludePaths };
     const submoduleRoot = safeRepositoryPath(repoRoot, relativePath);
     let stat;

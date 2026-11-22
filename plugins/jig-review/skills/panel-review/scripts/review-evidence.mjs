@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { captureDiff } from "./diff-evidence.mjs";
@@ -11,17 +11,20 @@ const MAX_EVIDENCE_PAGES = 2048;
 // Each page fits ordinary Read tool line/size limits, including very long diff
 // lines. Concatenating textFragments, then successive pages, restores the patch.
 class ReviewEvidence {
-  constructor({ deadlineAt, signal, maxBytes = MAX_EVIDENCE_BYTES } = {}) {
-    this.directory = mkdtempSync(path.join(os.tmpdir(), "jig-review-evidence-"));
+  constructor({ deadlineAt, signal, maxBytes = MAX_EVIDENCE_BYTES, requireReceipts = false, isolatedWorkspace = false, omitEnvFiles = false } = {}) {
+    this.root = mkdtempSync(path.join(os.tmpdir(), "jig-review-evidence-"));
+    this.directory = isolatedWorkspace ? path.join(this.root, "workspace") : this.root;
+    if (isolatedWorkspace) mkdirSync(this.directory, { mode: 0o700 });
     this.deadlineAt = deadlineAt;
     this.signal = signal;
     this.maxBytes = maxBytes;
     this.bytes = 0;
     this.receipts = new Map();
     this.limitations = new Set();
-    this.required = false;
+    this.required = requireReceipts;
+    this.omitEnvFiles = omitEnvFiles;
     this.cleanup = () => {
-      rmSync(this.directory, { recursive: true, force: true });
+      rmSync(this.root, { recursive: true, force: true });
       process.removeListener("exit", this.cleanup);
     };
     process.once("exit", this.cleanup);
@@ -113,6 +116,17 @@ class ReviewEvidence {
       checkTime: () => this.checkTime(),
       omit,
       accept: (patch, label) => {
+        // The provider reads evidence pages under new names. A Read(**/.env*)
+        // rule on the provider alone cannot protect a patch copied to a page.
+        // Check the full Git header, including either side of a rename.
+        if (this.omitEnvFiles) {
+          const nl = patch.indexOf(10);
+          const header = patch.subarray(0, nl < 0 ? patch.length : nl).toString("utf8");
+          if (/(?:^|[/" ])\.env/.test(header)) {
+            omit(`${label}: credential-file patch excluded`);
+            return;
+          }
+        }
         // Admit a whole file or none of it. A rejected file cannot consume the
         // remaining budget or stop Git before later file patches arrive.
         if (patch.length > this.maxBytes - this.bytes) {
@@ -176,13 +190,14 @@ class ReviewEvidence {
 
   structuredReport(report, context) {
     this.requireComplete(context);
-    if (!context.evidence) return report;
+    if (!context.evidence) throw new Error("Structured review requires evidence coverage receipts.");
     this.annotateReport(report, context, { requireComplete: true });
     return report.replace(/<review-coverage>\s*[\s\S]*?<\/review-coverage>\s*$/, "").trim();
   }
 
-  annotateReport(report, context, { requireComplete = false } = {}) {
-    if (!context.evidence) return report;
+  annotateReport(report, context, { requireComplete = false, requireReviewedPage = false } = {}) {
+    if (!context.evidence) return context.incomplete
+      ? `${report}\n\nEvidence coverage: limited. ${(context.limitations ?? []).join(" ")}` : report;
     const match = report.match(/<review-coverage>\s*([\s\S]*?)\s*<\/review-coverage>\s*$/);
     const reviewed = new Set();
     let invalid = !match;
@@ -201,10 +216,30 @@ class ReviewEvidence {
     }
     if (!report) throw new Error("Reviewer returned coverage without a review report.");
     const missing = [...this.receipts.keys()].filter((id) => !reviewed.has(id));
-    const limited = invalid || missing.length > 0 || context.incomplete;
-    if (requireComplete && limited) throw new Error("Structured review requires complete valid coverage receipts.");
+    const limited = invalid || reviewed.size === 0 || missing.length > 0 || context.incomplete;
+    if (requireReviewedPage && reviewed.size === 0) {
+      throw Object.assign(new Error(`No review: evidence coverage limited; 0/${this.receipts.size} pages verified.`),
+        { code: "INCOMPLETE_REVIEW_EVIDENCE" });
+    }
+    // Use the existing panel report contract as positive evidence. A model
+    // can open every page, quote its receipts, and still decline to review.
+    if (requireReviewedPage) {
+      const body = report.replaceAll("**", "");
+      // Cursor's result can join progress text directly to the final bullet.
+      const finding = /(?:[-*]|\d+[.)])\s+\[(?:critical|high|medium|low)\]\s+\[[^\]\n]+\]\s+\S/i;
+      const clean = /(?:^|[.!?\n])\s*(?:[-*#]+\s*)?(?:(?:I (?:found|identified) |there (?:are|were) )?no (?:actionable |substantive )?(?:findings|issues|defects)\b|findings:\s*none\b)/i;
+      if (!finding.test(body) && !clean.test(body)) throw Object.assign(
+        new Error("No review: evidence was accessed without a finding or an explicit no-findings conclusion."),
+        { code: "INCOMPLETE_REVIEW_EVIDENCE" },
+      );
+    }
+    if (requireComplete && limited) throw Object.assign(
+      new Error("No review: structured review requires complete valid coverage receipts."),
+      { code: "INCOMPLETE_REVIEW_EVIDENCE" },
+    );
+    this.coverage = limited ? "limited" : "reviewer-attested";
     const notes = [
-      `Evidence coverage: ${limited ? "limited" : "reviewer-attested"}; ${reviewed.size}/${this.receipts.size} pages reported reviewed with valid receipts.`,
+      `Evidence coverage: ${this.coverage}; ${reviewed.size}/${this.receipts.size} pages reported reviewed with valid receipts.`,
       "Receipts attest page access and the reviewer's coverage claim, not review quality. Scope fingerprint status is separate.",
     ];
     if (invalid) notes.push("Coverage receipt missing or invalid; complete coverage is not verified.");

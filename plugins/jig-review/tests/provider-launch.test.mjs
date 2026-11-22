@@ -68,21 +68,27 @@ test("preflight lists every executable a bundled launch needs", () => {
   assert.throws(() => preflightExecutables("cursor", "auto", "cursor-agent", {}), /not cursor/);
 });
 
-test("child environment drops parent session markers but keeps provider configuration", () => {
+test("child environment only exposes the selected provider credentials", () => {
   const inherited = Object.fromEntries(PARENT_SESSION_VARIABLES.map((name) => [name, "parent"]));
   Object.assign(inherited, {
     PATH: "/usr/bin",
     CLAUDE_CONFIG_DIR: "/home/user/.claude-work",
     CLAUDE_CODE_OAUTH_TOKEN: "token",
     CODEX_HOME: "/home/user/.codex-work",
-    ANTHROPIC_API_KEY: "key",
+    ANTHROPIC_API_KEY: "key", OPENAI_API_KEY: "elsewhere", CURSOR_API_KEY: "cursor-key",
+    ORDINARY_VARIABLE: "canary", AWS_SESSION_TOKEN: "cloud-key",
   });
-  const environment = childEnvironment(inherited, { CLAUDE_CONFIG_DIR: "/tmp/profile", CODEX_HOME: null });
+  const environment = childEnvironment(inherited, { CLAUDE_CONFIG_DIR: "/tmp/profile", CODEX_HOME: null }, "claude");
   for (const name of PARENT_SESSION_VARIABLES) assert.equal(environment[name], undefined, name);
   assert.equal(environment.PATH, "/usr/bin");
   assert.equal(environment.CLAUDE_CONFIG_DIR, "/tmp/profile");
   assert.equal(environment.CLAUDE_CODE_OAUTH_TOKEN, "token");
   assert.equal(environment.ANTHROPIC_API_KEY, "key");
-  assert.equal(Object.hasOwn(environment, "CODEX_HOME"), false);
+  for (const name of ["CODEX_HOME", "ORDINARY_VARIABLE", "AWS_SESSION_TOKEN", "OPENAI_API_KEY", "CURSOR_API_KEY"]) {
+    assert.equal(Object.hasOwn(environment, name), false, name);
+  }
+  const codex = childEnvironment(inherited, {}, "codex");
+  assert.deepEqual(codex, { PATH: "/usr/bin", CODEX_HOME: "/home/user/.codex-work", OPENAI_API_KEY: "elsewhere" });
+  assert.deepEqual(childEnvironment(inherited, {}, "cursor"), { PATH: "/usr/bin", CURSOR_API_KEY: "cursor-key" });
   assert.equal(inherited.CLAUDECODE, "parent", "the inherited object is not mutated");
 });

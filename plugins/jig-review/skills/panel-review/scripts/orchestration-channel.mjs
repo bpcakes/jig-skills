@@ -11,6 +11,15 @@ export const CHANNEL_SETTINGS = Object.freeze([
   "features.use_legacy_landlock=false",
 ]);
 
+// The verified namespace provides its own gateway and egress proxy for the
+// canonical communication client. Keep these out of ordinary provider runs.
+export function channelEnvironment(verified, env = process.env) {
+  if (!verified) return {};
+  const names = ["ORCHESTRATION_SOCKET", "ORCHESTRATION_CREDENTIAL_FILE", "ORCHESTRATION_TASK",
+    "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy"];
+  return Object.fromEntries(names.filter(name => env[name] !== undefined).map(name => [name, env[name]]));
+}
+
 export async function verifiedReadOnlyChannel(root, { deadlineAt, signal, environment = process.env } = {}) {
   const socket = environment.ORCHESTRATION_SOCKET, credential = environment.ORCHESTRATION_CREDENTIAL_FILE,
     task = environment.ORCHESTRATION_TASK;

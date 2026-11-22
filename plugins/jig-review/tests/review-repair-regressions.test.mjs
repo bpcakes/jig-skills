@@ -1,5 +1,6 @@
 import "./fixtures/no-default-launcher.mjs";
 import assert from "node:assert/strict";
+import { fixtureCursorKey } from "./fixtures/provider-evidence.mjs";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -122,11 +123,14 @@ for (const acceptance of ["satisfied", "uncertain"]) test(`default per-round pre
 });
 
 function fakeCli(t, f, provider, slow = false) {
+  if (provider === "cursor") fixtureCursorKey(t);
+  const fixtureModule = new URL("./fixtures/provider-evidence.mjs", import.meta.url).href;
   const bin = path.join(f.root, ".git/bin"); mkdirSync(bin);
   const cli = path.join(bin, provider === "claude" ? "claude" : "cursor-agent");
   const module = path.join(bin, "fake-cli.mjs");
   writeFileSync(module, `#!${process.execPath}
 import fs from 'node:fs';
+import { readEvidence, sendReport, withCoverage } from ${JSON.stringify(fixtureModule)};
 let prompt='';
 if(${JSON.stringify(provider)}==='claude'){for await(const chunk of process.stdin)prompt+=chunk;}
 else {prompt=fs.readFileSync(process.argv.at(-1).match(/from (.+)\\. Follow/)[1],'utf8');}
@@ -134,7 +138,8 @@ const a=JSON.parse(prompt.split('\\n').findLast(line=>line.startsWith('{')));
 fs.writeFileSync(${JSON.stringify(path.join(f.root, ".git/bridge-input.json"))},JSON.stringify(a));
 ${slow ? "await new Promise(resolve=>setTimeout(resolve,60000));" : ""}
 const report=JSON.stringify({assignmentId:a.id,fingerprint:a.fingerprint,complete:true,findings:[],acceptance:[{criterionId:'value',status:'satisfied',evidence:'Export assertion and source inspected',validationIds:['unit']}]});
-process.stdout.write(${JSON.stringify(provider)}==='claude'?JSON.stringify({type:'result',result:report,is_error:false}):report);
+const evidence = readEvidence(process.argv[process.argv.indexOf('--add-dir') + 1]);
+sendReport(${JSON.stringify(provider)}, withCoverage(report, evidence.reviewed));
 `);
   chmodSync(module, 0o755); symlinkSync(module, cli);
   const prior = process.env.PATH; process.env.PATH = `${bin}${path.delimiter}${prior}`;
@@ -152,12 +157,19 @@ for (const provider of ["claude", "cursor"]) for (const timeoutMs of [undefined,
       await submit(run.directory, run.pending.id, triage(run.pending.assignment, "fixed"));
     }
     assert.equal(run.phase, "CONVERGED", JSON.stringify(run.outcome));
-    const request = JSON.parse(readFileSync(path.join(run.directory, "assignments", run.attempts[0].id, "request.json")));
+    const assignmentDirectory = path.join(run.directory, "assignments", run.attempts[0].id);
+    const request = JSON.parse(readFileSync(path.join(assignmentDirectory, "request.json")));
     assert.equal(request.timeoutMs, timeoutMs ?? 29 * 60 * 1000);
     assert.equal(request.assignment.timeoutMs, request.timeoutMs);
     const seen = JSON.parse(readFileSync(path.join(f.root, ".git/bridge-input.json")));
     assert.equal(seen.commitRange.base, f.base); assert.equal(seen.commitRange.tip, f.git("rev-parse", "HEAD"));
     assert.equal(seen.scope.scope, "branch"); assert.equal(seen.scope.includeWorkingTree, false);
+    if (provider === "cursor") {
+      const metadata = JSON.parse(readFileSync(path.join(assignmentDirectory, "cursor-meta.json")));
+      assert.equal(metadata.model, request.assignment.providerOptions.model);
+      assert.equal(metadata.confinement, "restricted");
+      assert.equal(metadata.sandboxMode, "enabled");
+    }
     assert.equal(f.executions(), 1);
   });
 }

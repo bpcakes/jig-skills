@@ -127,6 +127,9 @@ try {
   // command and can use the controller's existing bounded infrastructure retry.
   if (request.role === "validate") log = openSync(path.join(directory, "stdout.log"), "wx", 0o600);
   const environment = commandEnvironment(request);
+  if (request.assignment?.provider === "cursor" && ["review", "adjudicate"].includes(request.role)) {
+    environment.JIG_CURSOR_REVIEW_META_FILE = path.join(directory, "cursor-meta.json");
+  }
   const missing = (request.requiredEnvironment ?? []).filter(name => !environment[name]);
   if (missing.length && !request.executionBoundary) throw new Error(`Required worker environment missing: ${missing.join(", ")}`);
   child = spawn(argv[0], argv.slice(1), { cwd: request.cwd,
