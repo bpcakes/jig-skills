@@ -81,14 +81,14 @@ The handoff retains researched answers, evidence, and revised recommendations fo
 
 The report leads with findings and identifies which reviewers independently reported each issue. Review notes disclose reviewer failures, intentional path exclusions and their policy source, coverage limitations, Claude file access, and whether the scope fingerprint was verified unchanged. A branch review that includes the working tree also reports exact counts and bounded lists of tracked paths differing from the index, untracked paths absent from it, and submodules with inner working changes. Truncation and capture-issue markers make capped or incomplete staging guidance explicit. Before committing, re-stage intended tracked paths, add intended untracked paths, and commit dirty submodule changes inside each submodule before staging its parent gitlink. Otherwise a commit can record code different from the reviewed files, including defects the reviewers correctly treated as superseded by later working changes. With only one completed review, the result is labeled as a single-reviewer report.
 
-For large external reviews, the adapters supply numbered pages of patch evidence. The `Evidence coverage` summary distinguishes:
+For every external review, the adapters supply numbered pages of patch evidence. The `Evidence coverage` summary distinguishes:
 
 - `reviewer-attested`: the reviewer returned valid receipts for every captured page and claimed to review them. This demonstrates page access and a claim of review, not review quality.
 - `limited`: pages were missing or had invalid receipts, or capture omitted evidence. A limited review must retain those qualifications even if no findings were reported.
 
 Fingerprint verification establishes scope stability. It does not prove complete coverage or a bug-free change. If the scope changes during the review, the results cannot be presented as reviews of the same changes.
 
-The runtime switches to pages when a diff exceeds 384 KiB or combined inline context exceeds 768 KiB. Capture is bounded to 16 MiB of source text and 2,048 pages. Each included file patch is limited to 2 MiB. A patch that exceeds that limit or the remaining total budget is omitted in full, with its header and reason recorded; capture continues to later files. No path category is excluded automatically. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [external-reviewer reference](../plugins/jig-review/skills/panel-review/references/external-reviewers.md) for capture details, deadlines, and cleanup.
+Zero verified pages or a refusal yields no review. The panel surfaces partial findings with limited coverage. The repair loop requires every page and a valid structured result before counting a provider toward convergence. Capture is bounded to 16 MiB of source text and 2,048 pages. Each included file patch is limited to 2 MiB. A patch that exceeds that limit or the remaining total budget is omitted in full, with its header and reason recorded; capture continues to later files. Restricted Cursor reviews also omit tracked and untracked `.env*` files from the evidence pages and report limited coverage. Untracked files have separate limits of 64 KiB per file and 128 KiB in aggregate; omissions are disclosed. See the [external-reviewer reference](../plugins/jig-review/skills/panel-review/references/external-reviewers.md) for capture details, deadlines, and cleanup.
 
 ## File Access and Project Hooks
 
@@ -110,7 +110,17 @@ $jig-review:panel-review --claude-file-access host
 
 `host` removes the directory restriction while retaining read-only tools. The review notes disclose this expanded boundary. Large diffs do not require host access.
 
-Cursor runs with `--mode ask --sandbox enabled --trust --workspace <repository>`. Workspace trust allows non-interactive startup, but ask mode and sandboxing do not establish isolation for project hooks. This is an accepted limitation; future hook isolation is tracked as `jig-skills-h18` in [Beads](../.beads/issues.jsonl). The current adapter does not disable project hooks.
+### Cursor confinement
+
+Cursor reviews the Git evidence captured from the selected checkout. Its working directory, workspace and additional root all point to the private evidence pages. The adapter creates and removes a fresh home, CLI profile and data store for each run. Repository MCP definitions, workspace approvals, project hooks and rules are outside configuration discovery. Context beyond the captured patches may be unavailable.
+
+The default profile selects allowlist approval, a workspace read boundary and an enabled sandbox. It denies shell, writes, every MCP tool, environment files and common cloud, SSH, Kubernetes, Cursor, Claude and Codex credential paths. `--trust` applies to the private evidence workspace. Cursor implements the tool permissions and filesystem read boundary. Treat source text intentionally included in a patch or task brief as disclosed to the selected provider.
+
+An explicit `--cursor-file-access host` borrows policy from `CURSOR_CONFIG_DIR` or the default Cursor profile. The adapter still creates a private profile and excludes repository MCP configuration. The report marks this mode **unconfined**. Its header and private `meta.json` record the model Cursor reported, configured approval mode and explicit sandbox flag. The metadata also records the requested model, reported permission mode when available, and evidence coverage.
+
+Cursor accepts `CURSOR_API_KEY` or `CURSOR_AUTH_TOKEN`. For a normal installed CLI, the adapter can borrow the logged-in account's access grant read-only from macOS Keychain or the platform's Cursor authentication file. The provider uses a private in-memory credential store. An expired grant or unsupported credential store requires renewed sign-in or an explicit Cursor credential. Custom Cursor binaries require an explicit credential.
+
+Claude and Codex receive their own API credentials and profile settings, subject to the existing selected-account rules. All three adapters exclude unrelated provider credentials, cloud variables, parent session markers, shell startup and loader overrides, and arbitrary environment variables. A verified orchestration namespace supplies its own scoped communication settings. The native Codex reviewer is managed by its host.
 
 Use `cursor-agent --list-models` to see the IDs available to your account. Pass an ID with `--cursor-model <model-id>`. Combining it with `--cursor-effort` or `--cursor-speed` is an error.
 

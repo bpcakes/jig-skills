@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fixtureCursorKey } from "./fixtures/provider-evidence.mjs";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -218,6 +219,7 @@ test("combined scope preserves coverage limitations", async (t) => {
 test("both adapters transport the combined scope and reject checkout drift", async (t) => {
   for (const provider of ["claude", "cursor"]) {
     await t.test(provider, async (subtest) => {
+      if (provider === "cursor") fixtureCursorKey(subtest);
       const options = repository(subtest);
       branchAndRepairs(options);
       const captureDir = mkdtempSync(path.join(os.tmpdir(), "jig-branch-provider-"));
@@ -227,33 +229,35 @@ test("both adapters transport the combined scope and reject checkout drift", asy
       const promptReader = provider === "claude"
         ? 'let prompt = ""; for await (const chunk of process.stdin) prompt += chunk;'
         : 'const argv = process.argv.slice(2); const prompt = readFileSync(path.join(argv[argv.indexOf("--add-dir") + 1], "review-prompt.md"), "utf8");';
-      const response = provider === "claude"
-        ? 'process.stdout.write(JSON.stringify({result: "Transport complete"}));'
-        : 'process.stdout.write("Transport complete");';
+      const fixtureModule = new URL("./fixtures/provider-evidence.mjs", import.meta.url).href;
       const script = [
         "#!/usr/bin/env node",
         'import { readFileSync, writeFileSync } from "node:fs";',
         'import path from "node:path";',
+        `import { readEvidence, sendReport, withCoverage } from ${JSON.stringify(fixtureModule)};`,
         promptReader,
-        `writeFileSync(${JSON.stringify(capture)}, prompt);`,
-        response,
+        "const evidence = readEvidence(process.argv[process.argv.indexOf('--add-dir') + 1]);",
+        `writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ prompt, evidence: evidence.text }));`,
+        `sendReport(${JSON.stringify(provider)}, withCoverage("Transport complete. No actionable findings.", evidence.reviewed));`,
       ].join("\n");
       writeFileSync(binary, script, { mode: 0o700 });
       const fingerprint = await captureFingerprint(options);
       const args = ["--cwd", options.cwd, "--scope", "branch", "--base", fingerprint.baseOid,
         "--include-working-tree", "--expected-fingerprint", fingerprint.fingerprint, "--timeout-ms", "10000"];
-      const parsed = (provider === "claude" ? parseClaude : parseCursor)(args);
-      const run = () => provider === "claude"
+      const parsed = provider === "claude" ? parseClaude(args) : parseCursor(args);
+      const run = (metaName) => provider === "claude"
         ? runClaudeReview(parsed, { claudeBin: binary })
-        : runCursorReview(parsed, { cursorBin: binary });
-      assert.equal(await run(), "Transport complete");
-      const prompt = readFileSync(capture, "utf8");
+        : runCursorReview({ ...parsed, metaFile: path.join(captureDir, metaName) }, { cursorBin: binary });
+      const report = await run("first.json");
+      assert.match(report, /^Transport complete/m);
+      assert.match(report, /Evidence coverage: reviewer-attested/);
+      const captured = JSON.parse(readFileSync(capture, "utf8"));
       for (const evidence of ["COMMITTED-DEFECT", "OTHER-BRANCH-DEFECT", "STAGED-CORRECTION", "FINAL-CORRECTION", "UNTRACKED-REGRESSION-CASE"]) {
-        assert.ok(prompt.includes(evidence), `missing ${evidence}`);
+        assert.ok(captured.evidence.includes(evidence), `missing ${evidence}`);
       }
-      assert.match(prompt, /final working files are the review target/i);
+      assert.match(captured.prompt, /final working files are the review target/i);
       writeFileSync(binary, `${script}\nwriteFileSync(${JSON.stringify(path.join(options.cwd, "app.txt"))}, "unexpected change\\n");`);
-      await assert.rejects(run(), /review scope fingerprint changed/);
+      await assert.rejects(run("second.json"), /review scope fingerprint changed/);
     });
   }
 });

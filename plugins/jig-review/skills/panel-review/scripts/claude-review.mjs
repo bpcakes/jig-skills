@@ -9,7 +9,7 @@ import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
-import { verifiedReadOnlyChannel } from "./orchestration-channel.mjs";
+import { channelEnvironment, verifiedReadOnlyChannel } from "./orchestration-channel.mjs";
 
 import {
   buildReviewPrompt,
@@ -250,7 +250,7 @@ async function runClaudeReview(options, dependencies = {}) {
   const scope = await resolveScope(options, { deadlineAt, signal });
   assertScopeMatchesFingerprint(scope, initialFingerprint);
   options.orchestrationChannel = await verifiedReadOnlyChannel(scope.repoRoot, { deadlineAt, signal });
-  const evidence = new ReviewEvidence({ deadlineAt, signal });
+  const evidence = new ReviewEvidence({ deadlineAt, signal, requireReceipts: true });
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
     if (dependencies.parseReport) evidence.requireComplete(context);
@@ -273,6 +273,7 @@ async function runClaudeReview(options, dependencies = {}) {
       maxBuffer: MAX_CLAUDE_OUTPUT_BYTES,
       signal,
       env: gitEnvironment(childEnvironment(process.env, {
+        ...channelEnvironment(options.orchestrationChannel),
         ...(options.configDir == null ? {} : { CLAUDE_CONFIG_DIR: options.configDir }),
         ...(options.launcher !== "none" || options.configDir != null
           // Inherited credentials or provider routing must not bypass the selected subscription.
@@ -284,11 +285,11 @@ async function runClaudeReview(options, dependencies = {}) {
             CLAUDE_CODE_USE_FOUNDRY: null,
           }
           : {}),
-      })),
+      }, "claude")),
     });
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
     const report = parseClaudeResult(result.stdout);
-    return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
+    return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context, { requireReviewedPage: true });
   } finally {
     evidence.cleanup();
   }

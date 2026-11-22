@@ -31,12 +31,14 @@ import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 import { CHANNEL_SETTINGS, verifiedReadOnlyChannel } from "../skills/panel-review/scripts/orchestration-channel.mjs";
 
+const fixtureModule = new URL("./fixtures/provider-evidence.mjs", import.meta.url).href;
+
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
 function makeRepository() {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "jig-codex-review-"));
+  const repo = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-codex-review-")));
   git(repo, ["init", "-q"]);
   git(repo, ["config", "user.name", "Adapter Test"]);
   git(repo, ["config", "user.email", "adapter@example.invalid"]);
@@ -98,12 +100,18 @@ function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "",
     "for await (const chunk of process.stdin) prompt += chunk;",
     "let home = null;",
     "try { home = { path: process.env.CODEX_HOME, entries: readdirSync(process.env.CODEX_HOME).sort(), authLink: readlinkSync(process.env.CODEX_HOME + '/auth.json'), authResolves: existsSync(process.env.CODEX_HOME + '/auth.json'), config: existsSync(process.env.CODEX_HOME + '/config.toml') ? readFileSync(process.env.CODEX_HOME + '/config.toml', 'utf8') : null }; } catch (error) { home = { path: process.env.CODEX_HOME, error: error.code }; }",
-    "writeFileSync(process.env.FAKE_CODEX_CAPTURE, JSON.stringify({ argv, prompt, env: process.env, home }));",
+    `import { readEvidence, withCoverage } from ${JSON.stringify(fixtureModule)};`,
+    "const outputIndex = argv.indexOf('--output-last-message');",
+    "const directory = outputIndex >= 0 ? path.dirname(argv[outputIndex + 1]) : null;",
+    "const paged = directory && existsSync(path.join(directory, 'manifest.json'));",
+    "const evidence = paged ? readEvidence(directory) : { text: prompt, reviewed: [] };",
+    `const capture = argv[0] === 'app-server' ? ${JSON.stringify(path.join(directory, "inspection.json"))} : ${JSON.stringify(path.join(directory, "capture.json"))};`,
+    "writeFileSync(capture, JSON.stringify({ argv, prompt, evidence: evidence?.text, env: process.env, home }));",
     `if (${JSON.stringify(stdout)}) process.stdout.write(${JSON.stringify(stdout)});`,
     `if (${JSON.stringify(stderr)}) process.stderr.write(${JSON.stringify(stderr)});`,
     `if (${exitCode} !== 0) process.exit(${exitCode});`,
-    "const outputIndex = argv.indexOf('--output-last-message');",
-    `if (${writeReport} && outputIndex >= 0) writeFileSync(argv[outputIndex + 1], ${JSON.stringify(report)});`,
+    `const report = ${JSON.stringify(report)};`,
+    `if (${writeReport} && outputIndex >= 0) writeFileSync(argv[outputIndex + 1], report && paged ? withCoverage(report, evidence.reviewed) : report);`,
     "",
   ].join("\n"));
   chmodSync(file, 0o755);
@@ -132,7 +140,7 @@ function writeSkill(root, name, marker) {
 
 async function adapterFixture(t) {
   const repo = makeRepository();
-  const scratch = mkdtempSync(path.join(os.tmpdir(), "jig-codex-capture-"));
+  const scratch = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-codex-capture-")));
   t.after(() => {
     rmSync(repo, { recursive: true, force: true });
     rmSync(scratch, { recursive: true, force: true });
@@ -155,12 +163,12 @@ async function adapterFixture(t) {
     `[projects.${JSON.stringify(repo)}]`, 'trust_level = "trusted"', "",
   ].join("\n"));
   writeSkill(path.join(sourceHome, "skills"), "home-probe-skill", "PROBE_HOME_SKILL");
-  withEnvironment(t, { HOME: userHome, CODEX_HOME: sourceHome });
+  withEnvironment(t, { HOME: userHome, CODEX_HOME: sourceHome, OPENAI_API_KEY: null, CODEX_API_KEY: null,
+    CODEX_ACCESS_TOKEN: null, FIXTURE_DATABASE_TOKEN: "fixture-database", ANTHROPIC_API_KEY: "fixture-claude-key", CURSOR_API_KEY: "fixture-cursor-key" });
   const capturePath = path.join(scratch, "capture.json");
   const taskBrief = path.join(scratch, "brief.json");
   writeFileSync(taskBrief, JSON.stringify({ goal: "Preserve public values", requirements: [{ id: "R1", text: "Return the requested value", source: "User request" }], constraints: [], nonGoals: [], unknowns: [] }));
   const pinnedBrief = readBrief(taskBrief);
-  withEnvironment(t, { FAKE_CODEX_CAPTURE: capturePath });
   const expectedFingerprint = await workingTreeFingerprint(repo);
   const parse = (extra = []) => parseArgs([
     "--cwd", repo, "--scope", "working-tree", "--expected-fingerprint", expectedFingerprint,
@@ -246,17 +254,21 @@ test("the adapter runs Codex directly with a scrubbed environment and shell-orie
   withEnvironment(t, { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "parent", CODEX_SANDBOX_NETWORK_DISABLED: "1" });
   const fakeCodex = fakeProvider(f.scratch, "fake-codex.mjs");
   const report = await runCodexReview(f.parse(["--model", "gpt-5-codex", "--effort", "medium"]), { codexBin: fakeCodex });
-  assert.equal(report, "No actionable findings from Codex.");
   const captured = f.captured();
+  assert.equal(captured.env.FIXTURE_DATABASE_TOKEN, undefined, "unrelated database credential reached Codex");
+  assert.match(report, /^No actionable findings from Codex\./m);
+  assert.match(report, /Evidence coverage: reviewer-attested/);
   assert.equal(captured.argv[0], "exec");
   assert.deepEqual(captured.argv.slice(captured.argv.indexOf("--model"), captured.argv.indexOf("--model") + 2), ["--model", "gpt-5-codex"]);
   assert.ok(captured.argv.includes('model_reasoning_effort="medium"'));
   assert.equal(captured.argv.at(-1), "-");
   assert.ok(captured.prompt.includes(reviewGuidance(f.pinnedBrief)));
   assert.match(captured.prompt, /Target: working tree at [0-9a-f]{40}/);
-  assert.match(captured.prompt, /\+  return 3;/);
+  assert.match(captured.evidence, /\+  return 3;/);
   assert.match(captured.prompt, /read-only shell commands such as cat, sed, or rg/);
   assert.ok(!captured.prompt.includes("or shell commands."), "Codex must be allowed read-only shell inspection");
+  assert.equal(captured.env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(captured.env.CURSOR_API_KEY, undefined);
   assert.equal(captured.env.CLAUDECODE, undefined);
   assert.equal(captured.env.CLAUDE_CODE_SESSION_ID, undefined);
   assert.equal(captured.env.CODEX_SANDBOX_NETWORK_DISABLED, undefined);
@@ -315,7 +327,8 @@ test("a Jig launcher wraps the Codex command and forwards the adapter arguments 
   // The pre-launch isolation renders use the Codex executable directly; the review itself must go through Jig.
   const renderOnly = fakeProvider(f.scratch, "render-only-codex.mjs", { report: "launcher was bypassed" });
   const report = await runCodexReview(f.parse(["--launcher", "auto"]), { codexBin: renderOnly, jigBin: fakeJig });
-  assert.equal(report, "No actionable findings from Codex.");
+  assert.match(report, /^No actionable findings from Codex\./m);
+  assert.match(report, /Evidence coverage: reviewer-attested/);
   const captured = f.captured();
   assert.deepEqual(captured.argv.slice(0, 5), ["codex", "launch", "--auto", "--", "exec"]);
   assert.equal(captured.argv.at(-1), "-");
@@ -619,15 +632,16 @@ test("under a launcher the shim passes inspection through and isolates only exec
     'import { writeFileSync } from "node:fs";',
     "const argv = process.argv.slice(2);",
     "const forwarded = argv.slice(argv.indexOf('--') + 1);",
-    `const env = { ...process.env, CODEX_HOME: ${JSON.stringify(selectedHome)}, FAKE_CODEX_CAPTURE: ${JSON.stringify(inspection)} };`,
+    `const env = { ...process.env, CODEX_HOME: ${JSON.stringify(selectedHome)} };`,
     "spawnSync(process.env.JIG_CODEX_BIN, ['app-server'], { env, stdio: ['ignore', 'ignore', 'inherit'], input: undefined });",
-    "const result = spawnSync(process.env.JIG_CODEX_BIN, forwarded, { env: { ...env, FAKE_CODEX_CAPTURE: process.env.FAKE_CODEX_CAPTURE }, stdio: 'inherit' });",
+    "const result = spawnSync(process.env.JIG_CODEX_BIN, forwarded, { env, stdio: 'inherit' });",
     "process.exit(result.status ?? 1);",
     "",
   ].join("\n"));
   chmodSync(fakeJig, 0o755);
   const report = await runCodexReview(f.parse(["--launcher", "auto"]), { codexBin: fakeCodex, jigBin: fakeJig });
-  assert.equal(report, "No actionable findings from Codex.");
+  assert.match(report, /^No actionable findings from Codex\./m);
+  assert.match(report, /Evidence coverage: reviewer-attested/);
   const inspected = JSON.parse(readFileSync(inspection, "utf8"));
   assert.deepEqual(inspected.argv, ["app-server"]);
   assert.equal(inspected.home.path, selectedHome, "inspection keeps the selected home");

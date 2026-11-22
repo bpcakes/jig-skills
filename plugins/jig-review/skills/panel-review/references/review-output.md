@@ -1,6 +1,8 @@
 # Consolidated review output
 
-Start with findings, ordered by severity. Do not bury issues under a summary.
+When Cursor ran, copy its adapter header above the findings, including confinement, reported model, approval and sandbox. Preserve an explicit `unconfined` status even if the review failed.
+
+Start the findings section with issues ordered by severity. Do not bury issues under a summary.
 
 For each finding, use:
 
@@ -43,6 +45,7 @@ Review notes:
 - Reviewers requested: <comma-separated reviewer names>
 - Scope: working-tree|branch (committed only)|branch (including working tree)
 - <selected reviewer> review: completed|failed|timed out|not started
+- <selected reviewer> evidence coverage: reviewer-attested|complete|limited|none, with missing pages or capture limitations
 - Claude file access: restricted|host
 - Claude config: default|custom
 - Scope fingerprint: verified|changed|not verified

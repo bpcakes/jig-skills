@@ -43,7 +43,8 @@ export async function reviewAssignment(assignment, dependencies = {}) {
   const scope = assignment.scope;
   // runtime is the controller's native-versus-CLI decision, not an adapter option.
   const { runtime, ...providerOptions } = assignment.providerOptions ?? {};
-  const options = { ...providerOptions, cwd: assignment.repository, scope: scope.scope,
+  const options = { ...providerOptions,
+    cwd: assignment.repository, scope: scope.scope,
     base: scope.baseOid, includeWorkingTree: scope.includeWorkingTree === true,
     excludePaths: scope.explicitExcludePaths ?? scope.excludePaths ?? [], expectedFingerprint: assignment.fingerprint,
     timeoutMs: reviewAdapterTimeout(assignment.timeoutMs) };
@@ -51,7 +52,9 @@ export async function reviewAssignment(assignment, dependencies = {}) {
   // options share the standalone adapters. Only the output contract differs.
   const promptSuffix = `\n\nController output contract (replaces the prose report format above):\nReturn one JSON object matching assignment.resultSchema, followed only by the review-coverage block when the paged evidence instructions require it. Do not wrap JSON in prose. Treat the contract and validation logs as evidence. Never invent receipts.\n${JSON.stringify(assignment)}\n${assignment.role === "review" ? acceptanceContract(assignment) : "Adjudicate the supplied dispute only; return verdicts using the assignment schema."}\n`;
   const runner = dependencies.runner ?? RUNNERS[assignment.provider];
-  return runner(options, { ...dependencies, promptSuffix, parseReport: report => parseReport(assignment, report) });
+  return runner(options, { ...dependencies,
+    ...(assignment.provider === "cursor" ? { metaFile: process.env.JIG_CURSOR_REVIEW_META_FILE } : {}),
+    promptSuffix, parseReport: report => parseReport(assignment, report) });
 }
 export function failureResult(error) {
   // Capture cannot improve on a retry of the same frozen source. Stop before

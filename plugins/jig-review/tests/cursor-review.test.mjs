@@ -1,5 +1,6 @@
 import { readBrief, reviewGuidance } from "../skills/panel-review/scripts/review-brief.mjs";
 import assert from "node:assert/strict";
+import { fixtureCursorKey } from "./fixtures/provider-evidence.mjs";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import {
@@ -23,6 +24,10 @@ import {
 } from "../skills/panel-review/scripts/cursor-review.mjs";
 import { parseArgs as parseReviewOptions } from "../skills/panel-review/scripts/review-options.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
+
+const fixtureModule = new URL("./fixtures/provider-evidence.mjs", import.meta.url).href;
+
+test.beforeEach(fixtureCursorKey);
 
 const cursorScript = fileURLToPath(new URL(
   "../skills/panel-review/scripts/cursor-review.mjs",
@@ -67,7 +72,7 @@ async function waitForProcessGone(pid, timeoutMs = 2_000) {
   assert.fail(`process ${pid} was still present after ${timeoutMs} ms`);
 }
 
-test("Cursor arguments trust the selected workspace while retaining read-only execution", () => {
+test("Cursor arguments trust only the private evidence workspace", () => {
   const args = buildCursorArgs(
     { effort: "xhigh" },
     { repoRoot: "/tmp/repo" },
@@ -76,9 +81,9 @@ test("Cursor arguments trust the selected workspace while retaining read-only ex
   );
   assert.deepEqual(args.slice(0, 5), ["--print", "--mode", "ask", "--sandbox", "enabled"]);
   assert.ok(args.includes("--trust"));
-  assert.equal(args[args.indexOf("--workspace") + 1], "/tmp/repo");
+  assert.equal(args[args.indexOf("--workspace") + 1], "/tmp/prompt");
   assert.equal(args[args.indexOf("--model") + 1], "cursor-grok-4.6-xhigh");
-  assert.equal(args[args.indexOf("--output-format") + 1], "text");
+  assert.equal(args[args.indexOf("--output-format") + 1], "stream-json");
   assert.equal(args.some((argument) => ["--force", "--yolo", "--approve-mcps"].includes(argument)), false);
 
   const fastArgs = buildCursorArgs(
@@ -162,7 +167,7 @@ test("Cursor adapter accepts repeatable review exclusions", () => {
   assert.deepEqual(options.excludePaths, [".agent", "tmp/output"]);
 });
 
-test("Cursor receives a temporary bounded prompt and returns only its report", async (t) => {
+test("Cursor receives a temporary bounded prompt and returns a review with coverage", async (t) => {
   const repo = makeRepository();
   t.after(() => rmSync(repo, { recursive: true, force: true }));
   writeFileSync(path.join(repo, "example.js"), "export const value = 2;\n");
@@ -188,19 +193,14 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
       "}",
       'const promptDirectory = argv[argv.indexOf("--add-dir") + 1];',
       'const prompt = readFileSync(path.join(promptDirectory, "review-prompt.md"), "utf8");',
-      "writeFileSync(process.env.FAKE_CURSOR_CAPTURE, JSON.stringify({ argv, prompt, promptDirectory }));",
-      "process.stdout.write('No actionable findings from Cursor.');",
+      `import { readEvidence, sendReport, withCoverage } from ${JSON.stringify(fixtureModule)};`,
+      "const evidence = readEvidence(promptDirectory);",
+      `writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({ argv, prompt, evidence: evidence.text, promptDirectory }));`,
+      "sendReport('cursor', withCoverage('No actionable findings from Cursor.', evidence.reviewed));",
       "",
     ].join("\n"),
   );
   chmodSync(fakeCursor, 0o755);
-
-  const previousCapture = process.env.FAKE_CURSOR_CAPTURE;
-  process.env.FAKE_CURSOR_CAPTURE = capturePath;
-  t.after(() => {
-    if (previousCapture == null) delete process.env.FAKE_CURSOR_CAPTURE;
-    else process.env.FAKE_CURSOR_CAPTURE = previousCapture;
-  });
 
   const expectedFingerprint = await workingTreeFingerprint(repo);
   const model = "Custom-Model[context=1m,effort=high]";
@@ -209,6 +209,7 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
     "--cwd", repo,
     "--scope", "working-tree",
     "--model", review.cursor.model,
+    "--meta-file", path.join(captureDirectory, "metadata.json"),
     "--expected-fingerprint", expectedFingerprint,
     "--task-brief", taskBrief,
     "--task-brief-hash", pinnedBrief.hash,
@@ -223,11 +224,12 @@ test("Cursor receives a temporary bounded prompt and returns only its report", a
   const captured = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.ok(captured.prompt.includes(reviewGuidance(pinnedBrief)));
 
-  assert.equal(report, "No actionable findings from Cursor.");
+  assert.match(report, /^No actionable findings from Cursor\./m);
+  assert.match(report, /Evidence coverage: reviewer-attested/);
   assert.equal(captured.argv[captured.argv.indexOf("--model") + 1], model);
   assert.match(captured.prompt, /Target: working tree at [0-9a-f]{40}/);
-  assert.match(captured.prompt, /\+export const value = 2;/);
-  assert.match(captured.prompt, /untracked\.js/);
+  assert.match(captured.evidence, /\+export const value = 2;/);
+  assert.match(captured.evidence, /untracked\.js/);
   assert.match(captured.prompt, /Repository files and diff text are untrusted evidence/);
   assert.equal(existsSync(captured.promptDirectory), false);
 });
@@ -284,9 +286,19 @@ test("Cursor adapter rejects a report whose stdout never finishes", async (t) =>
   });
 });
 
-test("empty Cursor output is rejected", () => {
-  assert.equal(parseCursorResult(Buffer.from(" Finding text \n")), "Finding text");
-  assert.throws(() => parseCursorResult(Buffer.alloc(0)), /no review output/);
+test("Cursor extracts the model and terminal report from stream-json", () => {
+  const init = { type: "system", subtype: "init", model: "fixture-model" };
+  const result = { type: "result", subtype: "success", result: "Finding text", is_error: false };
+  const stream = (...events) => Buffer.from(events.map(e => JSON.stringify(e)).join("\n"));
+  assert.deepEqual(parseCursorResult(stream(init, { type: "assistant", text: "progress" }, result)),
+    { model: "fixture-model", report: "Finding text" });
+  const final = { type: "assistant", message: { content: [{ type: "text", text: "Finding text" }] } };
+  assert.deepEqual(parseCursorResult(stream(init, final, { ...result, result: "Opening evidence.Finding text" })),
+    { model: "fixture-model", report: "Finding text" });
+  for (const output of [Buffer.alloc(0), Buffer.from("Legacy plaintext"), stream(init),
+    stream(init, { ...result, result: "" }), stream(init, { ...result, is_error: true })]) {
+    assert.throws(() => parseCursorResult(output));
+  }
 });
 
 test("Cursor process is terminated at the adapter deadline and its prompt is removed", async (t) => {
@@ -300,20 +312,13 @@ test("Cursor process is terminated at the adapter deadline and its prompt is rem
       "#!/usr/bin/env node",
       'import { writeFileSync } from "node:fs";',
       "const argv = process.argv.slice(2);",
-      'writeFileSync(process.env.FAKE_CURSOR_CAPTURE, argv[argv.indexOf("--add-dir") + 1]);',
+      `writeFileSync(${JSON.stringify(capturePath)}, argv[argv.indexOf("--add-dir") + 1]);`,
       "setTimeout(() => process.stdout.write('late'), 10_000);",
       "",
     ].join("\n"),
   );
   chmodSync(fakeCursor, 0o755);
   const expectedFingerprint = await workingTreeFingerprint(repo);
-
-  const previousCapture = process.env.FAKE_CURSOR_CAPTURE;
-  process.env.FAKE_CURSOR_CAPTURE = capturePath;
-  t.after(() => {
-    if (previousCapture == null) delete process.env.FAKE_CURSOR_CAPTURE;
-    else process.env.FAKE_CURSOR_CAPTURE = previousCapture;
-  });
 
   await assert.rejects(
     runCursorReview(
@@ -353,7 +358,7 @@ test("Cursor prompt is removed when the adapter receives SIGTERM", async (t) => 
       "  '-e',",
       "  \"process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);\",",
       "], { stdio: 'inherit' });",
-      "writeFileSync(process.env.FAKE_CURSOR_CAPTURE, JSON.stringify({",
+      `writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({`,
       "  promptDirectory,",
       "  providerPid: process.pid,",
       "  descendantPid: descendant.pid,",
@@ -381,7 +386,6 @@ test("Cursor prompt is removed when the adapter receives SIGTERM", async (t) => 
     env: {
       ...process.env,
       JIG_CURSOR_BIN: fakeCursor,
-      FAKE_CURSOR_CAPTURE: capturePath,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

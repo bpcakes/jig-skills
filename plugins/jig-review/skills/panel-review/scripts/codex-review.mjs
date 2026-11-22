@@ -10,7 +10,7 @@ import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
 import { CODEX_CLI_EFFORTS } from "./review-options.mjs";
-import { CHANNEL_SETTINGS, verifiedReadOnlyChannel } from "./orchestration-channel.mjs";
+import { CHANNEL_SETTINGS, channelEnvironment, verifiedReadOnlyChannel } from "./orchestration-channel.mjs";
 import {
   ambientSkills,
   instructionsLoaded,
@@ -113,7 +113,7 @@ function shimVariables(codexBin, privateHome) {
 const SHIM_NOT_EXECUTABLE = "the evidence directory does not permit executing the launcher shim (noexec temporary filesystem?); set TMPDIR to an executable location or use --launcher none";
 async function probeShim(shim, { deadlineAt, signal }) {
   try {
-    await runCommand(shim, [SHIM_PROBE], { timeoutMs: Math.min(RENDER_TIMEOUT_MS, remainingAdapterTime(deadlineAt)), signal, env: gitEnvironment(childEnvironment(process.env)) });
+    await runCommand(shim, [SHIM_PROBE], { timeoutMs: Math.min(RENDER_TIMEOUT_MS, remainingAdapterTime(deadlineAt)), signal, env: gitEnvironment(childEnvironment(process.env, {}, "codex")) });
   } catch (error) {
     if (error.timedOut || error.cancelled) throw error;
     throw Object.assign(new Error(`${SHIM_NOT_EXECUTABLE}: ${error.message}`), { providerError: SHIM_NOT_EXECUTABLE });
@@ -354,7 +354,7 @@ async function runCodexReview(options, dependencies = {}) {
   const scope = await resolveScope(options, { deadlineAt, signal });
   assertScopeMatchesFingerprint(scope, initialFingerprint);
   options.orchestrationChannel = await verifiedReadOnlyChannel(scope.repoRoot, { deadlineAt, signal });
-  const evidence = new ReviewEvidence({ deadlineAt, signal });
+  const evidence = new ReviewEvidence({ deadlineAt, signal, requireReceipts: true });
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
     if (dependencies.parseReport) evidence.requireComplete(context);
@@ -382,10 +382,11 @@ async function runCodexReview(options, dependencies = {}) {
     // credentials, so under a launcher the keys are removed and the selected
     // home is the only credential source.
     const environment = childEnvironment(process.env, {
+      ...channelEnvironment(options.orchestrationChannel),
       JIG_CODEX_BIN: shim,
       ...shimVariables(codexBin, privateHome),
       ...(launched ? Object.fromEntries(API_KEY_VARIABLES.map((name) => [name, null])) : {}),
-    });
+    }, "codex");
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     let transcript = Buffer.alloc(0);
     let started = false;
@@ -410,7 +411,7 @@ async function runCodexReview(options, dependencies = {}) {
     } catch (error) {
       throw classifyFailure(error, transcript, started);
     }
-    return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
+    return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context, { requireReviewedPage: true });
   } finally {
     evidence.cleanup();
   }

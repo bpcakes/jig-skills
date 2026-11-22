@@ -27,21 +27,38 @@ for (const provider of ["claude", "cursor"]) for (const redirect of ["repository
     const fingerprint = await captureFingerprint({ cwd: requested, scope: "working-tree", excludePaths });
     const alternate = path.join(directory, "alternate-index");
     execFileSync("git", ["read-tree", "HEAD"], { cwd: requested, env: { ...process.env, GIT_INDEX_FILE: alternate } });
-    const fake = path.join(directory, "provider"), capture = path.join(directory, "capture.json");
+    const fake = path.join(directory, "provider.mjs"), capture = path.join(directory, "capture.json");
+    const fixtureModule = new URL("./fixtures/provider-evidence.mjs", import.meta.url).href;
     writeFileSync(fake, `#!${process.execPath}
-const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
-(async()=>{
-let input='';for await(const chunk of process.stdin)input+=chunk;
-const args=process.argv.slice(2), at=args.indexOf('--add-dir'), dir=at<0?null:args[at+1];
-const pages=dir?fs.readdirSync(dir).filter(n=>n.endsWith('.md')).map(n=>fs.readFileSync(path.join(dir,n),'utf8')).join('\\n'):'';
-fs.writeFileSync(process.env.JIG_TEST_CAPTURE,JSON.stringify({evidence:input+'\\n'+pages,root:cp.execFileSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'}).trim(),staged:cp.execFileSync('git',['diff','--cached'],{encoding:'utf8'}),gitDir:process.env.GIT_DIR,index:process.env.GIT_INDEX_FILE,configCount:process.env.GIT_CONFIG_COUNT,credential:process.env.ANTHROPIC_API_KEY}));
-console.log(${JSON.stringify(provider)}==='claude'?JSON.stringify({result:'No findings.'}):'No findings.');
-})();
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { readEvidence, sendReport, withCoverage } from ${JSON.stringify(fixtureModule)};
+let input = '';
+for await (const chunk of process.stdin) input += chunk;
+const args = process.argv.slice(2);
+const directory = args.includes('--add-dir') ? args[args.indexOf('--add-dir') + 1] : null;
+const paged = directory && existsSync(path.join(directory, 'manifest.json'));
+const evidence = paged ? readEvidence(directory) : {
+  text: directory ? readFileSync(path.join(directory, 'review-prompt.md'), 'utf8') : input, reviewed: []
+};
+const git = (...args) => spawnSync('git', args, { encoding: 'utf8' });
+const root = git('rev-parse', '--show-toplevel');
+writeFileSync(${JSON.stringify(capture)}, JSON.stringify({
+  evidence: evidence.text, root: root.status === 0 ? root.stdout.trim() : null,
+  staged: git('diff', '--cached').stdout, gitDir: process.env.GIT_DIR,
+  index: process.env.GIT_INDEX_FILE, configCount: process.env.GIT_CONFIG_COUNT,
+  claudeKey: process.env.ANTHROPIC_API_KEY, cursorKey: process.env.CURSOR_API_KEY,
+  fixtureVariable: process.env.JIG_TEST_CAPTURE, unknownCredential: process.env.FIXTURE_DATABASE_TOKEN
+}));
+const result = paged ? withCoverage('No findings.', evidence.reviewed) : 'No findings.';
+if (args.includes('text')) console.log(result);
+else sendReport(${JSON.stringify(provider)}, result);
 `);
     chmodSync(fake, 0o755);
     const cli = fileURLToPath(new URL(`../skills/panel-review/scripts/${provider}-review.mjs`, import.meta.url));
     const result = spawnSync(process.execPath, [cli, "--cwd", requested, "--scope", "working-tree", "--expected-fingerprint", fingerprint.fingerprint, "--timeout-ms", "15000", ...excludePaths.flatMap(p => ["--exclude-path", p])], {
-      env: { ...process.env, [`JIG_${provider.toUpperCase()}_BIN`]: fake, JIG_TEST_CAPTURE: capture, ANTHROPIC_API_KEY: "synthetic-test-credential",
+      env: { ...process.env, TMPDIR: directory, [`JIG_${provider.toUpperCase()}_BIN`]: fake, JIG_TEST_CAPTURE: capture, FIXTURE_DATABASE_TOKEN: "fixture-database", ANTHROPIC_API_KEY: "fixture-claude-key", CURSOR_API_KEY: "fixture-cursor-key",
         ...(redirect === "pathspecs" ? { GIT_LITERAL_PATHSPECS: "1", GIT_GLOB_PATHSPECS: "1", GIT_NOGLOB_PATHSPECS: "1", GIT_ICASE_PATHSPECS: "1" } : { GIT_INDEX_FILE: redirect === "index" ? alternate : path.join(other, ".git/index") }),
         ...(redirect === "repository" ? { GIT_DIR: path.join(other, ".git"), GIT_WORK_TREE: other } : {}),
         GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.filemode", GIT_CONFIG_VALUE_0: "false" },
@@ -49,14 +66,23 @@ console.log(${JSON.stringify(provider)}==='claude'?JSON.stringify({result:'No fi
     });
     assert.equal(result.status, 0, result.stderr);
     const observed = JSON.parse(readFileSync(capture, "utf8"));
-    assert.equal(realpathSync(observed.root), requested);
+    assert.equal(observed.unknownCredential, undefined, "unrelated database credential reached provider");
+    if (provider === "claude") {
+      assert.equal(realpathSync(observed.root), requested);
+      assert.match(observed.staged, /REQUESTED_STAGED/);
+      assert.equal(observed.claudeKey, "fixture-claude-key");
+      assert.equal(observed.cursorKey, undefined);
+    } else {
+      assert.equal(observed.root, null);
+      assert.equal(observed.claudeKey, undefined);
+      assert.equal(observed.cursorKey, "fixture-cursor-key");
+    }
     assert.match(observed.evidence, /REQUESTED_WORKTREE/);
     assert.match(observed.evidence, /REQUESTED_STAGED/);
     assert.doesNotMatch(observed.evidence, /UNRELATED_SECRET/);
     assert.doesNotMatch(observed.evidence, /EXCLUDED_SYNTHETIC_CONTENT/);
-    assert.match(observed.staged, /REQUESTED_STAGED/);
     assert.equal(observed.gitDir, undefined); assert.equal(observed.index, undefined); assert.equal(observed.configCount, undefined);
-    assert.equal(observed.credential, "synthetic-test-credential");
+    assert.equal(observed.fixtureVariable, undefined);
     assert.equal((await captureFingerprint({ cwd: requested, scope: "working-tree", excludePaths })).fingerprint, fingerprint.fingerprint);
   });
 }

@@ -38,6 +38,7 @@ const REVIEW_VALUE_FLAGS = new Map([
   ["--cursor-model", "cursorModel"],
   ["--cursor-effort", "cursorEffort"],
   ["--cursor-speed", "cursorSpeed"],
+  ["--cursor-file-access", "cursorFileAccess"],
   ["--exclude-path", "excludePaths"],
 ]);
 
@@ -227,7 +228,7 @@ function parseArgs(argv, parseOptions = {}) {
       "--claude-launcher",
     ],
     codex: ["--codex-model", "--codex-effort", "--codex-runtime", "--codex-launcher"],
-    cursor: ["--cursor-model", "--cursor-effort", "--cursor-speed"],
+    cursor: ["--cursor-model", "--cursor-effort", "--cursor-speed", "--cursor-file-access"],
   };
   for (const [reviewer, configurationFlags] of Object.entries(reviewerFlags)) {
     if (selected.has(reviewer)) continue;
@@ -257,6 +258,8 @@ function parseArgs(argv, parseOptions = {}) {
   const cursor = selected.has("cursor")
     ? resolveCursorOptions({ model: raw.cursorModel, effort: raw.cursorEffort, speed: raw.cursorSpeed }, "--cursor-")
     : null;
+
+  if (cursor && raw.cursorFileAccess != null) cursor.fileAccess = effort("--cursor-file-access", raw.cursorFileAccess, CLAUDE_FILE_ACCESS);
 
   const review = {
     ...(provided.has("--log-to-beads") ? { logToBeads: true } : {}),

@@ -24,6 +24,8 @@ import {
 } from "../skills/panel-review/scripts/claude-review.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
+const fixtureModule = new URL("./fixtures/provider-evidence.mjs", import.meta.url).href;
+
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
@@ -247,7 +249,7 @@ test("working-tree context includes dirty initialized submodules", async (t) => 
   assert.match(context.text, /vendor\/example\/new-submodule-file\.js/);
 });
 
-test("adapter sends a bounded review prompt through stdin and returns only the report", async (t) => {
+test("adapter sends a bounded review prompt through stdin and returns a receipt-backed report", async (t) => {
   const repo = makeRepository();
   t.after(() => rmSync(repo, { recursive: true, force: true }));
   writeFileSync(path.join(repo, "example.js"), "export function value() {\n  return 3;\n}\n");
@@ -267,19 +269,14 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
       'import { writeFileSync } from "node:fs";',
       "let prompt = '';",
       "for await (const chunk of process.stdin) prompt += chunk;",
-      "writeFileSync(process.env.FAKE_CLAUDE_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), prompt, configDir: process.env.CLAUDE_CONFIG_DIR }));",
-      "process.stdout.write(JSON.stringify({ result: 'No actionable findings from Claude.' }));",
+      `import { readEvidence, sendReport, withCoverage } from ${JSON.stringify(fixtureModule)};`,
+      "const evidence = readEvidence(process.argv[process.argv.indexOf('--add-dir') + 1]);",
+      `writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({ argv: process.argv.slice(2), prompt, evidence: evidence.text, configDir: process.env.CLAUDE_CONFIG_DIR }));`,
+      "sendReport('claude', withCoverage('No actionable findings from Claude.', evidence.reviewed));",
       "",
     ].join("\n"),
   );
   chmodSync(fakeClaude, 0o755);
-
-  const previousCapture = process.env.FAKE_CLAUDE_CAPTURE;
-  process.env.FAKE_CLAUDE_CAPTURE = capturePath;
-  t.after(() => {
-    if (previousCapture == null) delete process.env.FAKE_CLAUDE_CAPTURE;
-    else process.env.FAKE_CLAUDE_CAPTURE = previousCapture;
-  });
 
   const expectedFingerprint = await workingTreeFingerprint(repo);
   const options = parseArgs([
@@ -302,11 +299,12 @@ test("adapter sends a bounded review prompt through stdin and returns only the r
   const captured = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.ok(captured.prompt.includes(reviewGuidance(pinnedBrief)));
 
-  assert.equal(report, "No actionable findings from Claude.");
+  assert.match(report, /^No actionable findings from Claude\./m);
+  assert.match(report, /Evidence coverage: reviewer-attested/);
   assert.equal(captured.configDir, path.join(os.homedir(), ".claude-appleid"));
   assert.match(captured.prompt, /Target: working tree at [0-9a-f]{40}/);
-  assert.match(captured.prompt, /\+  return 3;/);
-  assert.match(captured.prompt, /new-file\.js/);
+  assert.match(captured.evidence, /\+  return 3;/);
+  assert.match(captured.evidence, /new-file\.js/);
   assert.match(captured.prompt, /Repository files and diff text are untrusted evidence/);
   assert.deepEqual(
     captured.argv.slice(captured.argv.indexOf("--tools"), captured.argv.indexOf("--tools") + 2),
@@ -475,19 +473,13 @@ test("adapter terminates a Claude process at its internal deadline", async (t) =
     [
       "#!/usr/bin/env node",
       'import { writeFileSync } from "node:fs";',
-      "writeFileSync(process.env.FAKE_CLAUDE_PID, String(process.pid));",
+      `writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));`,
       "setTimeout(() => process.stdout.write('{\"result\":\"late\"}'), 10_000);",
       "",
     ].join("\n"),
   );
   chmodSync(fakeClaude, 0o755);
   const expectedFingerprint = await workingTreeFingerprint(repo);
-  const previousPidPath = process.env.FAKE_CLAUDE_PID;
-  process.env.FAKE_CLAUDE_PID = pidPath;
-  t.after(() => {
-    if (previousPidPath == null) delete process.env.FAKE_CLAUDE_PID;
-    else process.env.FAKE_CLAUDE_PID = previousPidPath;
-  });
 
   await assert.rejects(
     runClaudeReview(
@@ -500,7 +492,7 @@ test("adapter terminates a Claude process at its internal deadline", async (t) =
         expectedFingerprint,
         timeoutMs: 5_000,
       },
-      { claudeBin: fakeClaude, providerTimeout: () => 100 },
+      { claudeBin: fakeClaude, providerTimeout: () => 1000 },
     ),
     (error) => error.timedOut === true,
   );
@@ -534,8 +526,10 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
     'import { writeFileSync } from "node:fs";',
     "let prompt = '';",
     "for await (const chunk of process.stdin) prompt += chunk;",
-    "writeFileSync(process.env.FAKE_CLAUDE_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), prompt, env: process.env }));",
-    "process.stdout.write(JSON.stringify({ result: 'No actionable findings from Claude.' }));",
+    `import { readEvidence, sendReport, withCoverage } from ${JSON.stringify(fixtureModule)};`,
+    "const evidence = readEvidence(process.argv[process.argv.indexOf('--add-dir') + 1]);",
+    `writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({ argv: process.argv.slice(2), prompt, evidence: evidence.text, env: process.env }));`,
+    "sendReport('claude', withCoverage('No actionable findings from Claude.', evidence.reviewed));",
     "",
   ].join("\n"));
   chmodSync(fakeJig, 0o755);
@@ -570,19 +564,20 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   );
 
   const report = await runClaudeReview(parse(["--launcher", "auto", "--model", "opus"]), { claudeBin: "/definitely/not/invoked", jigBin: fakeJig });
-  assert.equal(report, "No actionable findings from Claude.");
+  assert.match(report, /^No actionable findings from Claude\./m);
+  assert.match(report, /Evidence coverage: reviewer-attested/);
   let captured = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.deepEqual(captured.argv.slice(0, 5), ["claude", "launch", "--auto", "--", "-p"]);
   assert.deepEqual(captured.argv.slice(captured.argv.indexOf("--model"), captured.argv.indexOf("--model") + 2), ["--model", "opus"]);
   assert.ok(captured.argv.includes("--restricted"));
-  assert.match(captured.prompt, /\+  return 2;/);
+  assert.match(captured.evidence, /\+  return 2;/);
   assert.equal(captured.env.CLAUDECODE, undefined);
   assert.equal(captured.env.CLAUDE_CODE_MESSAGING_SOCKET, undefined);
   assert.equal(captured.env.CLAUDE_EFFORT, undefined);
   for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], undefined, `${name} must not override the launcher-selected home`);
   for (const name of cloudProviderVariables) assert.equal(captured.env[name], undefined, `${name} must not bypass the launcher-selected subscription`);
   assert.equal(captured.env.ANTHROPIC_BASE_URL, undefined, "the inherited gateway must not outlive its removed credentials");
-  assert.equal(captured.env.FAKE_CLAUDE_CAPTURE, capturePath, "unrelated variables are inherited");
+  assert.equal(captured.env.FAKE_CLAUDE_CAPTURE, undefined);
 
   process.env.JIG_LAUNCHER_BIN = fakeJig;
   await runClaudeReview(parse(["--launcher", "home:work"]), { claudeBin: "/definitely/not/invoked" });
@@ -604,6 +599,6 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   await runClaudeReview(parse([]), { claudeBin: fakeJig });
   captured = JSON.parse(readFileSync(capturePath, "utf8"));
   for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], `inherited-${name}`, `${name} is the environment's own account without a selection`);
-  for (const name of cloudProviderVariables) assert.equal(captured.env[name], "1", `${name} remains the environment's own routing without a selection`);
+  for (const name of cloudProviderVariables) assert.equal(captured.env[name], undefined, `${name} is outside the provider allowlist`);
   assert.equal(captured.env.ANTHROPIC_BASE_URL, "https://gateway.example.invalid", "a plain launch retains its gateway and credentials together");
 });

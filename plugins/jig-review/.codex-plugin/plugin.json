@@ -1,6 +1,6 @@
 {
   "name": "jig-review",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Configurable parallel reviews and review-fix loops that diagnose stalls and route recovery using Claude Code, Codex, and Cursor Agent.",
   "author": {
     "name": "Jig"

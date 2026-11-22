@@ -3,15 +3,19 @@
 import { readBrief } from "./review-brief.mjs";
 
 import {
+  closeSync,
+  mkdtempSync,
+  openSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { ReviewEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
-import { childEnvironment } from "./provider-launch.mjs";
+import { assertIndependentWorkspace, installedCursor, prepareCursorSession } from "./cursor-session.mjs";
 
 import { resolveCursorOptions } from "./review-options.mjs";
 import {
@@ -47,6 +51,8 @@ function parseArgs(argv) {
     "--base",
     "--include-working-tree",
     "--model",
+    "--file-access",
+    "--meta-file",
     "--effort",
     "--speed",
     "--task-brief",
@@ -71,7 +77,12 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (value == null || value === "") throw new Error(`Missing value for ${argument}`);
     index += 1;
-    if (argument === "--task-brief") {
+    if (argument === "--file-access") {
+      if (!["restricted", "host"].includes(value)) throw new Error("--file-access must be restricted or host.");
+      options.fileAccess = value;
+    } else if (argument === "--meta-file") {
+      options.metaFile = path.resolve(value);
+    } else if (argument === "--task-brief") {
       options.taskBrief = value;
     } else if (argument === "--task-brief-hash") {
       options.taskBriefHash = value;
@@ -113,22 +124,22 @@ function parseArgs(argv) {
   return { ...options, ...resolveCursorOptions(options, "--") };
 }
 
-function buildCursorArgs(options, scope, promptDirectory, promptPath) {
+function buildCursorArgs(options, scope, promptDirectory, promptPath, sandboxMode = "enabled") {
   return [
     "--print",
     "--mode",
     "ask",
     "--sandbox",
-    "enabled",
+    sandboxMode,
     "--trust",
     "--workspace",
-    scope.repoRoot,
+    promptDirectory,
     "--add-dir",
     promptDirectory,
     "--model",
     options.model ?? resolveCursorOptions(options, "--").model,
     "--output-format",
-    "text",
+    "stream-json",
     [
       `Read the complete review assignment from ${promptPath}.`,
       "Follow that file exactly and return only the requested review report.",
@@ -137,10 +148,84 @@ function buildCursorArgs(options, scope, promptDirectory, promptPath) {
   ];
 }
 
+// stream-json includes tool outputs as well as the final answer. Bound a
+// single event and the report separately, without retaining the transcript.
+class CursorTranscript {
+  chunks = [];
+  bytes = 0;
+  model = null;
+  report = null;
+  lastAssistantText = null;
+  permissionMode = null;
+
+  write(chunk) {
+    let start = 0;
+    while (start < chunk.length) {
+      const nl = chunk.indexOf(10, start);
+      const end = nl < 0 ? chunk.length : nl;
+      this.bytes += end - start;
+      if (this.bytes > 32 * 1024 * 1024) throw new Error("Cursor stream event exceeds the size limit.");
+      this.chunks.push(chunk.subarray(start, end));
+      if (nl < 0) return;
+      this.consume();
+      start = nl + 1;
+    }
+  }
+
+  consume() {
+    const line = Buffer.concat(this.chunks, this.bytes).toString("utf8").trim();
+    this.chunks = [];
+    this.bytes = 0;
+    if (!line) return;
+    let event;
+    try { event = JSON.parse(line); } catch { throw new Error("Cursor returned an invalid stream-json event."); }
+    if (event.type === "system" && event.subtype === "init") {
+      if (this.model !== null || typeof event.model !== "string" || !event.model.trim()
+          || /[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(event.model) || event.model.length > 256) {
+        throw new Error("Cursor returned invalid model metadata.");
+      }
+      this.model = event.model;
+      if (typeof event.permissionMode === "string" && /^[a-zA-Z_-]{1,50}$/.test(event.permissionMode)) {
+        this.permissionMode = event.permissionMode;
+      }
+    }
+    // In stream-json, Cursor can concatenate progress messages and the final
+    // assistant answer in result.result. Only select a complete final message
+    // that the successful terminal event itself confirms.
+    if (event.type === "assistant" && Array.isArray(event.message?.content)) {
+      const answer = event.message.content.filter(block => block?.type === "text" && typeof block.text === "string")
+        .map(block => block.text).join("").trim();
+      this.lastAssistantText = answer && Buffer.byteLength(answer) <= MAX_CURSOR_OUTPUT_BYTES ? answer : null;
+    }
+    if (event.type === "result") {
+      if (!this.model || this.report !== null || event.subtype !== "success" || event.is_error === true
+          || typeof event.result !== "string" || !event.result.trim() || Buffer.byteLength(event.result) > MAX_CURSOR_OUTPUT_BYTES) {
+        throw new Error("Cursor returned an unsuccessful, oversized or empty result.");
+      }
+      this.report = event.result.trim();
+      if (this.lastAssistantText && this.report.endsWith(this.lastAssistantText)) this.report = this.lastAssistantText;
+    }
+  }
+
+  finish() {
+    this.consume();
+    if (!this.model || !this.report) throw new Error("Cursor returned no review output or reported model.");
+    return { report: this.report, model: this.model };
+  }
+}
+
 function parseCursorResult(stdout) {
-  const report = stdout.toString("utf8").trim();
-  if (!report) throw new Error("Cursor returned no review output.");
-  return report;
+  const transcript = new CursorTranscript();
+  transcript.write(stdout);
+  return transcript.finish();
+}
+
+function metaDestination(file, repository) {
+  if (!file) return path.join(mkdtempSync(path.join(os.tmpdir(), "jig-cursor-report-")), "meta.json");
+  const parent = realpathSync(path.dirname(path.resolve(file)));
+  const repo = realpathSync(repository);
+  if (parent === repo || parent.startsWith(repo + path.sep)) throw new Error("Write Cursor review metadata outside the reviewed checkout.");
+  return path.join(parent, path.basename(file));
 }
 
 async function runCursorReview(options, dependencies = {}) {
@@ -164,7 +249,8 @@ async function runCursorReview(options, dependencies = {}) {
   );
   const scope = await resolveScope(options, { deadlineAt, signal });
   assertScopeMatchesFingerprint(scope, initialFingerprint);
-  const evidence = new ReviewEvidence({ deadlineAt, signal });
+  assertIndependentWorkspace(os.tmpdir(), scope.repoRoot);
+  const evidence = new ReviewEvidence({ deadlineAt, signal, requireReceipts: true, isolatedWorkspace: true, omitEnvFiles: options.fileAccess !== "host" });
   const promptDirectory = evidence.directory;
   const promptPath = path.join(promptDirectory, "review-prompt.md");
 
@@ -173,27 +259,59 @@ async function runCursorReview(options, dependencies = {}) {
     if (dependencies.parseReport) evidence.requireComplete(context);
     const prompt = buildReviewPrompt(scope, context, { taskBrief }) + (dependencies.promptSuffix ?? "");
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";
+    const override = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN;
+    const cursorBin = override ?? installedCursor(scope.repoRoot);
+    const session = prepareCursorSession(evidence.root, promptDirectory, scope.repoRoot, options.fileAccess,
+      process.env, !override);
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
-    const result = await runCommand(
-      cursorBin,
-      buildCursorArgs(options, scope, promptDirectory, promptPath),
-      {
-        cwd: scope.repoRoot,
-        env: gitEnvironment(childEnvironment(process.env)),
-        timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
-        maxBuffer: MAX_CURSOR_OUTPUT_BYTES,
+    const transcript = new CursorTranscript();
+    const metaFile = dependencies.metaFile ?? metaDestination(options.metaFile, scope.repoRoot);
+    const metaFd = openSync(metaFile, "wx", 0o600);
+    const metadata = { provider: "Cursor", requestedModel: options.model ?? resolveCursorOptions(options, "--").model,
+      approvalMode: session.approvalMode, sandboxMode: session.sandboxMode, confinement: session.confinement,
+      policySource: "adapter configuration and CLI sandbox flag", status: "not reviewed", coverage: "none" };
+    const reportHeader = () => `Cursor reviewer: ${metadata.confinement} | model: ${transcript.model ?? "unreported"} | approval: ${metadata.approvalMode} | sandbox: ${metadata.sandboxMode}`;
+    try {
+      await runCommand(
+        cursorBin,
+        buildCursorArgs(options, scope, promptDirectory, promptPath, session.sandboxMode),
+        {
+          cwd: promptDirectory,
+          env: gitEnvironment(session.environment),
+          timeoutMs: allocateProviderTimeout(deadlineAt, options.timeoutMs),
+          maxBuffer: 0, overflow: "truncate", onStdout: chunk => transcript.write(chunk),
+          signal,
+        },
+      );
+      await verifyScopeFingerprint(
+        options,
+        initialFingerprint.fingerprint,
+        deadlineAt,
         signal,
-      },
-    );
-    await verifyScopeFingerprint(
-      options,
-      initialFingerprint.fingerprint,
-      deadlineAt,
-      signal,
-    );
-    const report = parseCursorResult(result.stdout);
-    return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
+      );
+      session.verifyPolicy();
+      const { report } = transcript.finish();
+      if (dependencies.parseReport) {
+        const parsed = dependencies.parseReport(evidence.structuredReport(report, context));
+        metadata.coverage = "reviewer-attested";
+        metadata.status = "reviewed";
+        return parsed;
+      }
+      const annotated = evidence.annotateReport(report, context, { requireReviewedPage: true });
+      metadata.coverage = evidence.coverage;
+      metadata.status = metadata.coverage === "limited" ? "partial review" : "reviewed";
+      return `${reportHeader()}\nMetadata: ${metaFile}\n\n${annotated}`;
+    } catch (error) {
+      error.message += `\n${reportHeader()}\nMetadata: ${metaFile}`;
+      throw error;
+    } finally {
+      try {
+        writeFileSync(metaFd, JSON.stringify({ ...metadata, model: transcript.model,
+          reportedPermissionMode: transcript.permissionMode }, null, 2) + "\n");
+      } finally {
+        closeSync(metaFd);
+      }
+    }
   } finally {
     evidence.cleanup();
   }
