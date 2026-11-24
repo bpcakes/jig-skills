@@ -5,7 +5,7 @@ import { readBrief } from "./review-brief.mjs";
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ReviewEvidence } from "./review-evidence.mjs";
+import { ReviewEvidence, sweepStaleEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
@@ -361,6 +361,9 @@ async function runCodexReview(options, dependencies = {}) {
     const prompt = buildReviewPrompt(scope, context, { taskBrief, tooling: "codex", orchestrationChannel: options.orchestrationChannel,
       orchestrationTask: process.env.ORCHESTRATION_TASK }) + (dependencies.promptSuffix ?? "");
     const codexBin = dependencies.codexBin ?? process.env.JIG_CODEX_BIN ?? "codex";
+    // A cancelled run has already discarded its directory. The files below are
+    // Codex's own while it runs, so cancellation leaves them for cleanup().
+    signal?.throwIfAborted();
     const lastMessagePath = path.join(evidence.directory, LAST_MESSAGE_FILE);
     const { shim, privateHome } = writeShim(evidence.directory);
     const launched = options.launcher !== "none";
@@ -417,6 +420,7 @@ async function runCodexReview(options, dependencies = {}) {
 }
 
 async function main() {
+  sweepStaleEvidence();
   const cancellation = installAdapterCancellation();
   try {
     const report = await runCodexReview(

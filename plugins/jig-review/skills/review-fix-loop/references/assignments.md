@@ -6,10 +6,10 @@ Read the `assignment` object in the returned request file. For native reviews, w
 
 Native assignments already include the shared [tool-output guidance](../../panel-review/references/native-tool-output.md) in their frozen instructions; pass those instructions through without appending a second copy. It applies to native review, triage, and repair diagnostics. Full diagnostic logs remain available outside the checkout; compact tool output does not replace required controller validation.
 
-Save the result outside the checkout and submit it:
+Save the result in a private directory outside the checkout, shown here as `<artifacts>`, and submit it:
 
 ```sh
-node <skill>/scripts/review-fix-loop.mjs submit --run <run> --assignment <id> --result /tmp/result.json
+node <skill>/scripts/review-fix-loop.mjs submit --run <run> --assignment <id> --result <artifacts>/result.json
 ```
 
 Each result includes `assignmentId` and `fingerprint` copied from the assignment. Submit one immutable JSON result for each pending assignment ID, in any completion order. Malformed native results are rejected before freezing or consuming an attempt; correct the result and resubmit the same ID. Do not regenerate an already accepted result. Do not manually rerun a claimed job; uncertain execution stops without replay. For startup, transport, or cleanup failures, read [recovery.md](recovery.md).

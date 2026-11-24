@@ -1,5 +1,6 @@
+import "./fixtures/no-session-marker.mjs";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   CURSOR_MODELS,
+  hostNote,
   parseArgs as parseReviewArgs,
 } from "../skills/panel-review/scripts/review-options.mjs";
 
@@ -307,4 +309,26 @@ test("a Claude Code host reviews with Codex only through its CLI adapter", () =>
   assert.throws(() => parseArgs(["--host", "cursor"]), /Unsupported --host value "cursor"\. Use codex, claude/);
   assert.throws(() => parseArgs(["--host", "claude", "--host", "codex"]), /Duplicate argument: --host/);
   assert.throws(() => parseArgs(["--host"]), /Missing value for --host/);
+});
+
+test("an omitted host inside a Claude Code session earns a note beside the unchanged result", () => {
+  const cli = fileURLToPath(new URL("../skills/panel-review/scripts/review-options.mjs", import.meta.url));
+  const run = (args, env) => spawnSync(process.execPath,
+    [cli, "--claude-launcher", "none", "--codex-launcher", "none", ...args], { env, encoding: "utf8" });
+  const session = { ...process.env, CLAUDECODE: "1" };
+
+  const unnamed = run([], session);
+  assert.equal(unnamed.status, 0);
+  assert.equal(unnamed.stderr, "review-options: note: CLAUDECODE is set and --host was not given, so the Codex host is assumed. Pass --host claude if Claude Code is running this skill.\n");
+  // The marker never chooses the host: a Codex session started from a Claude Code shell inherits it.
+  assert.deepEqual(JSON.parse(unnamed.stdout), JSON.parse(run([], process.env).stdout));
+  assert.equal(JSON.parse(unnamed.stdout).host, "codex");
+  for (const host of ["claude", "codex"]) assert.equal(run(["--host", host], session).stderr, "", host);
+  assert.equal(run([], process.env).stderr, "");
+  // A rejected command reports only its error.
+  assert.equal(run(["--reviewers", "nobody"], session).stderr, 'review-options: Unknown reviewer "nobody". Use claude, codex, or cursor.\n');
+
+  assert.match(hostNote(["--reviewers", "claude"], { CLAUDECODE: "1" }), /--host was not given/);
+  assert.equal(hostNote(["--host", "claude"], { CLAUDECODE: "1" }), null);
+  assert.equal(hostNote([], {}), null);
 });

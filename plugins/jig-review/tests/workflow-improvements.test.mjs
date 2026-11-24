@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import test from "node:test";
 import { createWorkingTreeRun as createRun } from "./fixtures/working-tree-loop.mjs";
 import { advance, runUntilBoundary, status, submit, TERMINAL } from "../skills/review-fix-loop/scripts/review-fix-loop.mjs";
@@ -10,7 +11,7 @@ import { commandEnvironment } from "../skills/review-fix-loop/scripts/job-runtim
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
 import { loadRun, resultFile } from "../skills/review-fix-loop/scripts/run-store.mjs";
 import { resultSchema } from "../skills/review-fix-loop/scripts/assignment-schema.mjs";
-import { failureResult, parseReport, reviewAssignment } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
+import { failureResult, parseReport, readInput, reviewAssignment } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 import { validateContract } from "../skills/review-fix-loop/scripts/task-contract.mjs";
 
 function fixture(t) {
@@ -125,6 +126,18 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
     assert.equal(failure.providerError, "");
     assert.equal(failureResult(failure).retryable, undefined, report);
   }
+});
+
+test("bridge input is decoded as a whole, however its characters are split across chunks", async () => {
+  const text = JSON.stringify({ provider: "claude", log: "✔ unit — passed 𝒳", repository: "/répertoire/dépôt" });
+  // One byte per chunk ends a chunk inside every multi-byte character.
+  const pieces = Array.from(Buffer.from(text), (byte) => Buffer.from([byte]));
+  assert.ok(pieces.length > text.length);
+  assert.equal(await readInput(Readable.from(pieces)), text);
+  assert.equal(await readInput(Readable.from([])), "");
+  // The limit counts bytes as they arrive.
+  assert.equal((await readInput(Readable.from([Buffer.alloc(8, "a"), Buffer.alloc(8, "b")]), 16)).length, 16);
+  await assert.rejects(readInput(Readable.from([Buffer.alloc(8), Buffer.alloc(9)]), 16), /Assignment input too large/);
 });
 
 test("bridge marks only recognized permanent errors non-retryable", () => {

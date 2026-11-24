@@ -5,7 +5,7 @@ import { readBrief } from "./review-brief.mjs";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { normalizeClaudeConfigDir } from "./claude-config.mjs";
-import { ReviewEvidence } from "./review-evidence.mjs";
+import { ReviewEvidence, sweepStaleEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment, normalizeLauncher, resolveProviderLaunch } from "./provider-launch.mjs";
@@ -29,6 +29,8 @@ const VALID_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const VALID_FILE_ACCESS = new Set(["restricted", "host"]);
 const DEFAULT_TIMEOUT_MS = 28 * 60 * 1000;
 const MAX_CLAUDE_OUTPUT_BYTES = 4 * 1024 * 1024;
+// A run's error log may hold stack traces; the failure message keeps its start.
+const MAX_ERROR_LOG_CHARACTERS = 4 * 1024;
 // Environment credentials Claude Code prefers over a config directory's stored
 // login. When a home is selected explicitly, by launcher or --config-dir, they
 // would authenticate and charge a different account, so they are removed.
@@ -214,14 +216,44 @@ function parseClaudeResult(stdout) {
     throw new Error("Claude returned malformed JSON output.");
   }
   if (payload.is_error === true) {
-    // Claude's own structured error channel; the bridge classifies it directly.
-    const message = typeof payload.result === "string" ? payload.result : "Claude reported an error.";
-    throw Object.assign(new Error(message), { providerError: message });
+    // `result` is Claude's own statement of the failure, and the only text the
+    // bridge classifies. A run that ended without one lists `errors` instead:
+    // what that run logged, where a missing file or an unknown option is
+    // something the reviewer met, not why the provider failed. Those lines
+    // explain the failure and classify nothing. An error result that says
+    // nothing at all is not a provider message.
+    const stated = typeof payload.result === "string" && payload.result.trim() ? payload.result : "";
+    const logged = (Array.isArray(payload.errors) ? payload.errors : [])
+      .filter((entry) => typeof entry === "string" && entry.trim()).join("\n");
+    if (!stated && !logged) throw new Error("Claude reported an error.");
+    const log = logged.length > MAX_ERROR_LOG_CHARACTERS
+      ? `${logged.slice(0, MAX_ERROR_LOG_CHARACTERS)}\n[error log truncated]`
+      : logged;
+    throw Object.assign(new Error([stated, log].filter(Boolean).join("\n")), { providerError: stated });
   }
   if (typeof payload.result !== "string" || !payload.result.trim()) {
     throw new Error("Claude output did not contain a final review result.");
   }
   return payload.result.trim();
+}
+
+// A failed `claude -p --output-format json` run still prints its result object
+// and exits non-zero: the explanation is that result's text, while stderr holds
+// at most a terse tag. Claude's own statement there classifies the failure.
+// Without one the command failure classifies, stderr included, exactly as it
+// does when the result says nothing; logged errors only add to the message.
+function claudeFailure(error) {
+  if (error.exitCode == null || !error.stdout?.length) return error;
+  let result;
+  try {
+    parseClaudeResult(error.stdout);
+  } catch (failure) {
+    result = failure;
+  }
+  if (typeof result?.providerError !== "string") return error;
+  const detail = error.stderr ? `\nclaude stderr: ${error.stderr}` : "";
+  return Object.assign(new Error(`claude exited with ${error.exitCode}: ${result.message}${detail}`),
+    { exitCode: error.exitCode, stderr: error.stderr, providerError: result.providerError || error.message });
 }
 
 async function runClaudeReview(options, dependencies = {}) {
@@ -285,7 +317,7 @@ async function runClaudeReview(options, dependencies = {}) {
           }
           : {}),
       })),
-    });
+    }).catch((error) => { throw claudeFailure(error); });
     await verifyScopeFingerprint(options, initialFingerprint.fingerprint, deadlineAt, signal);
     const report = parseClaudeResult(result.stdout);
     return dependencies.parseReport ? dependencies.parseReport(evidence.structuredReport(report, context)) : evidence.annotateReport(report, context);
@@ -295,6 +327,7 @@ async function runClaudeReview(options, dependencies = {}) {
 }
 
 async function main() {
+  sweepStaleEvidence();
   const cancellation = installAdapterCancellation();
   try {
     const report = await runClaudeReview(
@@ -330,6 +363,7 @@ if (isMain) {
 export {
   CREDENTIAL_VARIABLES,
   buildClaudeArgs,
+  claudeFailure,
   buildReviewPrompt,
   collectReviewContext,
   parseArgs,

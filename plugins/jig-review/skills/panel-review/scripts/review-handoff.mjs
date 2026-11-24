@@ -108,7 +108,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   try {
     const args = process.argv.slice(2), flags = {};
     for (let i = 0; i < args.length; i += 2) {
-      if (!["--capture", "--brief", "--brief-hash", "--review", "--output"].includes(args[i]) || flags[args[i]] || !args[i + 1]) fail("Usage: review-handoff.mjs --capture capture.json --brief brief.json --brief-hash SHA256 --review review.json --output /tmp/handoff.json");
+      if (!["--capture", "--brief", "--brief-hash", "--review", "--output"].includes(args[i]) || flags[args[i]] || !args[i + 1]) fail("Usage: review-handoff.mjs --capture <artifacts>/capture.json --brief <artifacts>/brief.json --brief-hash <sha256> --review <artifacts>/review.json --output <artifacts>/handoff.json");
       flags[args[i]] = args[i + 1];
     }
     if (Object.keys(flags).length !== 5) fail("All five arguments are required.");

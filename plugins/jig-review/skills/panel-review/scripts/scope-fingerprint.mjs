@@ -11,6 +11,7 @@ import {
   openSync,
   readlinkSync,
   realpathSync,
+  statSync,
 } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -24,6 +25,7 @@ import {
   normalizeExcludePaths,
   resolveReviewExclusions,
 } from "./review-exclusions.mjs";
+import { installSignalCancellation } from "./signal-cancellation.mjs";
 
 // Linux guarantees /proc/self/fd entries can be used to preserve raw path bytes
 // across spawn. Other supported platforms degrade non-UTF-8 submodule coverage
@@ -127,6 +129,21 @@ function signalProcessTree(child, signal) {
   } catch {
     // The process may already have exited.
   }
+}
+
+// Node reports a working directory that is missing, or is not a directory, as
+// ENOENT or ENOTDIR on the command, which reads as Git not being installed.
+// The error keeps its code, and its message names the directory as the cause.
+// Without a directory the command ran in this process's own, which exists.
+function spawnFailure(error, cwd) {
+  if (cwd == null || !["ENOENT", "ENOTDIR"].includes(error?.code) || Buffer.isBuffer(cwd)) return error;
+  try {
+    if (statSync(cwd).isDirectory()) return error;
+  } catch {
+    // Missing or unreadable: the directory explains the failure.
+  }
+  error.message = `${error.message}: the working directory ${JSON.stringify(cwd)} is not an existing directory`;
+  return error;
 }
 
 async function runGit(cwd, args, deadlineAt, signal = null) {
@@ -250,7 +267,7 @@ function runGitProcess(cwd, args, deadlineAt, signal = null, filterNames = "") {
       );
     } catch (error) {
       closeDirectoryFd();
-      reject(error);
+      reject(spawnFailure(error, cwd));
       return;
     }
 
@@ -274,7 +291,7 @@ function runGitProcess(cwd, args, deadlineAt, signal = null, filterNames = "") {
         ? combined
         : combined.subarray(combined.length - MAX_ERROR_BYTES);
     });
-    child.on("error", (error) => finish(error));
+    child.on("error", (error) => finish(spawnFailure(error, cwd)));
     child.on("exit", (code) => {
       exitSeen = true;
       exitCode = code;
@@ -430,17 +447,24 @@ async function hashFile(filePath, expectedStat, deadlineAt, signal = null) {
       new Error("fingerprint file hashing exceeded its deadline"),
       { timedOut: true },
     );
-    const handleAbort = () => stream.destroy(signal.reason instanceof Error
+    // destroy() closes the descriptor itself, even with autoClose off, before
+    // it emits the error. Closing it again there would throw out of the event
+    // handler, or close a descriptor that something else has opened since.
+    const abandon = (error) => {
+      closed = true;
+      stream.destroy(error);
+    };
+    const handleAbort = () => abandon(signal.reason instanceof Error
       ? signal.reason
       : Object.assign(new Error("fingerprint capture cancelled"), { cancelled: true }));
     const timer = setTimeout(
-      () => stream.destroy(deadlineError()),
+      () => abandon(deadlineError()),
       remaining,
     );
     signal?.addEventListener("abort", handleAbort, { once: true });
     stream.on("data", (chunk) => {
       if (Date.now() >= deadlineAt) {
-        stream.destroy(deadlineError());
+        abandon(deadlineError());
         return;
       }
       contentHash.update(chunk);
@@ -1093,32 +1117,18 @@ async function captureFingerprint(options) {
 }
 
 async function main() {
-  const controller = new AbortController();
-  let parentSignal = null;
-  const handlers = new Map();
-  for (const signal of ["SIGINT", "SIGTERM"]) {
-    const handler = () => {
-      if (parentSignal) return;
-      parentSignal = signal;
-      controller.abort(Object.assign(
-        new Error(`fingerprint capture received ${signal}`),
-        { cancelled: true, parentSignal: signal },
-      ));
-    };
-    handlers.set(signal, handler);
-    process.once(signal, handler);
-  }
+  const cancellation = installSignalCancellation({ subject: "fingerprint capture" });
   try {
     const result = await captureFingerprint({
       ...parseArgs(process.argv.slice(2)),
-      signal: controller.signal,
+      signal: cancellation.signal,
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } catch (error) {
-    if (parentSignal && !error.parentSignal) error.parentSignal = parentSignal;
+    if (cancellation.parentSignal && !error.parentSignal) error.parentSignal = cancellation.parentSignal;
     throw error;
   } finally {
-    for (const [signal, handler] of handlers) process.removeListener(signal, handler);
+    cancellation.dispose();
   }
 }
 

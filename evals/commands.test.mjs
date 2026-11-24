@@ -21,11 +21,13 @@ test('workflow detection follows executable positions and shell wrappers', () =>
   for (const command of ['claude -p review', 'pwd && /usr/bin/claude -p review',
     'env TEST=1 command claude', 'exec cursor-agent --mode ask',
     'bash -lc "node .agents/skills/review-fix-loop/scripts/loop-options.mjs"',
+    'node .agents/skills/panel-review/scripts/resolve-scope.mjs --scope auto',
+    'node .agents/skills/panel-review/scripts/codex-review.mjs --scope working-tree',
     'echo ok; codex review', '(claude)', 'pwd | cursor-agent']) {
     assert.equal(launchesWorkflow(command), true, command);
   }
   for (const command of ['rg -n claude instructions.md', 'grep -n "codex exec" instructions.md',
-    'echo claude', 'cat scripts/claude-review.mjs', 'codex --version',
+    'echo claude', 'cat scripts/claude-review.mjs', 'cat scripts/codex-review.mjs', 'codex --version',
     'node checks.mjs claude-review', 'bash -lc \'rg -n "claude|cursor-agent" instructions.md\'']) {
     assert.equal(launchesWorkflow(command), false, command);
   }
@@ -66,6 +68,7 @@ test('bounded loop cases permit local helpers but reject reviewer launches in ex
   for (const c of cases) {
     for (const command of [
       'node .agents/skills/panel-review/scripts/scope-fingerprint.mjs --scope working-tree',
+      'node .agents/skills/panel-review/scripts/resolve-scope.mjs --scope auto',
       'node .agents/skills/review-fix-loop/scripts/loop-options.mjs',
       'bash -lc "node .agents/skills/panel-review/scripts/review-options.mjs"',
       'cat .agents/skills/panel-review/scripts/claude-review.mjs',
@@ -75,6 +78,7 @@ test('bounded loop cases permit local helpers but reject reviewer launches in ex
     for (const command of [
       'node .agents/skills/panel-review/scripts/claude-review.mjs --scope working-tree',
       'node --no-warnings .agents/skills/panel-review/scripts/cursor-review.mjs',
+      'node .agents/skills/panel-review/scripts/codex-review.mjs --scope working-tree',
       'node scripts/scope-fingerprint.mjs && claude -p review',
       'bash -lc "node scripts/scope-fingerprint.mjs; node scripts/cursor-review.mjs"',
       'env PROFILE=review command cursor-agent --print review',
@@ -89,6 +93,9 @@ test('reviewer-only enforcement preserves the stricter workflow prohibition', ()
   assert.equal(checkCommands({ forbidWorkflowLaunches: true }, helper), false);
   assert.equal(checkCommands({ forbidReviewerLaunches: true }, helper), true);
   assert.equal(checkCommands({ forbidReviewerLaunches: true, forbidWorkflowLaunches: true }, helper), false);
+  for (const adapter of ['claude-review', 'codex-review', 'cursor-review']) {
+    assert.equal(checkCommands({ forbidReviewerLaunches: true }, [`node scripts/${adapter}.mjs --scope working-tree`]), false, adapter);
+  }
 });
 
 test('script restrictions reject launcher execution but allow inspection', () => {
@@ -166,6 +173,7 @@ test('native judgment cases reject delegation traces while allowing their shared
       'claude -p "Review this diff"', 'codex exec review', 'cursor-agent --mode ask review',
       'node .agents/skills/panel-review/scripts/claude-review.mjs --scope working-tree',
       'node .agents/skills/panel-review/scripts/cursor-review.mjs --scope working-tree',
+      'node .agents/skills/panel-review/scripts/codex-review.mjs --scope working-tree',
       'bash -lc "git diff; claude -p review"',
     ]) assert.equal(checkCommands(c, [command]), false, `${id}: ${command}`);
     assert.equal(checkCommands(c, [

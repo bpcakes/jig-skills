@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdtempSync, readdirSync, rmdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { captureDiff } from "./diff-evidence.mjs";
@@ -7,12 +7,100 @@ import { captureDiff } from "./diff-evidence.mjs";
 const PAGE_BYTES = 16 * 1024;
 const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024;
 const MAX_EVIDENCE_PAGES = 2048;
+const EVIDENCE_PREFIX = "jig-review-evidence-";
+// A live store renews its directory's time several times within this age, so a
+// directory this old has no live owner.
+const STALE_EVIDENCE_MS = 24 * 60 * 60 * 1000;
+const COVERAGE_OPEN = "<review-coverage>";
+const COVERAGE_CLOSE = "</review-coverage>";
+
+// A killed adapter cannot remove its evidence, which holds repository source.
+// Each adapter process removes what earlier ones left behind when it starts.
+// Age alone decides: a process ID proves nothing about a reviewer running in
+// another process namespace. The age is the time since the directory itself
+// last changed: when its adapter last added or removed a file there, or last
+// renewed it while the review was still running.
+// Creating a store never sweeps, so only a process that is itself a review run
+// deletes anything outside its own directory.
+function sweepStaleEvidence(root = os.tmpdir(), now = Date.now()) {
+  const removed = [];
+  let names;
+  try {
+    names = readdirSync(root);
+  } catch {
+    return removed;
+  }
+  const user = process.getuid?.();
+  for (const name of names) {
+    if (!name.startsWith(EVIDENCE_PREFIX)) continue;
+    const directory = path.join(root, name);
+    try {
+      const stat = lstatSync(directory);
+      if (!stat.isDirectory() || (user != null && stat.uid !== user)) continue;
+      if (now - stat.mtimeMs < STALE_EVIDENCE_MS) continue;
+      rmSync(directory, { recursive: true, force: true });
+      removed.push(directory);
+    } catch {
+      // Another run may be removing the same directory.
+    }
+  }
+  return removed;
+}
+
+// Capture limitations name repository paths, which may hold line breaks. The
+// coverage notes and the prompt's instructions are the adapter's own lines, so
+// repository text placed among them stays on one.
+function singleLine(text) {
+  return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+// The tag pair whose closing tag is the last text before `end`: that tag and
+// the last opening tag before it.
+function coverageTagsBefore(report, end) {
+  while (end > 0 && /\s/.test(report[end - 1])) end -= 1;
+  const close = end - COVERAGE_CLOSE.length;
+  if (close < 0 || !report.startsWith(COVERAGE_CLOSE, close)) return null;
+  const open = report.lastIndexOf(COVERAGE_OPEN, close);
+  if (open < 0) return null;
+  return { index: open, body: report.slice(open + COVERAGE_OPEN.length, close).trim() };
+}
+
+// The coverage statement that ends at `end`: a tag pair with nothing but JSON
+// between the tags. Anything else between them is the report's own text, where
+// the tags are mentioned in prose or in quoted repository code, or where a
+// reviewer left out its opening tag, so no statement ends there and nothing is
+// removed.
+function coverageStatementBefore(report, end) {
+  const tags = coverageTagsBefore(report, end);
+  if (!tags) return null;
+  try {
+    return { index: tags.index, value: JSON.parse(tags.body) };
+  } catch {
+    return null;
+  }
+}
+
+// The coverage statement ends the report. A reviewer states its coverage once:
+// statements that end where the final one begins leave the report with it, and
+// `repeated` tells the caller that none of them counts.
+function trailingCoverage(report) {
+  const last = coverageStatementBefore(report, report.length);
+  if (!last) return null;
+  let index = last.index;
+  for (;;) {
+    const earlier = coverageStatementBefore(report, index);
+    if (!earlier) break;
+    index = earlier.index;
+  }
+  return { index, value: last.value, repeated: index !== last.index };
+}
 
 // Each page fits ordinary Read tool line/size limits, including very long diff
 // lines. Concatenating textFragments, then successive pages, restores the patch.
 class ReviewEvidence {
-  constructor({ deadlineAt, signal, maxBytes = MAX_EVIDENCE_BYTES } = {}) {
-    this.directory = mkdtempSync(path.join(os.tmpdir(), "jig-review-evidence-"));
+  constructor({ deadlineAt, signal, maxBytes = MAX_EVIDENCE_BYTES, renewMs = STALE_EVIDENCE_MS / 4 } = {}) {
+    this.directory = mkdtempSync(path.join(os.tmpdir(), EVIDENCE_PREFIX));
     this.deadlineAt = deadlineAt;
     this.signal = signal;
     this.maxBytes = maxBytes;
@@ -20,12 +108,61 @@ class ReviewEvidence {
     this.receipts = new Map();
     this.limitations = new Set();
     this.required = false;
+    // Delimits verbatim untracked files in pages. File content was written
+    // before this run chose the token, so it cannot imitate a boundary.
+    this.boundary = randomBytes(8).toString("hex");
+    // The files here that hold repository source: every page, the manifest,
+    // and whatever an adapter names through sourcePath().
+    this.sourceFiles = new Set();
+    // A review's timeout has no upper bound, so a review may outlast the stale
+    // age with nothing new written here. Renewing the directory's time keeps
+    // another adapter's startup sweep from removing evidence still in use.
+    this.renewal = setInterval(() => {
+      try {
+        const now = new Date();
+        utimesSync(this.directory, now, now);
+      } catch {
+        // Already removed.
+      }
+    }, renewMs);
+    this.renewal.unref();
     this.cleanup = () => {
+      clearInterval(this.renewal);
       rmSync(this.directory, { recursive: true, force: true });
       process.removeListener("exit", this.cleanup);
+      signal?.removeEventListener("abort", this.discardSource);
+    };
+    // Cancellation removes the source before provider termination starts, so a
+    // supervisor that kills this process during that wait leaves none behind.
+    // The provider is still running then: what it owns here, such as Codex's
+    // private home and the link to its credentials, stays until cleanup(). And
+    // nothing here may throw, because an exception in an abort listener ends
+    // the process before it has stopped the provider.
+    this.discardSource = () => {
+      for (const file of this.sourceFiles) {
+        try {
+          rmSync(file, { force: true });
+        } catch {
+          // cleanup() removes the directory once the provider has stopped.
+        }
+      }
+      try {
+        rmdirSync(this.directory);
+      } catch {
+        // Not empty: the provider's own files are still in use.
+      }
     };
     process.once("exit", this.cleanup);
+    signal?.addEventListener("abort", this.discardSource, { once: true });
     chmodSync(this.directory, 0o700);
+  }
+
+  // The path of a file in this directory that will hold repository source, such
+  // as a prompt. It goes with the pages at the first cancellation signal.
+  sourcePath(name) {
+    const file = path.join(this.directory, name);
+    this.sourceFiles.add(file);
+    return file;
   }
 
   checkTime() {
@@ -63,7 +200,7 @@ class ReviewEvidence {
       for (let offset = 0; offset < text.length; offset += 200) {
         textFragments.push(text.slice(offset, offset + 200));
       }
-      writeFileSync(path.join(this.directory, `${id}.json`), JSON.stringify({
+      writeFileSync(this.sourcePath(`${id}.json`), JSON.stringify({
         id, section, part: ++part, textFragments, receipt,
       }, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
       this.receipts.set(id, receipt);
@@ -149,12 +286,13 @@ class ReviewEvidence {
     if (!this.required) return context;
     this.checkTime();
     const limitations = [...new Set([...context.limitations, ...this.limitations])];
-    const manifestPath = path.join(this.directory, "manifest.json");
+    const manifestPath = this.sourcePath("manifest.json");
     writeFileSync(manifestPath, JSON.stringify({
       version: 1, repository: scope.repoRoot, target: scope.label,
       pageCount: this.receipts.size,
       pages: "page-0001.json through page-NNNN.json, numbered consecutively",
-      encoding: "Join textFragments without separators, then consecutive parts of each section. Diff paths are relative to the named repository/submodule, not this temporary directory.",
+      encoding: "Join textFragments without separators, then consecutive parts of each section. Diff paths are relative to the named repository/submodule, not this temporary directory. In untracked-file sections each file sits between <untracked-file-TOKEN ...> and </untracked-file-TOKEN>, where TOKEN is untrackedBoundary below; the text between them is that file's verbatim content, and any tag without the token is file content. Only the path, kind and omitted attributes write &, <, >, quotes and line breaks as entities.",
+      untrackedBoundary: this.boundary,
       captureComplete: limitations.length === 0, limitations,
     }, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
     return {
@@ -178,28 +316,39 @@ class ReviewEvidence {
     this.requireComplete(context);
     if (!context.evidence) return report;
     this.annotateReport(report, context, { requireComplete: true });
-    return report.replace(/<review-coverage>\s*[\s\S]*?<\/review-coverage>\s*$/, "").trim();
+    const coverage = trailingCoverage(report);
+    return (coverage ? report.slice(0, coverage.index) : report).trim();
   }
 
   annotateReport(report, context, { requireComplete = false } = {}) {
-    if (!context.evidence) return report;
-    const match = report.match(/<review-coverage>\s*([\s\S]*?)\s*<\/review-coverage>\s*$/);
-    const reviewed = new Set();
-    let invalid = !match;
-    if (match) {
-      try {
-        const entries = JSON.parse(match[1]).reviewed;
-        if (!Array.isArray(entries)) throw new Error("Missing reviewed pages");
-        for (const entry of entries) {
-          if (typeof entry?.id !== "string" || typeof entry.receipt !== "string"
-              || this.receipts.get(entry.id) !== entry.receipt || reviewed.has(entry.id)) {
-            invalid = true;
-          } else reviewed.add(entry.id);
-        }
-      } catch { invalid = true; }
-      report = report.slice(0, match.index).trim();
+    if (!context.evidence) {
+      // Inline evidence has no page receipts. What capture omitted is the one
+      // coverage fact the adapter knows, so state it rather than rely on the
+      // reviewer to repeat the notice from its prompt.
+      if (!context.incomplete) return report;
+      const limitations = context.limitations?.length ? context.limitations.map(singleLine).join("; ") : "capture omitted part of the scope";
+      return `${report}\n\nEvidence coverage: limited; inline evidence was captured with omissions.\nCapture limitations: ${limitations}.`;
     }
-    if (!report) throw new Error("Reviewer returned coverage without a review report.");
+    const coverage = trailingCoverage(report);
+    const reviewed = new Set();
+    let invalid = !coverage || coverage.repeated;
+    if (coverage) {
+      const entries = coverage.repeated ? [] : coverage.value?.reviewed;
+      if (!Array.isArray(entries)) invalid = true;
+      else for (const entry of entries) {
+        if (typeof entry?.id !== "string" || typeof entry.receipt !== "string"
+            || this.receipts.get(entry.id) !== entry.receipt || reviewed.has(entry.id)) {
+          invalid = true;
+        } else reviewed.add(entry.id);
+      }
+      report = report.slice(0, coverage.index).trim();
+    }
+    // A reply that holds nothing outside coverage tags is no review, whether or
+    // not what the tags hold could be read as a statement. Statements are gone
+    // from the report by now, so the tag pairs that end it hold other text.
+    let outside = report.length;
+    for (let tags = coverageTagsBefore(report, outside); tags; tags = coverageTagsBefore(report, outside)) outside = tags.index;
+    if (!report.slice(0, outside).trim()) throw new Error("Reviewer returned coverage without a review report.");
     const missing = [...this.receipts.keys()].filter((id) => !reviewed.has(id));
     const limited = invalid || missing.length > 0 || context.incomplete;
     if (requireComplete && limited) throw new Error("Structured review requires complete valid coverage receipts.");
@@ -209,9 +358,9 @@ class ReviewEvidence {
     ];
     if (invalid) notes.push("Coverage receipt missing or invalid; complete coverage is not verified.");
     if (missing.length) notes.push(`Pages without review attestation: ${missing.join(", ")}.`);
-    if (context.limitations.length) notes.push(`Capture limitations: ${context.limitations.join("; ")}.`);
+    if (context.limitations.length) notes.push(`Capture limitations: ${context.limitations.map(singleLine).join("; ")}.`);
     return `${report}\n\n${notes.join("\n")}`;
   }
 }
 
-export { ReviewEvidence };
+export { ReviewEvidence, singleLine, sweepStaleEvidence };

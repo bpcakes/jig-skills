@@ -35,8 +35,15 @@ function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
+// The shim (`pwd -P`) and Codex report physical paths, and a temporary
+// directory can sit behind a symlink, as /var does on macOS. Fixtures are
+// canonical so expectations compare like with like.
+function temporaryDirectory(prefix) {
+  return realpathSync(mkdtempSync(path.join(os.tmpdir(), prefix)));
+}
+
 function makeRepository() {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "jig-codex-review-"));
+  const repo = temporaryDirectory("jig-codex-review-");
   git(repo, ["init", "-q"]);
   git(repo, ["config", "user.name", "Adapter Test"]);
   git(repo, ["config", "user.email", "adapter@example.invalid"]);
@@ -58,8 +65,9 @@ async function workingTreeFingerprint(repo) {
 // `mcp list --json` lists the [mcp_servers.NAME] tables in CODEX_HOME/config.toml,
 // honoring mcp_servers.NAME.enabled=false unless told to ignore it. Other
 // invocations record argv, prompt, environment, and the home's files, then
-// write the report to the --output-last-message path.
-function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "", report = "No actionable findings from Codex.", writeReport = true, ignoreSkillsConfig = false, keepDocs = false, skillEntryFormat = "rooted", ignoreMcpOverrides = false } = {}) {
+// write the report to the --output-last-message path. With `hold`, the session
+// instead stays open until SIGTERM and records what it could still reach then.
+function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "", report = "No actionable findings from Codex.", writeReport = true, ignoreSkillsConfig = false, keepDocs = false, skillEntryFormat = "rooted", ignoreMcpOverrides = false, hold = false } = {}) {
   const file = path.join(directory, name);
   writeFileSync(file, [
     "#!/usr/bin/env node",
@@ -98,7 +106,16 @@ function fakeProvider(directory, name, { exitCode = 0, stderr = "", stdout = "",
     "for await (const chunk of process.stdin) prompt += chunk;",
     "let home = null;",
     "try { home = { path: process.env.CODEX_HOME, entries: readdirSync(process.env.CODEX_HOME).sort(), authLink: readlinkSync(process.env.CODEX_HOME + '/auth.json'), authResolves: existsSync(process.env.CODEX_HOME + '/auth.json'), config: existsSync(process.env.CODEX_HOME + '/config.toml') ? readFileSync(process.env.CODEX_HOME + '/config.toml', 'utf8') : null }; } catch (error) { home = { path: process.env.CODEX_HOME, error: error.code }; }",
+    // The handler is in place before the capture file tells a test the session has started.
+    `if (${hold}) {`,
+    "  process.on('SIGTERM', () => {",
+    "    let evidence; try { evidence = readdirSync(path.dirname(process.env.CODEX_HOME)).sort(); } catch (error) { evidence = error.code; }",
+    "    writeFileSync(process.env.FAKE_CODEX_STOPPED, JSON.stringify({ credentials: existsSync(process.env.CODEX_HOME + '/auth.json'), evidence }));",
+    "    process.exit(143);",
+    "  });",
+    "}",
     "writeFileSync(process.env.FAKE_CODEX_CAPTURE, JSON.stringify({ argv, prompt, env: process.env, home }));",
+    `if (${hold}) await new Promise(() => setInterval(() => {}, 1000));`,
     `if (${JSON.stringify(stdout)}) process.stdout.write(${JSON.stringify(stdout)});`,
     `if (${JSON.stringify(stderr)}) process.stderr.write(${JSON.stringify(stderr)});`,
     `if (${exitCode} !== 0) process.exit(${exitCode});`,
@@ -132,7 +149,7 @@ function writeSkill(root, name, marker) {
 
 async function adapterFixture(t) {
   const repo = makeRepository();
-  const scratch = mkdtempSync(path.join(os.tmpdir(), "jig-codex-capture-"));
+  const scratch = temporaryDirectory("jig-codex-capture-");
   t.after(() => {
     rmSync(repo, { recursive: true, force: true });
     rmSync(scratch, { recursive: true, force: true });
@@ -400,11 +417,13 @@ test("CLI and bridge retain bounded untrusted diagnostics after Codex starts", a
   assert.equal(failure.providerError, "");
   assert.equal(bridge.retryable, undefined, "diagnostic words must not disable the provider");
 
+  // The adapter process sweeps old evidence from its temporary directory when
+  // it starts; a test must not do that to the developer's.
   const cli = spawnSync(process.execPath, [
     fileURLToPath(new URL("../skills/panel-review/scripts/codex-review.mjs", import.meta.url)),
     "--cwd", f.repo, "--scope", "working-tree", "--expected-fingerprint", f.parse().expectedFingerprint,
     "--timeout-ms", "10000",
-  ], { env: { ...process.env, JIG_CODEX_BIN: codex }, encoding: "utf8", timeout: 15000 });
+  ], { env: { ...process.env, JIG_CODEX_BIN: codex, TMPDIR: f.scratch }, encoding: "utf8", timeout: 15000 });
   assert.equal(cli.status, 1, cli.stderr);
   for (const output of [bridge.error, cli.stderr]) {
     assert.ok(output.includes(diagnostic), output);
@@ -413,6 +432,48 @@ test("CLI and bridge retain bounded untrusted diagnostics after Codex starts", a
     assert.ok(output.length < 6000, "public diagnostics stay bounded");
     assert.doesNotMatch(output, /see transcript/);
   }
+});
+
+test("cancelling a review leaves Codex its private home until Codex has stopped", async (t) => {
+  const f = await adapterFixture(t);
+  const stoppedPath = path.join(f.scratch, "stopped.json");
+  withEnvironment(t, { FAKE_CODEX_STOPPED: stoppedPath });
+  const codex = fakeProvider(f.scratch, "held-codex.mjs", { hold: true });
+  const controller = new AbortController();
+  const review = runCodexReview({ ...f.parse(), timeoutMs: 30_000 }, { codexBin: codex, signal: controller.signal });
+  review.catch(() => {});
+  // A failed check below must not leave the held session running until the
+  // adapter's deadline.
+  t.after(async () => {
+    controller.abort(new Error("test ended"));
+    await review.catch(() => {});
+  });
+  // The capture file exists before the provider has finished writing it.
+  const capture = () => {
+    try {
+      return f.captured();
+    } catch {
+      return null;
+    }
+  };
+  const deadlineAt = Date.now() + 20_000;
+  let started;
+  while (!(started = capture())) {
+    if (Date.now() >= deadlineAt) throw new Error("fake Codex did not start its session");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  const home = started.home;
+  assert.equal(home.authResolves, true);
+
+  controller.abort(Object.assign(new Error("review cancelled"), { cancelled: true }));
+  await assert.rejects(review, /review cancelled/);
+
+  // Codex writes refreshed credentials through the link in its home. Removing
+  // the home while Codex still ran could strand them in a temporary file.
+  const stopped = JSON.parse(readFileSync(stoppedPath, "utf8"));
+  assert.equal(stopped.credentials, true, "the credentials link was intact when Codex was told to stop");
+  assert.deepEqual(stopped.evidence, ["codex-home", "codex-shim.sh"]);
+  assert.equal(existsSync(path.dirname(home.path)), false, "everything is removed once Codex has stopped");
 });
 
 test("transcript text never classifies a failure; only Codex's structured error events do", async (t) => {

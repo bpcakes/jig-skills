@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defaultLauncherCandidates, parseArgs as reviewArgs, readOptionValue, reviewOptionTakesValue } from "../../panel-review/scripts/review-options.mjs";
+import { defaultLauncherCandidates, hostNote, parseArgs as reviewArgs, readOptionValue, reviewOptionTakesValue } from "../../panel-review/scripts/review-options.mjs";
 import { DEFAULT_FIX_MODE, repairPolicy } from "./repair-policy.mjs";
 
 export const DEFAULT_MAX_ROUNDS = null;
@@ -61,6 +61,14 @@ export function parseArgs(argv) {
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { process.stdout.write(`${JSON.stringify(parseArgs(process.argv.slice(2)), null, 2)}\n`); }
+  try {
+    const argv = process.argv.slice(2);
+    const options = parseArgs(argv);
+    // The loop assumes the Codex host as the review options do, so an omitted
+    // --host earns the same note beside the same unchanged result.
+    const note = hostNote(argv);
+    if (note) process.stderr.write(`loop-options: ${note}\n`);
+    process.stdout.write(`${JSON.stringify(options, null, 2)}\n`);
+  }
   catch (error) { process.stderr.write(`loop-options: ${error.message}\n`); process.exitCode = 1; }
 }
