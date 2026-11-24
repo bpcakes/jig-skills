@@ -55,19 +55,27 @@ function singleLine(text) {
     (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
-// The coverage statement whose closing tag is the last text before `end`: that
-// tag paired with the last opening tag before it, when everything between the
-// two is JSON. Anything else between them is the report's own text, where the
-// tags are mentioned in prose or in quoted repository code, or where a reviewer
-// left out its opening tag, so no statement ends there and nothing is removed.
-function coverageStatementBefore(report, end) {
+// The tag pair whose closing tag is the last text before `end`: that tag and
+// the last opening tag before it.
+function coverageTagsBefore(report, end) {
   while (end > 0 && /\s/.test(report[end - 1])) end -= 1;
   const close = end - COVERAGE_CLOSE.length;
   if (close < 0 || !report.startsWith(COVERAGE_CLOSE, close)) return null;
   const open = report.lastIndexOf(COVERAGE_OPEN, close);
   if (open < 0) return null;
+  return { index: open, body: report.slice(open + COVERAGE_OPEN.length, close).trim() };
+}
+
+// The coverage statement that ends at `end`: a tag pair with nothing but JSON
+// between the tags. Anything else between them is the report's own text, where
+// the tags are mentioned in prose or in quoted repository code, or where a
+// reviewer left out its opening tag, so no statement ends there and nothing is
+// removed.
+function coverageStatementBefore(report, end) {
+  const tags = coverageTagsBefore(report, end);
+  if (!tags) return null;
   try {
-    return { index: open, value: JSON.parse(report.slice(open + COVERAGE_OPEN.length, close)) };
+    return { index: tags.index, value: JSON.parse(tags.body) };
   } catch {
     return null;
   }
@@ -335,7 +343,12 @@ class ReviewEvidence {
       }
       report = report.slice(0, coverage.index).trim();
     }
-    if (!report) throw new Error("Reviewer returned coverage without a review report.");
+    // A reply that holds nothing outside its coverage tags is no review, whether
+    // or not what the tags hold could be read as a statement.
+    const tags = coverage ? null : coverageTagsBefore(report, report.length);
+    if (!report || (tags && !report.slice(0, tags.index).trim())) {
+      throw new Error("Reviewer returned coverage without a review report.");
+    }
     const missing = [...this.receipts.keys()].filter((id) => !reviewed.has(id));
     const limited = invalid || missing.length > 0 || context.incomplete;
     if (requireComplete && limited) throw new Error("Structured review requires complete valid coverage receipts.");

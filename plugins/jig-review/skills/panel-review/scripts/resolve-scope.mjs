@@ -5,22 +5,24 @@
 // here once, rather than re-derived from prose on every run.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { readOptionValue } from "./review-options.mjs";
-import { checkoutHasChanges, runGit } from "./scope-fingerprint.mjs";
+import { captureFingerprint, runGit } from "./scope-fingerprint.mjs";
 import { installSignalCancellation } from "./signal-cancellation.mjs";
 
-const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
+// The fingerprint helper's own budget: deciding `auto` runs one capture.
+const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const SCOPES = new Set(["auto", "working-tree", "branch"]);
-const FLAGS = new Set(["--cwd", "--scope", "--base", "--include-working-tree", "--wait"]);
+const FLAGS = new Set(["--cwd", "--scope", "--base", "--include-working-tree", "--exclude-path", "--wait"]);
 const DEFAULT_BRANCH_NAMES = Object.freeze(["main", "master", "trunk"]);
 
 function parseArgs(argv) {
-  const options = { cwd: process.cwd(), scope: null, base: null, includeWorkingTree: false };
+  const options = { cwd: process.cwd(), scope: null, base: null, includeWorkingTree: false, excludePaths: [] };
   const seen = new Set();
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (!FLAGS.has(argument)) throw new Error(`Unsupported argument: ${argument}`);
-    if (seen.has(argument)) throw new Error(`Duplicate argument: ${argument}`);
+    if (seen.has(argument) && argument !== "--exclude-path") throw new Error(`Duplicate argument: ${argument}`);
     seen.add(argument);
     if (argument === "--include-working-tree") {
       options.includeWorkingTree = true;
@@ -28,7 +30,9 @@ function parseArgs(argv) {
     }
     // Accepted for compatibility; it selects nothing.
     if (argument === "--wait") continue;
-    options[argument.slice(2)] = readOptionValue(argv, index, argument);
+    const value = readOptionValue(argv, index, argument);
+    if (argument === "--exclude-path") options.excludePaths.push(value);
+    else options[argument.slice(2)] = value;
     index += 1;
   }
   return validate(options);
@@ -49,11 +53,11 @@ function validate(options) {
   if (options.includeWorkingTree && options.scope !== "branch" && options.base == null) {
     throw new Error("--include-working-tree requires branch scope; add --scope branch or --base <ref>.");
   }
-  return options;
+  return { ...options, excludePaths: normalizeExcludePaths(options.excludePaths) };
 }
 
 async function resolveReviewScope(options) {
-  options = validate({ scope: null, base: null, includeWorkingTree: false, ...options });
+  options = validate({ scope: null, base: null, includeWorkingTree: false, excludePaths: [], ...options });
   const deadlineAt = Date.now() + (options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const git = (cwd, args) => runGit(cwd, args, deadlineAt, options.signal ?? null);
   const repoRoot = (await git(options.cwd, ["rev-parse", "--show-toplevel"])).toString("utf8").trim();
@@ -74,20 +78,15 @@ async function resolveReviewScope(options) {
       throw error;
     }
   };
-  // Git's status answers at once for the usual case. It can be configured to
-  // hide changes inside submodules, so a status that reports nothing is checked
-  // against the fingerprint helper's own inspection: the clean check that
-  // committed-only branch scope would then have to pass.
-  const hasLocalChanges = async () => {
-    try {
-      if ((await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])).length > 0) return true;
-      return await checkoutHasChanges(repoRoot, headOid, deadlineAt, options.signal ?? null);
-    } catch (error) {
-      // Status too large to hold is itself evidence of local changes.
-      if (error.outputLimit) return true;
-      throw error;
-    }
-  };
+  // Whether working-tree scope would have anything to review: the fingerprint
+  // helper's own answer for that scope, under the exclusions the review will
+  // use. `git status` cannot give it. It may be configured to hide changes
+  // inside submodules, which the capture inspects, and it lists changes the
+  // review excludes, which would select a working-tree review of nothing.
+  const hasReviewableLocalChanges = async () => (await captureFingerprint({
+    cwd: repoRoot, scope: "working-tree", excludePaths: options.excludePaths,
+    signal: options.signal ?? null, timeoutMs: Math.max(1, deadlineAt - Date.now()),
+  })).hasChanges;
   // The checked-out branch as a full ref, or null on a detached HEAD.
   const currentBranch = async () => {
     try {
@@ -132,9 +131,10 @@ async function resolveReviewScope(options) {
     scope = "branch";
     scopeSource = "base";
   } else if (scope === "auto") {
-    const dirty = !headOid || await hasLocalChanges();
-    scope = dirty ? "working-tree" : "branch";
-    scopeSource = dirty ? "auto-local-changes" : "auto-clean-checkout";
+    // An unborn HEAD has no branch to compare.
+    const local = !headOid || await hasReviewableLocalChanges();
+    scope = local ? "working-tree" : "branch";
+    scopeSource = local ? "auto-local-changes" : "auto-no-local-changes";
   }
 
   if (scope === "working-tree") {

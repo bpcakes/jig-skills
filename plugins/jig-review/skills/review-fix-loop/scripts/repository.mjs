@@ -371,11 +371,12 @@ export function snapshot(root, store, { maxBytes = DEFAULT_STORAGE.maxSourceByte
 }
 export async function resolveScope(cwd, options) {
   const root = repositoryRoot(cwd);
-  // Panel-review's resolver decides the scope and the base, so the same flags
-  // select the same scope and base in both skills. A loop's branch scope
-  // always includes the working tree.
-  const { scope, base } = await resolveReviewScope({ cwd: root, scope: options.scope, base: options.base });
-  const args = { cwd: root, scope, base, includeWorkingTree: scope === "branch", excludePaths: options.review.excludePaths, timeoutMs: 300000 };
+  // Panel-review's resolver decides the scope and the base, so a scope flag
+  // means the same in both skills. A loop's branch scope always includes the
+  // working tree.
+  const excludePaths = options.review.excludePaths, timeoutMs = 300000;
+  const { scope, base } = await resolveReviewScope({ cwd: root, scope: options.scope, base: options.base, excludePaths, timeoutMs });
+  const args = { cwd: root, scope, base, includeWorkingTree: scope === "branch", excludePaths, timeoutMs };
   const fingerprint = await captureFingerprint(args);
   assertCompleteFingerprint(fingerprint);
   args.base = fingerprint.baseOid;

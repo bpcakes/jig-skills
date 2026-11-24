@@ -447,17 +447,24 @@ async function hashFile(filePath, expectedStat, deadlineAt, signal = null) {
       new Error("fingerprint file hashing exceeded its deadline"),
       { timedOut: true },
     );
-    const handleAbort = () => stream.destroy(signal.reason instanceof Error
+    // destroy() closes the descriptor itself, even with autoClose off, before
+    // it emits the error. Closing it again there would throw out of the event
+    // handler, or close a descriptor that something else has opened since.
+    const abandon = (error) => {
+      closed = true;
+      stream.destroy(error);
+    };
+    const handleAbort = () => abandon(signal.reason instanceof Error
       ? signal.reason
       : Object.assign(new Error("fingerprint capture cancelled"), { cancelled: true }));
     const timer = setTimeout(
-      () => stream.destroy(deadlineError()),
+      () => abandon(deadlineError()),
       remaining,
     );
     signal?.addEventListener("abort", handleAbort, { once: true });
     stream.on("data", (chunk) => {
       if (Date.now() >= deadlineAt) {
-        stream.destroy(deadlineError());
+        abandon(deadlineError());
         return;
       }
       contentHash.update(chunk);
@@ -975,14 +982,6 @@ async function workingTreeFingerprint(
   };
 }
 
-// Whether the checkout differs from HEAD anywhere, with every initialized
-// submodule inspected and nothing excluded: what committed-only branch scope
-// requires to be false. `git status` cannot answer this, because a repository
-// or one of its submodules may be configured to hide changes inside submodules.
-async function checkoutHasChanges(repoRoot, headOid, deadlineAt, signal = null) {
-  return (await workingTreeFingerprint(repoRoot, headOid, new Set(), deadlineAt, signal)).hasChanges;
-}
-
 async function branchFingerprint(
   repoRoot,
   headOid,
@@ -1149,7 +1148,6 @@ if (isMain) {
 
 export {
   captureFingerprint,
-  checkoutHasChanges,
   parseArgs,
   runGit,
 };

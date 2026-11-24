@@ -556,6 +556,28 @@ test("a closing tag that ends no coverage statement leaves the whole report in p
   }
 });
 
+test("a reply that holds nothing outside its coverage tags is not a review", (t) => {
+  const { evidence, context, statement, block } = attestedStore(t);
+  for (const reply of [
+    // A statement the adapter cannot read, and no report before it.
+    `<review-coverage>\`\`\`json\n${statement}\n\`\`\`</review-coverage>`,
+    `\n  <review-coverage>${statement.slice(0, -1)},}</review-coverage>\n`,
+    block,
+  ]) {
+    assert.throws(() => evidence.annotateReport(reply, context), /Reviewer returned coverage without a review report/);
+    assert.throws(() => evidence.structuredReport(reply, context), /Reviewer returned coverage without a review report/);
+  }
+});
+
+test("whitespace of any kind around a coverage statement is not part of it", (t) => {
+  const { evidence, context, receipt, statement } = attestedStore(t);
+  for (const padding of ["\u00a0", "\ufeff", " \n\t"]) {
+    const report = evidence.annotateReport(`Findings.\n<review-coverage>${padding}${statement}${padding}</review-coverage>`, context);
+    assert.ok(report.startsWith("Findings.\n\nEvidence coverage: reviewer-attested; 1/1"), JSON.stringify(padding));
+    assert.doesNotMatch(report, new RegExp(receipt));
+  }
+});
+
 test("inline reports state what capture omitted", async (t) => {
   const repo = repository(t);
   writeFileSync(path.join(repo, "base.txt"), "base\n");

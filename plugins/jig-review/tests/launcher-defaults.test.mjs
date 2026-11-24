@@ -1,3 +1,4 @@
+import "./fixtures/no-session-marker.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -36,9 +37,7 @@ else {
 test("default option CLI detects compatible Jig with help-only probes for both providers", t => {
   const f = fixture(t);
   const cli = fileURLToPath(new URL("../skills/panel-review/scripts/review-options.mjs", import.meta.url));
-  // Run as a plain shell would: inside a Claude Code session the command notes an omitted --host.
-  const { CLAUDECODE: _sessionMarker, ...environment } = f.inherited;
-  const result = JSON.parse(execFileSync(process.execPath, [cli], { env: environment, encoding: "utf8" }));
+  const result = JSON.parse(execFileSync(process.execPath, [cli], { env: f.inherited, encoding: "utf8" }));
   assert.equal(result.claude.launcher, "auto");
   assert.equal(result.codex.launcher, "auto");
   assert.equal(result.codex.runtime, "cli");

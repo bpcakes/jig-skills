@@ -53,7 +53,12 @@ test("flag conflicts are rejected from the arguments alone", () => {
   assert.throws(() => parseArgs(["--base", "--include-working-tree"]), /Missing value for --base/);
   assert.throws(() => parseArgs(["--scope", "branch", "--cwd", "--wait"]), /Missing value for --cwd/);
   assert.deepEqual(parseArgs(["--cwd", "/repo", "--wait", "--base", "main", "--include-working-tree"]),
-    { cwd: "/repo", scope: null, base: "main", includeWorkingTree: true });
+    { cwd: "/repo", scope: null, base: "main", includeWorkingTree: true, excludePaths: [] });
+  // Exclusions repeat, and are normalized as the fingerprint helper normalizes them.
+  assert.deepEqual(parseArgs(["--exclude-path", "vendor/", "--scope", "auto", "--exclude-path", "generated"]).excludePaths,
+    ["generated", "vendor"]);
+  assert.throws(() => parseArgs(["--exclude-path", "*.log"]), /--exclude-path/);
+  assert.throws(() => parseArgs(["--exclude-path"]), /Missing value for --exclude-path/);
 });
 
 test("no scope flags select the working tree, including before the first commit", async (t) => {
@@ -93,7 +98,7 @@ test("auto chooses the working tree only while local changes exist", async (t) =
   git(repo, "branch", "main");
   commitChange(repo, "changed\n");
   const clean = await resolveReviewScope({ cwd: repo, scope: "auto" });
-  assert.deepEqual([clean.scope, clean.scopeSource, clean.base, clean.baseRef], ["branch", "auto-clean-checkout", base, "refs/heads/main"]);
+  assert.deepEqual([clean.scope, clean.scopeSource, clean.base, clean.baseRef], ["branch", "auto-no-local-changes", base, "refs/heads/main"]);
   writeFileSync(path.join(repo, "untracked.txt"), "new\n");
   const dirty = await resolveReviewScope({ cwd: repo, scope: "auto" });
   assert.deepEqual([dirty.scope, dirty.scopeSource, dirty.arguments], ["working-tree", "auto-local-changes", ["--scope", "working-tree"]]);
@@ -116,13 +121,13 @@ test("auto sees local changes that Git status is configured to hide inside submo
   addSubmodule(library, inner, "inner");
   addSubmodule(repo, library, "lib");
   git(repo, "-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init", "--recursive");
-  const auto = async () => {
-    const resolved = await resolveReviewScope({ cwd: repo, scope: "auto" });
+  const auto = async (excludePaths = []) => {
+    const resolved = await resolveReviewScope({ cwd: repo, scope: "auto", excludePaths });
     return [resolved.scope, resolved.scopeSource];
   };
   const status = (...options) => git(repo, "status", "--porcelain=v1", "--untracked-files=all", ...options);
 
-  assert.deepEqual(await auto(), ["branch", "auto-clean-checkout"]);
+  assert.deepEqual(await auto(), ["branch", "auto-no-local-changes"]);
   for (const hidden of [path.join("lib", "local.txt"), path.join("lib", "inner", "local.txt")]) {
     writeFileSync(path.join(repo, hidden), "local\n");
     assert.equal(status(), "", `Git status hides ${hidden}`);
@@ -130,6 +135,8 @@ test("auto sees local changes that Git status is configured to hide inside submo
     // Branch scope would have been refused: its clean check sees the same change.
     const capture = await captureFingerprint({ cwd: repo, scope: "branch", base });
     assert.equal(capture.checkoutClean, false, hidden);
+    // A review that excludes the submodule has nothing to review in the working tree.
+    assert.deepEqual(await auto(["lib"]), ["branch", "auto-no-local-changes"], hidden);
     rmSync(path.join(repo, hidden));
   }
   // The nested change stays hidden even from a status told to ignore no submodule.
@@ -137,8 +144,44 @@ test("auto sees local changes that Git status is configured to hide inside submo
   assert.equal(status("--ignore-submodules=none"), "");
   assert.deepEqual(await auto(), ["working-tree", "auto-local-changes"]);
   rmSync(path.join(repo, "lib", "inner", "local.txt"));
-  assert.deepEqual(await auto(), ["branch", "auto-clean-checkout"]);
+  assert.deepEqual(await auto(), ["branch", "auto-no-local-changes"]);
   assert.equal((await captureFingerprint({ cwd: repo, scope: "branch", base })).checkoutClean, true);
+});
+
+test("auto never selects a working tree whose only changes the review excludes", async (t) => {
+  const repo = repository(t);
+  git(repo, "branch", "main");
+  commitChange(repo, "changed\n");
+  mkdirSync(path.join(repo, "generated"));
+  writeFileSync(path.join(repo, "generated", "output.txt"), "local\n");
+  const auto = async (excludePaths = []) => {
+    const resolved = await resolveReviewScope({ cwd: repo, scope: "auto", excludePaths });
+    // What the capture of that scope will report under the same exclusions.
+    const capture = resolved.scope === "working-tree"
+      ? await captureFingerprint({ cwd: repo, scope: "working-tree", excludePaths }) : null;
+    return [resolved.scope, resolved.scopeSource, capture?.hasChanges ?? null];
+  };
+  assert.deepEqual(await auto(), ["working-tree", "auto-local-changes", true]);
+  // Git status lists the change, but the review would have nothing to read there.
+  assert.notEqual(git(repo, "status", "--porcelain=v1", "--untracked-files=all"), "");
+  assert.deepEqual(await auto(["generated"]), ["branch", "auto-no-local-changes", null]);
+  const run = (...args) => spawnSync(process.execPath, [cli, "--scope", "auto", ...args], { cwd: repo, encoding: "utf8" });
+  assert.equal(JSON.parse(run("--exclude-path", "generated").stdout).scope, "branch");
+  assert.equal(JSON.parse(run().stdout).scope, "working-tree");
+  const rejected = run("--exclude-path", "../elsewhere");
+  assert.equal(rejected.status, 1);
+  assert.equal(rejected.stdout, "");
+  assert.match(rejected.stderr, /^resolve-scope: .*--exclude-path/);
+
+  // A change the review does not exclude selects the working tree again.
+  writeFileSync(path.join(repo, "other.txt"), "local\n");
+  assert.deepEqual(await auto(["generated"]), ["working-tree", "auto-local-changes", true]);
+  rmSync(path.join(repo, "other.txt"));
+  // The committed policy excludes as the flag does.
+  writeFileSync(path.join(repo, ".reviewignore"), "generated\n");
+  git(repo, "add", ".reviewignore");
+  git(repo, "commit", "-qm", "policy");
+  assert.deepEqual(await auto(), ["branch", "auto-no-local-changes", null]);
 });
 
 test("the default branch is origin/HEAD, then main, master or trunk with local before origin", async (t) => {

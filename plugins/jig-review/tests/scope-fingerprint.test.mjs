@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
+import fs, {
   chmodSync,
   existsSync,
   mkdirSync,
@@ -11,11 +11,12 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { runGit as runFingerprintGit } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
+import { captureFingerprint, runGit as runFingerprintGit } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 
 const fingerprintScript = fileURLToPath(new URL(
   "../skills/panel-review/scripts/scope-fingerprint.mjs",
@@ -384,4 +385,45 @@ test("fingerprint Git capture rejects stdout that never reaches end", async (t) 
       // The process may already have exited.
     }
   });
+});
+
+// The timeout only bounds a regression: the capture would then never settle.
+test("cancellation or a deadline that arrives while a file is hashed fails the capture with that reason", { timeout: 60_000 }, async (t) => {
+  const repo = makeRepository();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  writeFileSync(path.join(repo, "untracked.bin"), Buffer.alloc(4 * 1024 * 1024, 1));
+  const original = { createReadStream: fs.createReadStream, now: Date.now };
+  const restore = () => {
+    fs.createReadStream = original.createReadStream;
+    Date.now = original.now;
+    syncBuiltinESMExports();
+  };
+  t.after(restore);
+  // Runs `interrupt` as soon as the capture has opened a file to hash.
+  const duringHashing = (interrupt) => {
+    fs.createReadStream = (...args) => {
+      const stream = original.createReadStream(...args);
+      queueMicrotask(interrupt);
+      return stream;
+    };
+    syncBuiltinESMExports();
+  };
+
+  const controller = new AbortController();
+  const cancelled = Object.assign(new Error("capture cancelled by the test"), { cancelled: true });
+  duringHashing(() => controller.abort(cancelled));
+  await assert.rejects(
+    captureFingerprint({ cwd: repo, scope: "working-tree", signal: controller.signal }),
+    (error) => error === cancelled,
+  );
+  restore();
+
+  duringHashing(() => { Date.now = () => original.now() + 60 * 60 * 1000; });
+  await assert.rejects(
+    captureFingerprint({ cwd: repo, scope: "working-tree" }),
+    { timedOut: true, message: "fingerprint file hashing exceeded its deadline" },
+  );
+  restore();
+  // The repository is captured normally once nothing interrupts it.
+  assert.equal((await captureFingerprint({ cwd: repo, scope: "working-tree" })).complete, true);
 });

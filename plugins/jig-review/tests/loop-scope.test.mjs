@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { git, resolveScope } from "../skills/review-fix-loop/scripts/repository.mjs";
 import { parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
-import { resolveReviewScope } from "../skills/panel-review/scripts/resolve-scope.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), "jig-loop-scope-"));
@@ -88,19 +87,19 @@ test("automatic loop scope sees changes that Git status is configured to hide in
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all").toString(), "", "Git status hides the change");
   const result = await resolveScope(root, parseArgs([]));
   assert.equal(result.args.scope, "working-tree"); assert.equal(result.fingerprint.hasChanges, true);
+  // A loop that excludes the submodule has nothing to review there, so the
+  // branch's commit is reviewed instead of an empty working tree.
+  const excluded = await resolveScope(root, parseArgs(["--exclude-path", "lib"]));
+  assert.equal(excluded.args.scope, "branch"); assert.equal(excluded.fingerprint.hasChanges, true);
 });
 
-test("every loop scope option resolves to what panel-review resolves", async t => {
-  const { root, base, head } = fixture(t);
-  git(root, "update-ref", "refs/remotes/origin/trunk", base);
-  for (const state of ["clean", "dirty"]) {
-    if (state === "dirty") writeFileSync(path.join(root, "value"), "local\n");
-    for (const flags of [[], ["--scope", "branch"], ["--scope", "working-tree"], ["--base", head], ["--scope", "auto", "--base", base]]) {
-      const options = parseArgs(flags);
-      const shared = await resolveReviewScope({ cwd: root, scope: options.scope, base: options.base });
-      const { args } = await resolveScope(root, options);
-      assert.deepEqual([args.scope, args.base], [shared.scope, shared.base], `${state}: ${flags.join(" ")}`);
-      assert.equal(args.includeWorkingTree, shared.scope === "branch", "a loop's branch scope includes the working tree");
-    }
-  }
+test("automatic loop scope never selects a working tree whose only changes are excluded", async t => {
+  const { root, base } = fixture(t);
+  git(root, "update-ref", "refs/heads/main", base);
+  mkdirSync(path.join(root, "generated"));
+  writeFileSync(path.join(root, "generated", "output.txt"), "local\n");
+  assert.equal((await resolveScope(root, parseArgs([]))).args.scope, "working-tree");
+  const result = await resolveScope(root, parseArgs(["--exclude-path", "generated"]));
+  assert.equal(result.args.scope, "branch"); assert.equal(result.args.base, base);
+  assert.equal(result.fingerprint.hasChanges, true, "the branch's commit is reviewed");
 });
