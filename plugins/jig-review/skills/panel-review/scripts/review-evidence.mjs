@@ -343,13 +343,12 @@ class ReviewEvidence {
       }
       report = report.slice(0, coverage.index).trim();
     }
-    // A reply that holds nothing outside its coverage tags is no review, whether
-    // or not what the tags hold could be read as a statement. Statements are
-    // gone from the report by now, so a tag pair that ends it holds other text.
-    const tags = coverageTagsBefore(report, report.length);
-    if (!report || (tags && !report.slice(0, tags.index).trim())) {
-      throw new Error("Reviewer returned coverage without a review report.");
-    }
+    // A reply that holds nothing outside coverage tags is no review, whether or
+    // not what the tags hold could be read as a statement. Statements are gone
+    // from the report by now, so the tag pairs that end it hold other text.
+    let outside = report.length;
+    for (let tags = coverageTagsBefore(report, outside); tags; tags = coverageTagsBefore(report, outside)) outside = tags.index;
+    if (!report.slice(0, outside).trim()) throw new Error("Reviewer returned coverage without a review report.");
     const missing = [...this.receipts.keys()].filter((id) => !reviewed.has(id));
     const limited = invalid || missing.length > 0 || context.incomplete;
     if (requireComplete && limited) throw new Error("Structured review requires complete valid coverage receipts.");

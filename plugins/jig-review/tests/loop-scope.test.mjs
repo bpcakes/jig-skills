@@ -91,4 +91,8 @@ test("automatic loop scope sees changes that Git status is configured to hide in
   // branch's commit is reviewed instead of an empty working tree.
   const excluded = await resolveScope(root, parseArgs(["--exclude-path", "lib"]));
   assert.equal(excluded.args.scope, "branch"); assert.equal(excluded.fingerprint.hasChanges, true);
+  // A change Git status lists still selects the working tree when the loop
+  // excludes it, as it always has.
+  writeFileSync(path.join(root, "notes.txt"), "local\n");
+  assert.equal((await resolveScope(root, parseArgs(["--exclude-path", "lib", "--exclude-path", "notes.txt"]))).args.scope, "working-tree");
 });

@@ -82,29 +82,33 @@ async function resolveReviewScope(options) {
   const interrupted = (error) => Boolean(options.signal?.aborted || error.cancelled || error.timedOut);
   // Whether local changes select the working tree. Git's status decides for
   // everything it lists, as it always has. It can be configured to hide changes
-  // inside submodules, so when it reports nothing, or cannot say, the
-  // fingerprint helper's capture of the working tree answers for them, under
-  // the review's exclusions: a hidden change the review excludes must not
-  // select a working tree with nothing to review. The capture only adds a
-  // reason to select the working tree. When it fails or is incomplete, the
-  // working tree could not be reviewed as captured, so it is not selected, and
-  // the capture of the scope that is selected reports what is wrong.
+  // inside submodules, so when it lists nothing the fingerprint helper's
+  // capture of the working tree answers for those, under the review's
+  // exclusions: a hidden change the review excludes must not select a working
+  // tree with nothing to review. There the capture only adds a reason to select
+  // the working tree, so one that fails or is incomplete selects nothing, and
+  // the capture of the selected scope reports what is wrong. When status itself
+  // fails, the capture is the only answer there is: whatever it reports stands,
+  // and if it fails too the checkout could not be inspected at all.
   const hasLocalChanges = async () => {
+    let statusFailure = null;
     try {
       if ((await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])).length > 0) return true;
     } catch (error) {
       if (interrupted(error)) throw error;
       // Status too large to hold is itself evidence of local changes.
       if (error.outputLimit) return true;
+      statusFailure = error;
     }
     try {
       const capture = await captureFingerprint({
         cwd: repoRoot, scope: "working-tree", excludePaths: options.excludePaths,
         signal: options.signal ?? null, timeoutMs: Math.max(1, deadlineAt - Date.now()),
       });
-      return capture.complete && capture.hasChanges;
+      return capture.hasChanges && (capture.complete || statusFailure != null);
     } catch (error) {
       if (interrupted(error)) throw error;
+      if (statusFailure) throw statusFailure;
       return false;
     }
   };

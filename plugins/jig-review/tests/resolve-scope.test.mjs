@@ -152,7 +152,7 @@ test("auto sees local changes that Git status is configured to hide inside submo
   assert.equal((await captureFingerprint({ cwd: repo, scope: "branch", base })).checkoutClean, true);
 });
 
-test("a capture that cannot answer for hidden changes does not select the working tree", async (t) => {
+test("hidden changes need a complete capture, and a failed status leaves the capture to answer", async (t) => {
   const repo = repository(t);
   git(repo, "branch", "main");
   const library = repository(t);
@@ -170,13 +170,41 @@ test("a capture that cannot answer for hidden changes does not select the workin
   const unpopulated = await resolveReviewScope({ cwd: clone, scope: "auto" });
   assert.deepEqual([unpopulated.scope, unpopulated.scopeSource], ["branch", "auto-no-local-changes"]);
 
-  // A submodule Git cannot open makes status fail. The capture is asked
-  // instead, and records the submodule as an issue.
+  // A submodule Git cannot open makes status fail. The capture is then the
+  // only answer there is, and what it could not inspect counts as a change.
   writeFileSync(path.join(repo, "lib", ".git"), "gitdir: /nowhere\n");
   assert.throws(() => git(repo, "status", "--porcelain=v1"), /not a git repository|does not point to a valid repository/i);
-  const broken = await resolveReviewScope({ cwd: repo, scope: "auto" });
-  assert.deepEqual([broken.scope, broken.scopeSource], ["branch", "auto-no-local-changes"]);
   assert.equal((await captureFingerprint({ cwd: repo, scope: "working-tree" })).complete, false);
+  const broken = await resolveReviewScope({ cwd: repo, scope: "auto" });
+  assert.deepEqual([broken.scope, broken.scopeSource], ["working-tree", "auto-local-changes"]);
+  // A change that status would have listed is not lost with it.
+  writeFileSync(path.join(repo, "tracked.txt"), "local\n");
+  assert.equal((await resolveReviewScope({ cwd: repo, scope: "auto" })).scope, "working-tree");
+});
+
+test("a checkout that neither status nor the capture can inspect fails the resolution", (t) => {
+  const repo = repository(t);
+  git(repo, "branch", "main");
+  const bin = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-resolve-scope-git-")));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
+  const realGit = execFileSync("/bin/sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+  writeFileSync(path.join(bin, "git"), [
+    "#!/bin/sh",
+    'for argument in "$@"; do',
+    "  if [ \"$argument\" = status ]; then echo 'fatal: status unavailable' >&2; exit 128; fi",
+    "done",
+    `exec '${realGit}' "$@"`,
+    "",
+  ].join("\n"), { mode: 0o755 });
+  const run = (...args) => spawnSync(process.execPath, [cli, ...args], {
+    cwd: repo, encoding: "utf8", env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+  });
+  const auto = run("--scope", "auto");
+  assert.equal(auto.status, 1);
+  assert.equal(auto.stdout, "");
+  assert.equal(auto.stderr, "resolve-scope: git status failed: fatal: status unavailable\n");
+  // A scope that needs no such inspection still resolves.
+  assert.equal(JSON.parse(run("--scope", "branch").stdout).scope, "branch");
 });
 
 test("auto follows Git status for every change it lists, excluded or not", async (t) => {

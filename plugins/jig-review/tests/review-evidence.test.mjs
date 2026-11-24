@@ -567,6 +567,9 @@ test("a reply that holds nothing outside its coverage tags is not a review", (t)
     `<review-coverage>pages 1 to 3</review-coverage>\n${block}`,
     // A reply wrapped whole in the tags cannot be told from an unreadable statement.
     `<review-coverage>- [high] [b.js:2] A finding\n${statement}</review-coverage>`,
+    // However many tag pairs the reply is made of.
+    "<review-coverage>pages 1 to 3</review-coverage>\n<review-coverage>all of them</review-coverage>",
+    `<review-coverage>pages 1 to 3</review-coverage><review-coverage>all of them</review-coverage>\n${block}`,
   ]) {
     assert.throws(() => evidence.annotateReport(reply, context), /Reviewer returned coverage without a review report/);
     assert.throws(() => evidence.structuredReport(reply, context), /Reviewer returned coverage without a review report/);
