@@ -5,7 +5,8 @@
 // here once, rather than re-derived from prose on every run.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { runGit } from "./scope-fingerprint.mjs";
+import { readOptionValue } from "./review-options.mjs";
+import { checkoutHasChanges, runGit } from "./scope-fingerprint.mjs";
 import { installSignalCancellation } from "./signal-cancellation.mjs";
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
@@ -27,9 +28,7 @@ function parseArgs(argv) {
     }
     // Accepted for compatibility; it selects nothing.
     if (argument === "--wait") continue;
-    const value = argv[index + 1];
-    if (!value) throw new Error(`Missing value for ${argument}`);
-    options[argument.slice(2)] = value;
+    options[argument.slice(2)] = readOptionValue(argv, index, argument);
     index += 1;
   }
   return validate(options);
@@ -75,9 +74,14 @@ async function resolveReviewScope(options) {
       throw error;
     }
   };
+  // Git's status answers at once for the usual case. It can be configured to
+  // hide changes inside submodules, so a status that reports nothing is checked
+  // against the fingerprint helper's own inspection: the clean check that
+  // committed-only branch scope would then have to pass.
   const hasLocalChanges = async () => {
     try {
-      return (await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])).length > 0;
+      if ((await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])).length > 0) return true;
+      return await checkoutHasChanges(repoRoot, headOid, deadlineAt, options.signal ?? null);
     } catch (error) {
       // Status too large to hold is itself evidence of local changes.
       if (error.outputLimit) return true;

@@ -405,8 +405,10 @@ async function startSignalledAdapter(t) {
     "high",
     "--expected-fingerprint",
     expectedFingerprint,
+    // Well past the waits below, so the adapter's own deadline never stops the
+    // provider before the test has signalled it.
     "--timeout-ms",
-    "5000",
+    "60000",
   ], {
     env: {
       ...process.env,
@@ -422,7 +424,10 @@ async function startSignalledAdapter(t) {
     if (child.exitCode == null && child.signalCode == null) child.kill("SIGKILL");
   });
 
-  const deadlineAt = Date.now() + 3_000;
+  // Adapter start-up, fingerprinting, context capture, and two Node processes
+  // starting. The loop ends as soon as both files exist; the budget only bounds
+  // a run that would never get there, with room for a loaded host.
+  const deadlineAt = Date.now() + 20_000;
   while (!existsSync(capturePath) || !existsSync(readyPath)) {
     if (Date.now() >= deadlineAt) throw new Error("fake Cursor did not receive the prompt");
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -432,7 +437,7 @@ async function startSignalledAdapter(t) {
   assert.equal(path.dirname(capture.promptDirectory), adapterTemporary);
   // Resolves with what the provider saw when the adapter told it to stop.
   const providerStopped = async () => {
-    const stopDeadlineAt = Date.now() + 3_000;
+    const stopDeadlineAt = Date.now() + 10_000;
     while (!existsSync(stoppedPath) || !readFileSync(stoppedPath, "utf8")) {
       if (Date.now() >= stopDeadlineAt) throw new Error("the provider was not told to stop");
       await new Promise((resolve) => setTimeout(resolve, 5));

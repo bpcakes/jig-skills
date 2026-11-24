@@ -1,3 +1,4 @@
+import "./fixtures/no-session-marker.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
@@ -6,10 +7,6 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_MAX_ROUNDS, MAX_ROUNDS, parseArgs } from "../skills/review-fix-loop/scripts/loop-options.mjs";
-
-// Inside a Claude Code session the command adds a note about an omitted --host;
-// tests of other behavior run it as a plain shell would.
-const { CLAUDECODE: _sessionMarker, ...plainEnvironment } = process.env;
 
 test("defaults resolve auto scope, all severities, no implicit repair cap and balanced native reviews", () => {
   const o = parseArgs([]);
@@ -67,22 +64,22 @@ test("entrypoint works through a symlink", t => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const link = path.join(dir, "loop.mjs");
   symlinkSync(fileURLToPath(new URL("../skills/review-fix-loop/scripts/loop-options.mjs", import.meta.url)), link);
-  assert.equal(JSON.parse(execFileSync(process.execPath, [link], { env: plainEnvironment, encoding: "utf8" })).maxRounds, null);
+  assert.equal(JSON.parse(execFileSync(process.execPath, [link], { encoding: "utf8" })).maxRounds, null);
 });
 test("an omitted host inside a Claude Code session earns the loop options a note beside the unchanged result", () => {
   const cli = fileURLToPath(new URL("../skills/review-fix-loop/scripts/loop-options.mjs", import.meta.url));
   const run = (args, env) => spawnSync(process.execPath, [cli, ...args], { env, encoding: "utf8" });
-  const session = { ...plainEnvironment, CLAUDECODE: "1" };
+  const session = { ...process.env, CLAUDECODE: "1" };
 
   const unnamed = run([], session);
   assert.equal(unnamed.status, 0);
   assert.equal(unnamed.stderr, "loop-options: note: CLAUDECODE is set and --host was not given, so the Codex host is assumed. Pass --host claude if Claude Code is running this skill.\n");
   // The marker never chooses the host: a Codex session started from a Claude Code shell inherits it.
-  assert.equal(unnamed.stdout, run([], plainEnvironment).stdout);
+  assert.equal(unnamed.stdout, run([], process.env).stdout);
   assert.equal(JSON.parse(unnamed.stdout).review.host, "codex");
   assert.deepEqual(JSON.parse(unnamed.stdout).review.reviewers, ["codex"]);
   for (const host of ["claude", "codex"]) assert.equal(run(["--host", host], session).stderr, "", host);
-  assert.equal(run([], plainEnvironment).stderr, "");
+  assert.equal(run([], process.env).stderr, "");
   // A rejected command reports only its error.
   assert.equal(run(["--scope", "nowhere"], session).stderr, "loop-options: --scope must be auto, branch, or working-tree.\n");
 });

@@ -55,42 +55,37 @@ function singleLine(text) {
     (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
-// The block whose closing tag is the last text before `end`, paired with the
-// last opening tag before it.
-function coverageBlockBefore(report, end) {
+// The coverage statement whose closing tag is the last text before `end`: that
+// tag paired with the last opening tag before it, when everything between the
+// two is JSON. Anything else between them is the report's own text, where the
+// tags are mentioned in prose or in quoted repository code, or where a reviewer
+// left out its opening tag, so no statement ends there and nothing is removed.
+function coverageStatementBefore(report, end) {
   while (end > 0 && /\s/.test(report[end - 1])) end -= 1;
   const close = end - COVERAGE_CLOSE.length;
   if (close < 0 || !report.startsWith(COVERAGE_CLOSE, close)) return null;
   const open = report.lastIndexOf(COVERAGE_OPEN, close);
   if (open < 0) return null;
-  return { index: open, body: report.slice(open + COVERAGE_OPEN.length, close).trim() };
-}
-
-function isJson(text) {
   try {
-    JSON.parse(text);
-    return true;
+    return { index: open, value: JSON.parse(report.slice(open + COVERAGE_OPEN.length, close)) };
   } catch {
-    return false;
+    return null;
   }
 }
 
-// The coverage block ends the report. Pair the final closing tag with the last
-// opening tag before it: a report may mention the tag earlier, in its own prose
-// or in quoted repository text, and that text is part of the report.
-// A reviewer states its coverage once. Blocks of JSON that end where the final
-// block begins are further statements, not report text: they leave the report
-// with it, and `repeated` tells the caller that no statement counts.
+// The coverage statement ends the report. A reviewer states its coverage once:
+// statements that end where the final one begins leave the report with it, and
+// `repeated` tells the caller that none of them counts.
 function trailingCoverage(report) {
-  const last = coverageBlockBefore(report, report.length);
+  const last = coverageStatementBefore(report, report.length);
   if (!last) return null;
   let index = last.index;
   for (;;) {
-    const earlier = coverageBlockBefore(report, index);
-    if (!earlier || !isJson(earlier.body)) break;
+    const earlier = coverageStatementBefore(report, index);
+    if (!earlier) break;
     index = earlier.index;
   }
-  return { index, body: last.body, repeated: index !== last.index };
+  return { index, value: last.value, repeated: index !== last.index };
 }
 
 // Each page fits ordinary Read tool line/size limits, including very long diff
@@ -330,16 +325,14 @@ class ReviewEvidence {
     const reviewed = new Set();
     let invalid = !coverage || coverage.repeated;
     if (coverage) {
-      try {
-        const entries = coverage.repeated ? [] : JSON.parse(coverage.body).reviewed;
-        if (!Array.isArray(entries)) throw new Error("Missing reviewed pages");
-        for (const entry of entries) {
-          if (typeof entry?.id !== "string" || typeof entry.receipt !== "string"
-              || this.receipts.get(entry.id) !== entry.receipt || reviewed.has(entry.id)) {
-            invalid = true;
-          } else reviewed.add(entry.id);
-        }
-      } catch { invalid = true; }
+      const entries = coverage.repeated ? [] : coverage.value?.reviewed;
+      if (!Array.isArray(entries)) invalid = true;
+      else for (const entry of entries) {
+        if (typeof entry?.id !== "string" || typeof entry.receipt !== "string"
+            || this.receipts.get(entry.id) !== entry.receipt || reviewed.has(entry.id)) {
+          invalid = true;
+        } else reviewed.add(entry.id);
+      }
       report = report.slice(0, coverage.index).trim();
     }
     if (!report) throw new Error("Reviewer returned coverage without a review report.");

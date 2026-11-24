@@ -49,6 +49,9 @@ test("flag conflicts are rejected from the arguments alone", () => {
   assert.throws(() => parseArgs(["--reviewers", "claude"]), /Unsupported argument: --reviewers/);
   assert.throws(() => parseArgs(["--scope", "branch", "--scope", "auto"]), /Duplicate argument: --scope/);
   assert.throws(() => parseArgs(["--base"]), /Missing value for --base/);
+  // The next flag is not the value that was left out.
+  assert.throws(() => parseArgs(["--base", "--include-working-tree"]), /Missing value for --base/);
+  assert.throws(() => parseArgs(["--scope", "branch", "--cwd", "--wait"]), /Missing value for --cwd/);
   assert.deepEqual(parseArgs(["--cwd", "/repo", "--wait", "--base", "main", "--include-working-tree"]),
     { cwd: "/repo", scope: null, base: "main", includeWorkingTree: true });
 });
@@ -96,6 +99,46 @@ test("auto chooses the working tree only while local changes exist", async (t) =
   assert.deepEqual([dirty.scope, dirty.scopeSource, dirty.arguments], ["working-tree", "auto-local-changes", ["--scope", "working-tree"]]);
   // An explicit branch scope is not changed by local edits; the fingerprint owns the clean check.
   assert.equal((await resolveReviewScope({ cwd: repo, scope: "branch" })).scope, "branch");
+});
+
+test("auto sees local changes that Git status is configured to hide inside submodules", async (t) => {
+  const repo = repository(t);
+  const base = git(repo, "rev-parse", "HEAD");
+  git(repo, "branch", "main");
+  const inner = repository(t);
+  const library = repository(t);
+  const addSubmodule = (cwd, source, name) => {
+    git(cwd, "-c", "protocol.file.allow=always", "submodule", "add", "-q", source, name);
+    // Each repository hides the changes inside its own submodule.
+    git(cwd, "config", "-f", ".gitmodules", `submodule.${name}.ignore`, "dirty");
+    git(cwd, "commit", "-qam", name);
+  };
+  addSubmodule(library, inner, "inner");
+  addSubmodule(repo, library, "lib");
+  git(repo, "-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init", "--recursive");
+  const auto = async () => {
+    const resolved = await resolveReviewScope({ cwd: repo, scope: "auto" });
+    return [resolved.scope, resolved.scopeSource];
+  };
+  const status = (...options) => git(repo, "status", "--porcelain=v1", "--untracked-files=all", ...options);
+
+  assert.deepEqual(await auto(), ["branch", "auto-clean-checkout"]);
+  for (const hidden of [path.join("lib", "local.txt"), path.join("lib", "inner", "local.txt")]) {
+    writeFileSync(path.join(repo, hidden), "local\n");
+    assert.equal(status(), "", `Git status hides ${hidden}`);
+    assert.deepEqual(await auto(), ["working-tree", "auto-local-changes"], hidden);
+    // Branch scope would have been refused: its clean check sees the same change.
+    const capture = await captureFingerprint({ cwd: repo, scope: "branch", base });
+    assert.equal(capture.checkoutClean, false, hidden);
+    rmSync(path.join(repo, hidden));
+  }
+  // The nested change stays hidden even from a status told to ignore no submodule.
+  writeFileSync(path.join(repo, "lib", "inner", "local.txt"), "local\n");
+  assert.equal(status("--ignore-submodules=none"), "");
+  assert.deepEqual(await auto(), ["working-tree", "auto-local-changes"]);
+  rmSync(path.join(repo, "lib", "inner", "local.txt"));
+  assert.deepEqual(await auto(), ["branch", "auto-clean-checkout"]);
+  assert.equal((await captureFingerprint({ cwd: repo, scope: "branch", base })).checkoutClean, true);
 });
 
 test("the default branch is origin/HEAD, then main, master or trunk with local before origin", async (t) => {

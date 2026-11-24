@@ -480,8 +480,8 @@ function attestedStore(t) {
   evidence.required = true;
   const context = evidence.finish({ repoRoot: "/repo", label: "test" }, { limitations: [] });
   const [{ id, receipt }] = pages(evidence);
-  return { evidence, context, receipt,
-    block: `<review-coverage>${JSON.stringify({ reviewed: [{ id, receipt }] })}</review-coverage>` };
+  const statement = JSON.stringify({ reviewed: [{ id, receipt }] });
+  return { evidence, context, receipt, statement, block: `<review-coverage>${statement}</review-coverage>` };
 }
 
 test("a report that mentions the coverage tag keeps every finding and its attestation", (t) => {
@@ -527,6 +527,32 @@ test("coverage stated more than once attests nothing and leaves no block in the 
     const report = evidence.annotateReport(`${findings}\n${block}`, context);
     assert.ok(report.startsWith(`${findings}\n\nEvidence coverage: reviewer-attested; 1/1`), report);
     assert.doesNotMatch(report, new RegExp(receipt));
+  }
+});
+
+test("a closing tag that ends no coverage statement leaves the whole report in place", (t) => {
+  const { evidence, context, statement } = attestedStore(t);
+  const finding = "- [high] [b.js:2] A finding that must survive";
+  for (const report of [
+    // The reviewer mentioned the tag, then left it out of its own statement.
+    `- [low] [a.js:1] The <review-coverage> tag is loose\n${finding}\n${statement}</review-coverage>`,
+    `- [low] [a.js:1] It reads <review-coverage>{"reviewed":[]} first\n${finding}\n${statement}</review-coverage>`,
+    // Tags around text that is not JSON are not a statement either.
+    `${finding}\n<review-coverage>pages 1 to 3</review-coverage>`,
+    `${finding}\n<review-coverage>{"reviewed":[}</review-coverage>`,
+    `${finding}\n<review-coverage></review-coverage>`,
+  ]) {
+    const annotated = evidence.annotateReport(report, context);
+    assert.ok(annotated.startsWith(`${report}\n\nEvidence coverage: limited; 0/1 pages`), annotated);
+    assert.match(annotated, /Coverage receipt missing or invalid/);
+    assert.throws(() => evidence.structuredReport(report, context), /complete valid coverage receipts/);
+  }
+  // JSON between the tags is a statement whatever it says: it leaves the report
+  // and, without a list of reviewed pages, attests nothing.
+  for (const body of ["[]", "null", '"all pages"', '{"reviewed":"all"}', " {}\n"]) {
+    const annotated = evidence.annotateReport(`${finding}\n<review-coverage>${body}</review-coverage>`, context);
+    assert.ok(annotated.startsWith(`${finding}\n\nEvidence coverage: limited; 0/1 pages`), annotated);
+    assert.match(annotated, /Coverage receipt missing or invalid/);
   }
 });
 

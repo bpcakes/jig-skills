@@ -1,3 +1,4 @@
+import "./fixtures/no-session-marker.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync, utimesSync } from "node:fs";
@@ -16,9 +17,6 @@ import { discoverValidation, validateContract } from "../skills/review-fix-loop/
 import { defaultValidationSandbox } from "../skills/review-fix-loop/scripts/validation-sandbox.mjs";
 
 const stub = fileURLToPath(new URL("./fixtures/loop-provider.mjs", import.meta.url));
-// Inside a Claude Code session the loop's commands add a note about an omitted
-// --host; tests of other behavior run them as a plain shell would.
-const { CLAUDECODE: _sessionMarker, ...plainEnvironment } = process.env;
 const cli = fileURLToPath(new URL("../skills/review-fix-loop/scripts/review-fix-loop.mjs", import.meta.url));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function isolatedAvailable(t) {
@@ -202,7 +200,7 @@ test("external repair adapter errors retain their cause after partial workspace 
 });
 
 test("CLI init notes an omitted host inside a Claude Code session, beside a created run only", t => {
-  const session = { ...plainEnvironment, CLAUDECODE: "1" };
+  const session = { ...process.env, CLAUDECODE: "1" };
   const init = (f, env, ...args) => {
     const contractFile = path.join(f.directory, "contract.json");
     writeFileSync(contractFile, JSON.stringify(f.contract));
@@ -221,7 +219,7 @@ test("CLI init notes an omitted host inside a Claude Code session, beside a crea
     assert.equal(refused.status, 1); assert.equal(refused.stdout, "");
     assert.equal(refused.stderr, `review-fix-loop: Resume the active run: ${run.directory}\n`);
   }
-  for (const [env, ...args] of [[session, "--host", "claude", "--claude-launcher", "none"], [session, "--host", "codex", "--codex-launcher", "none"], [plainEnvironment, "--codex-launcher", "none"]]) {
+  for (const [env, ...args] of [[session, "--host", "claude", "--claude-launcher", "none"], [session, "--host", "codex", "--codex-launcher", "none"], [process.env, "--codex-launcher", "none"]]) {
     const named = init(fixture(t), env, ...args);
     assert.equal(named.status, 0, named.stderr); assert.equal(named.stderr, "", args.join(" "));
   }
@@ -230,7 +228,7 @@ test("CLI init notes an omitted host inside a Claude Code session, beside a crea
 for (const mode of ["minimal", "balanced", "comprehensive"]) test(`CLI ${mode} repair policy survives native assignment boundaries and resume`, async t => {
   const f = fixture(t), contractFile = path.join(f.directory, "contract.json");
   writeFileSync(contractFile, JSON.stringify(f.contract));
-  const initial = JSON.parse(execFileSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--fix-mode", mode], { env: plainEnvironment, encoding: "utf8" }));
+  const initial = JSON.parse(execFileSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--fix-mode", mode], { encoding: "utf8" }));
   assert.equal(initial.fixMode, mode);
   const started = loadRun(initial.run), policy = started.fixPolicy;
   assert.ok(policy.length > 0);

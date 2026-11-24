@@ -6,17 +6,17 @@ Run `node <skill>/scripts/review-fix-loop.mjs <command>` on Linux or macOS with 
 
 ```sh
 node <skill>/scripts/review-fix-loop.mjs plan-validation --cwd /repository
-node <skill>/scripts/review-fix-loop.mjs init --cwd /repository --contract /tmp/task-contract.json
+node <skill>/scripts/review-fix-loop.mjs init --cwd /repository --contract <artifacts>/task-contract.json
 node <skill>/scripts/review-fix-loop.mjs run --run /repository/.git/jig/review-fix/<id>
 node <skill>/scripts/review-fix-loop.mjs advance --run /repository/.git/jig/review-fix/<id>
 node <skill>/scripts/review-fix-loop.mjs status --run /repository/.git/jig/review-fix/<id>
 ```
 
-Always use the returned run path. Runs, active references, and controller locks live under the checkout-specific Git directory (`git rev-parse --absolute-git-dir`) in `jig/review-fix/`. Only one active run may exist per checkout; the main checkout and existing linked worktrees may run independently. Older runs in the common Git directory remain resumable at their original paths; an unfinished older run for the same checkout still prevents a new run. `run` drives the executable loop until a terminal outcome, an unanswered contract question, or a native assignment requiring a result. `advance` performs one controller step; a discovery step may prepare and launch several independent reviews. Neither resets rounds or provider attempts. `status` reads recorded state; a terminal status describes the recorded fingerprint, not later checkout changes.
+`<artifacts>` is a private directory outside the checkout, such as one created with `mktemp -d`. Always use the returned run path. Runs, active references, and controller locks live under the checkout-specific Git directory (`git rev-parse --absolute-git-dir`) in `jig/review-fix/`. Only one active run may exist per checkout; the main checkout and existing linked worktrees may run independently. Older runs in the common Git directory remain resumable at their original paths; an unfinished older run for the same checkout still prevents a new run. `run` drives the executable loop until a terminal outcome, an unanswered contract question, or a native assignment requiring a result. `advance` performs one controller step; a discovery step may prepare and launch several independent reviews. Neither resets rounds or provider attempts. `status` reads recorded state; a terminal status describes the recorded fingerprint, not later checkout changes.
 
 `--cwd` must identify the user's checkout pinned before review or initialization. The controller treats whichever repository it receives as its root; it cannot determine whether the caller silently created a temporary worktree first. Check imported handoffs and resumed repair assignments against the pinned checkout before editing. Shared Git history or a controller-supplied path does not authorize relocating repairs.
 
-Automatic branch-base detection checks `refs/remotes/origin/HEAD`, then `main`, `master`, and `trunk`, preferring the local branch over `origin/<name>` for each name. Explicit bases remain binding.
+The controller resolves scope and base with panel-review's resolver, so the same flags select the same scope and base in both skills; a loop's branch scope always includes the working tree. `--scope auto` selects working-tree scope when the checkout has local changes, including changes inside initialized submodules that Git's status is configured to hide, and branch scope otherwise. Automatic branch-base detection checks `refs/remotes/origin/HEAD`, then `main`, `master`, and `trunk`, preferring the local branch over `origin/<name>` for each name. The checked-out branch alone is compared with its `origin/<name>` when that exists, so its unpushed commits are reviewed. Explicit bases remain binding.
 
 Commit mode defaults to `--commit-mode per-round`: checkpoint included working changes, append a commit for each completed repair round, and converge over one fixed base-to-tip range. Use `--commit-mode none` to preserve working changes and the index without committing. Read [commit publication](commits.md) before using the default mode.
 
@@ -29,7 +29,7 @@ Capability checks run before allocation. On an unsupported repository or platfor
 For authorized follow-up repairs, initialize with the panel review's [handoff artifact](../../panel-review/references/review-handoff.md):
 
 ```sh
-node <skill>/scripts/review-fix-loop.mjs init --cwd /repository --contract /tmp/task-contract.json --from-review /tmp/review/handoff.json
+node <skill>/scripts/review-fix-loop.mjs init --cwd /repository --contract <artifacts>/task-contract.json --from-review <artifacts>/handoff.json
 ```
 
 Scope, pinned base, and exclusions inherit from the handoff; omit scope overrides. Conflicting overrides, malformed evidence, or a changed source/index are rejected before run allocation. The original capture is checked in its original mode; committed-only branch captures must still describe a clean checkout before the repair run pins its selected commit mode's scope. All ordinary capability and preservation checks still apply. Initialization copies the handoff into an immutable manifest, so resuming does not depend on the original temporary file.

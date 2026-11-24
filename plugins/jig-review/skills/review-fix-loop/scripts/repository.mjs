@@ -5,6 +5,7 @@ import path from "node:path";
 import { contentHash, copyBlob, hash, json, readBlob, readJSON, storeBlob, storeFile } from "./run-store.mjs";
 import { sameFile, streamFile, withRegularFile } from "./file-content.mjs";
 import { captureFingerprint } from "../../panel-review/scripts/scope-fingerprint.mjs";
+import { resolveReviewScope } from "../../panel-review/scripts/resolve-scope.mjs";
 import { isExcludedPath } from "../../panel-review/scripts/review-exclusions.mjs";
 import { localGitEnvironment } from "../../panel-review/scripts/git-environment.mjs";
 import { gitStdio } from "../../panel-review/scripts/git-lease.mjs";
@@ -370,14 +371,10 @@ export function snapshot(root, store, { maxBytes = DEFAULT_STORAGE.maxSourceByte
 }
 export async function resolveScope(cwd, options) {
   const root = repositoryRoot(cwd);
-  let scope = options.scope, base = options.base;
-  if (scope === "auto") scope = !maybeGit(root, "rev-parse", "--verify", "HEAD") || git(root, "status", "--porcelain=v1", "--untracked-files=all").length ? "working-tree" : "branch";
-  if (scope === "branch" && !base) {
-    base = maybeGit(root, "symbolic-ref", "refs/remotes/origin/HEAD");
-    if (!base) base = ["main", "master", "trunk"].flatMap(name => [`refs/heads/${name}`, `refs/remotes/origin/${name}`])
-      .find(ref => maybeGit(root, "rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`));
-    if (!base) throw new Error("Cannot infer branch base; supply --base or --scope working-tree.");
-  }
+  // Panel-review's resolver decides the scope and the base, so the same flags
+  // select the same scope and base in both skills. A loop's branch scope
+  // always includes the working tree.
+  const { scope, base } = await resolveReviewScope({ cwd: root, scope: options.scope, base: options.base });
   const args = { cwd: root, scope, base, includeWorkingTree: scope === "branch", excludePaths: options.review.excludePaths, timeoutMs: 300000 };
   const fingerprint = await captureFingerprint(args);
   assertCompleteFingerprint(fingerprint);

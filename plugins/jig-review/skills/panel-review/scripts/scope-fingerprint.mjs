@@ -975,6 +975,14 @@ async function workingTreeFingerprint(
   };
 }
 
+// Whether the checkout differs from HEAD anywhere, with every initialized
+// submodule inspected and nothing excluded: what committed-only branch scope
+// requires to be false. `git status` cannot answer this, because a repository
+// or one of its submodules may be configured to hide changes inside submodules.
+async function checkoutHasChanges(repoRoot, headOid, deadlineAt, signal = null) {
+  return (await workingTreeFingerprint(repoRoot, headOid, new Set(), deadlineAt, signal)).hasChanges;
+}
+
 async function branchFingerprint(
   repoRoot,
   headOid,
@@ -1141,6 +1149,7 @@ if (isMain) {
 
 export {
   captureFingerprint,
+  checkoutHasChanges,
   parseArgs,
   runGit,
 };
