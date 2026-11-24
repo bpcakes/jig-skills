@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -91,15 +91,4 @@ test("automatic loop scope sees changes that Git status is configured to hide in
   // branch's commit is reviewed instead of an empty working tree.
   const excluded = await resolveScope(root, parseArgs(["--exclude-path", "lib"]));
   assert.equal(excluded.args.scope, "branch"); assert.equal(excluded.fingerprint.hasChanges, true);
-});
-
-test("automatic loop scope never selects a working tree whose only changes are excluded", async t => {
-  const { root, base } = fixture(t);
-  git(root, "update-ref", "refs/heads/main", base);
-  mkdirSync(path.join(root, "generated"));
-  writeFileSync(path.join(root, "generated", "output.txt"), "local\n");
-  assert.equal((await resolveScope(root, parseArgs([]))).args.scope, "working-tree");
-  const result = await resolveScope(root, parseArgs(["--exclude-path", "generated"]));
-  assert.equal(result.args.scope, "branch"); assert.equal(result.args.base, base);
-  assert.equal(result.fingerprint.hasChanges, true, "the branch's commit is reviewed");
 });

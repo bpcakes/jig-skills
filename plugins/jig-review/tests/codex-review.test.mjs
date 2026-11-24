@@ -447,12 +447,21 @@ test("cancelling a review leaves Codex its private home until Codex has stopped"
     controller.abort(new Error("test ended"));
     await review.catch(() => {});
   });
+  // The capture file exists before the provider has finished writing it.
+  const capture = () => {
+    try {
+      return f.captured();
+    } catch {
+      return null;
+    }
+  };
   const deadlineAt = Date.now() + 20_000;
-  while (!existsSync(f.capturePath)) {
+  let started;
+  while (!(started = capture())) {
     if (Date.now() >= deadlineAt) throw new Error("fake Codex did not start its session");
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  const home = f.captured().home;
+  const home = started.home;
   assert.equal(home.authResolves, true);
 
   controller.abort(Object.assign(new Error("review cancelled"), { cancelled: true }));

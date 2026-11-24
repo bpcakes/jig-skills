@@ -344,8 +344,9 @@ class ReviewEvidence {
       report = report.slice(0, coverage.index).trim();
     }
     // A reply that holds nothing outside its coverage tags is no review, whether
-    // or not what the tags hold could be read as a statement.
-    const tags = coverage ? null : coverageTagsBefore(report, report.length);
+    // or not what the tags hold could be read as a statement. Statements are
+    // gone from the report by now, so a tag pair that ends it holds other text.
+    const tags = coverageTagsBefore(report, report.length);
     if (!report || (tags && !report.slice(0, tags.index).trim())) {
       throw new Error("Reviewer returned coverage without a review report.");
     }

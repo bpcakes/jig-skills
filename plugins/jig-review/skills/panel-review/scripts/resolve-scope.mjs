@@ -10,7 +10,7 @@ import { readOptionValue } from "./review-options.mjs";
 import { captureFingerprint, runGit } from "./scope-fingerprint.mjs";
 import { installSignalCancellation } from "./signal-cancellation.mjs";
 
-// The fingerprint helper's own budget: deciding `auto` runs one capture.
+// The fingerprint helper's own budget: deciding `auto` may run one capture.
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const SCOPES = new Set(["auto", "working-tree", "branch"]);
 const FLAGS = new Set(["--cwd", "--scope", "--base", "--include-working-tree", "--exclude-path", "--wait"]);
@@ -78,15 +78,36 @@ async function resolveReviewScope(options) {
       throw error;
     }
   };
-  // Whether working-tree scope would have anything to review: the fingerprint
-  // helper's own answer for that scope, under the exclusions the review will
-  // use. `git status` cannot give it. It may be configured to hide changes
-  // inside submodules, which the capture inspects, and it lists changes the
-  // review excludes, which would select a working-tree review of nothing.
-  const hasReviewableLocalChanges = async () => (await captureFingerprint({
-    cwd: repoRoot, scope: "working-tree", excludePaths: options.excludePaths,
-    signal: options.signal ?? null, timeoutMs: Math.max(1, deadlineAt - Date.now()),
-  })).hasChanges;
+  // Cancellation and the deadline end the resolution wherever they arrive.
+  const interrupted = (error) => Boolean(options.signal?.aborted || error.cancelled || error.timedOut);
+  // Whether local changes select the working tree. Git's status decides for
+  // everything it lists, as it always has. It can be configured to hide changes
+  // inside submodules, so when it reports nothing, or cannot say, the
+  // fingerprint helper's capture of the working tree answers for them, under
+  // the review's exclusions: a hidden change the review excludes must not
+  // select a working tree with nothing to review. The capture only adds a
+  // reason to select the working tree. When it fails or is incomplete, the
+  // working tree could not be reviewed as captured, so it is not selected, and
+  // the capture of the scope that is selected reports what is wrong.
+  const hasLocalChanges = async () => {
+    try {
+      if ((await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])).length > 0) return true;
+    } catch (error) {
+      if (interrupted(error)) throw error;
+      // Status too large to hold is itself evidence of local changes.
+      if (error.outputLimit) return true;
+    }
+    try {
+      const capture = await captureFingerprint({
+        cwd: repoRoot, scope: "working-tree", excludePaths: options.excludePaths,
+        signal: options.signal ?? null, timeoutMs: Math.max(1, deadlineAt - Date.now()),
+      });
+      return capture.complete && capture.hasChanges;
+    } catch (error) {
+      if (interrupted(error)) throw error;
+      return false;
+    }
+  };
   // The checked-out branch as a full ref, or null on a detached HEAD.
   const currentBranch = async () => {
     try {
@@ -132,7 +153,7 @@ async function resolveReviewScope(options) {
     scopeSource = "base";
   } else if (scope === "auto") {
     // An unborn HEAD has no branch to compare.
-    const local = !headOid || await hasReviewableLocalChanges();
+    const local = !headOid || await hasLocalChanges();
     scope = local ? "working-tree" : "branch";
     scopeSource = local ? "auto-local-changes" : "auto-no-local-changes";
   }

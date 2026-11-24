@@ -143,12 +143,43 @@ test("auto sees local changes that Git status is configured to hide inside submo
   writeFileSync(path.join(repo, "lib", "inner", "local.txt"), "local\n");
   assert.equal(status("--ignore-submodules=none"), "");
   assert.deepEqual(await auto(), ["working-tree", "auto-local-changes"]);
+  // The command takes the review's exclusions for the same decision.
+  const run = (...args) => JSON.parse(spawnSync(process.execPath, [cli, "--scope", "auto", ...args], { cwd: repo, encoding: "utf8" }).stdout);
+  assert.equal(run().scope, "working-tree");
+  assert.equal(run("--exclude-path", "lib").scope, "branch");
   rmSync(path.join(repo, "lib", "inner", "local.txt"));
   assert.deepEqual(await auto(), ["branch", "auto-no-local-changes"]);
   assert.equal((await captureFingerprint({ cwd: repo, scope: "branch", base })).checkoutClean, true);
 });
 
-test("auto never selects a working tree whose only changes the review excludes", async (t) => {
+test("a capture that cannot answer for hidden changes does not select the working tree", async (t) => {
+  const repo = repository(t);
+  git(repo, "branch", "main");
+  const library = repository(t);
+  git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", library, "lib");
+  git(repo, "commit", "-qm", "lib");
+  // A clone whose submodule is registered but was never populated: nothing
+  // differs from HEAD, and the capture reports the submodule as an issue.
+  const clone = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-resolve-scope-clone-")));
+  t.after(() => rmSync(clone, { recursive: true, force: true }));
+  git(clone, "clone", "-q", repo, ".");
+  git(clone, "submodule", "--quiet", "init");
+  assert.equal(git(clone, "status", "--porcelain=v1", "--untracked-files=all"), "");
+  const capture = await captureFingerprint({ cwd: clone, scope: "working-tree" });
+  assert.deepEqual([capture.complete, capture.hasChanges], [false, true]);
+  const unpopulated = await resolveReviewScope({ cwd: clone, scope: "auto" });
+  assert.deepEqual([unpopulated.scope, unpopulated.scopeSource], ["branch", "auto-no-local-changes"]);
+
+  // A submodule Git cannot open makes status fail. The capture is asked
+  // instead, and records the submodule as an issue.
+  writeFileSync(path.join(repo, "lib", ".git"), "gitdir: /nowhere\n");
+  assert.throws(() => git(repo, "status", "--porcelain=v1"), /not a git repository|does not point to a valid repository/i);
+  const broken = await resolveReviewScope({ cwd: repo, scope: "auto" });
+  assert.deepEqual([broken.scope, broken.scopeSource], ["branch", "auto-no-local-changes"]);
+  assert.equal((await captureFingerprint({ cwd: repo, scope: "working-tree" })).complete, false);
+});
+
+test("auto follows Git status for every change it lists, excluded or not", async (t) => {
   const repo = repository(t);
   git(repo, "branch", "main");
   commitChange(repo, "changed\n");
@@ -156,32 +187,32 @@ test("auto never selects a working tree whose only changes the review excludes",
   writeFileSync(path.join(repo, "generated", "output.txt"), "local\n");
   const auto = async (excludePaths = []) => {
     const resolved = await resolveReviewScope({ cwd: repo, scope: "auto", excludePaths });
-    // What the capture of that scope will report under the same exclusions.
-    const capture = resolved.scope === "working-tree"
-      ? await captureFingerprint({ cwd: repo, scope: "working-tree", excludePaths }) : null;
-    return [resolved.scope, resolved.scopeSource, capture?.hasChanges ?? null];
+    return [resolved.scope, resolved.scopeSource];
   };
-  assert.deepEqual(await auto(), ["working-tree", "auto-local-changes", true]);
-  // Git status lists the change, but the review would have nothing to read there.
-  assert.notEqual(git(repo, "status", "--porcelain=v1", "--untracked-files=all"), "");
-  assert.deepEqual(await auto(["generated"]), ["branch", "auto-no-local-changes", null]);
+  assert.deepEqual(await auto(), ["working-tree", "auto-local-changes"]);
+  // A listed change selects the working tree even when the review excludes it.
+  // Branch scope is not the alternative: it reads its exclusions from the base,
+  // so it could review, and a loop could commit, what this checkout excludes.
+  assert.deepEqual(await auto(["generated"]), ["working-tree", "auto-local-changes"]);
+  writeFileSync(path.join(repo, ".reviewignore"), "generated\n");
+  git(repo, "add", ".reviewignore");
+  git(repo, "commit", "-qm", "policy");
+  assert.deepEqual(await auto(), ["working-tree", "auto-local-changes"]);
+
   const run = (...args) => spawnSync(process.execPath, [cli, "--scope", "auto", ...args], { cwd: repo, encoding: "utf8" });
-  assert.equal(JSON.parse(run("--exclude-path", "generated").stdout).scope, "branch");
-  assert.equal(JSON.parse(run().stdout).scope, "working-tree");
+  assert.equal(JSON.parse(run("--exclude-path", "generated").stdout).scope, "working-tree");
   const rejected = run("--exclude-path", "../elsewhere");
   assert.equal(rejected.status, 1);
   assert.equal(rejected.stdout, "");
   assert.match(rejected.stderr, /^resolve-scope: .*--exclude-path/);
 
-  // A change the review does not exclude selects the working tree again.
-  writeFileSync(path.join(repo, "other.txt"), "local\n");
-  assert.deepEqual(await auto(["generated"]), ["working-tree", "auto-local-changes", true]);
-  rmSync(path.join(repo, "other.txt"));
-  // The committed policy excludes as the flag does.
-  writeFileSync(path.join(repo, ".reviewignore"), "generated\n");
-  git(repo, "add", ".reviewignore");
-  git(repo, "commit", "-qm", "policy");
-  assert.deepEqual(await auto(), ["branch", "auto-no-local-changes", null]);
+  // With nothing listed, the capture is asked about hidden changes. A policy
+  // file it cannot read concerns the working tree alone, which is not selected.
+  rmSync(path.join(repo, "generated"), { recursive: true });
+  writeFileSync(path.join(repo, ".reviewignore"), "*.log\n");
+  git(repo, "commit", "-qam", "a policy the helpers reject");
+  await assert.rejects(captureFingerprint({ cwd: repo, scope: "working-tree" }), /\.reviewignore/);
+  assert.deepEqual(await auto(), ["branch", "auto-no-local-changes"]);
 });
 
 test("the default branch is origin/HEAD, then main, master or trunk with local before origin", async (t) => {

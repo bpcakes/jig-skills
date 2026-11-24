@@ -1,6 +1,6 @@
 # Scope and fingerprint capture
 
-Resolve scope with the bundled helper before any reviewer starts, forwarding only the scope flags and `--exclude-path` values the user supplied:
+Resolve scope with the bundled helper before any reviewer starts, forwarding only the scope flags the user supplied and the `--exclude-path` values the review will use:
 
 ```text
 node "<skill-root>/scripts/resolve-scope.mjs" --cwd <repository> [--scope <auto|working-tree|branch>] [--base <ref>] [--include-working-tree] [--exclude-path <path>]...
@@ -13,7 +13,7 @@ The helper applies these rules, and the fingerprint helper and adapters enforce 
 - `--base <ref>` selects branch scope, including with `--scope auto`; it is rejected with `--scope working-tree`.
 - No `--base` and no `--scope` selects working-tree scope.
 - Reject `--scope auto` combined with `--include-working-tree` before inspecting Git state. Inclusion requires an explicit `--scope branch` or `--base`, so checkout cleanliness never determines whether the same arguments are valid.
-- `--scope auto` selects working-tree scope when that scope has something to review, or when `HEAD` is unborn; otherwise it selects branch scope against the detected default branch. The helper takes the answer from a working-tree capture under the effective exclusions: staged, unstaged, and untracked changes count, including changes inside initialized submodules that Git's status is configured to hide, and changes under excluded paths do not. A checkout whose only local changes are excluded resolves to branch scope, where the committed-only clean-check still applies.
+- `--scope auto` selects working-tree scope when staged, unstaged, or untracked changes exist, or when `HEAD` is unborn; otherwise it selects branch scope against the detected default branch. Changes that Git's status lists count whether or not the review excludes them. Git's status can also be configured to hide changes inside initialized submodules: those count when a working-tree capture under the effective exclusions finds them, so a hidden change the review excludes does not select a working tree with nothing to review.
 - `--scope branch` without `--base` uses the detected default branch: `refs/remotes/origin/HEAD`, then `main`, `master`, or `trunk`, preferring a local branch over `origin/<name>`. For the checked-out branch alone that preference is reversed: `main` with unpushed commits is compared with `origin/main`, and with itself, which leaves nothing to review, only when `origin/main` does not exist. If none resolves, the helper asks for `--base` or `--scope working-tree`; relay that and stop.
 - A named base is resolved with `git rev-parse --verify --end-of-options <ref>^{commit}`. An invalid ref fails by name; no other base is substituted.
 - `--include-working-tree` outside branch scope is rejected. Keep the inclusion mode identical across all captures and providers.

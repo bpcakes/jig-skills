@@ -427,12 +427,20 @@ async function startSignalledAdapter(t) {
   // Adapter start-up, fingerprinting, context capture, and two Node processes
   // starting. The loop ends as soon as both files exist; the budget only bounds
   // a run that would never get there, with room for a loaded host.
+  // The capture file exists before the provider has finished writing it.
+  const written = () => {
+    try {
+      return JSON.parse(readFileSync(capturePath, "utf8"));
+    } catch {
+      return null;
+    }
+  };
   const deadlineAt = Date.now() + 20_000;
-  while (!existsSync(capturePath) || !existsSync(readyPath)) {
+  let capture;
+  while (!(capture = written()) || !existsSync(readyPath)) {
     if (Date.now() >= deadlineAt) throw new Error("fake Cursor did not receive the prompt");
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  const capture = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.equal(existsSync(capture.promptDirectory), true);
   assert.equal(path.dirname(capture.promptDirectory), adapterTemporary);
   // Resolves with what the provider saw when the adapter told it to stop.
