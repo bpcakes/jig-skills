@@ -164,8 +164,8 @@ export function launchesWorkflow(command, depth = 0, reviewersOnly = false) {
     }
     if (executable === 'node' || executable === 'nodejs') {
       const script = args.find(a => !a.startsWith('-')) ?? '';
-      return (reviewersOnly ? /^(claude-review|cursor-review)\.mjs$/
-        : /^(loop-options|review-options|claude-review|cursor-review|scope-fingerprint)\.mjs$/).test(path.basename(script));
+      return (reviewersOnly ? /^(claude-review|codex-review|cursor-review)\.mjs$/
+        : /^(loop-options|review-options|resolve-scope|claude-review|codex-review|cursor-review|scope-fingerprint)\.mjs$/).test(path.basename(script));
     }
     return false;
   });

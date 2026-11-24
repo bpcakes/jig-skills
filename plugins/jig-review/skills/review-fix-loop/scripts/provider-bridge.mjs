@@ -5,6 +5,7 @@ import { runClaudeReview } from "../../panel-review/scripts/claude-review.mjs";
 import { runCodexReview } from "../../panel-review/scripts/codex-review.mjs";
 import { runCursorReview } from "../../panel-review/scripts/cursor-review.mjs";
 import { installAdapterCancellation } from "../../panel-review/scripts/adapter-runtime.mjs";
+import { sweepStaleEvidence } from "../../panel-review/scripts/review-evidence.mjs";
 import { assertResult } from "./assignment-schema.mjs";
 import { reviewAdapterTimeout } from "./review-timeouts.mjs";
 
@@ -68,14 +69,27 @@ export function failureResult(error) {
   return { error: error.message, ...(permanent ? { retryable: false } : {}),
     ...(error.timedOut || error.parentSignal ? { execution: "uncertain" } : {}) };
 }
+// The assignment arrives in chunks that may end inside a character, so its
+// bytes are decoded once, together.
+export async function readInput(stream, maxBytes = 4 * 1024 * 1024) {
+  const chunks = [];
+  let bytes = 0;
+  for await (const chunk of stream) {
+    bytes += chunk.length;
+    if (bytes > maxBytes) throw new Error("Assignment input too large.");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, bytes).toString("utf8");
+}
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  sweepStaleEvidence();
   const cancellation = installAdapterCancellation();
+  // Nothing else interrupts the wait for the assignment.
+  const abortInput = () => process.stdin.destroy(cancellation.signal.reason);
+  cancellation.signal.addEventListener("abort", abortInput, { once: true });
   try {
-    let input = "";
-    for await (const chunk of process.stdin) {
-      input += chunk;
-      if (Buffer.byteLength(input) > 4 * 1024 * 1024) throw new Error("Assignment input too large.");
-    }
+    const input = await readInput(process.stdin);
+    cancellation.signal.removeEventListener("abort", abortInput);
     const assignment = JSON.parse(input);
     if (assignment.provider !== process.argv[2]) throw new Error("Bridge provider does not match assignment.");
     process.stdout.write(JSON.stringify(await reviewAssignment(assignment, { signal: cancellation.signal })) + "\n");

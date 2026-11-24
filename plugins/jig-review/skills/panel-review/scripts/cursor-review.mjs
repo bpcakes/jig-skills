@@ -6,9 +6,8 @@ import {
   realpathSync,
   writeFileSync,
 } from "node:fs";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ReviewEvidence } from "./review-evidence.mjs";
+import { ReviewEvidence, sweepStaleEvidence } from "./review-evidence.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 import { gitEnvironment } from "./git-environment.mjs";
 import { childEnvironment } from "./provider-launch.mjs";
@@ -166,12 +165,14 @@ async function runCursorReview(options, dependencies = {}) {
   assertScopeMatchesFingerprint(scope, initialFingerprint);
   const evidence = new ReviewEvidence({ deadlineAt, signal });
   const promptDirectory = evidence.directory;
-  const promptPath = path.join(promptDirectory, "review-prompt.md");
+  const promptPath = evidence.sourcePath("review-prompt.md");
 
   try {
     const context = await collectReviewContext(scope, { deadlineAt, signal, evidence });
     if (dependencies.parseReport) evidence.requireComplete(context);
     const prompt = buildReviewPrompt(scope, context, { taskBrief }) + (dependencies.promptSuffix ?? "");
+    // A cancelled run has already discarded its directory.
+    signal?.throwIfAborted();
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
     const cursorBin = dependencies.cursorBin ?? process.env.JIG_CURSOR_BIN ?? "cursor-agent";
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
@@ -200,6 +201,7 @@ async function runCursorReview(options, dependencies = {}) {
 }
 
 async function main() {
+  sweepStaleEvidence();
   const cancellation = installAdapterCancellation();
   try {
     const report = await runCursorReview(

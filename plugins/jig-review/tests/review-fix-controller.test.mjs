@@ -16,6 +16,9 @@ import { discoverValidation, validateContract } from "../skills/review-fix-loop/
 import { defaultValidationSandbox } from "../skills/review-fix-loop/scripts/validation-sandbox.mjs";
 
 const stub = fileURLToPath(new URL("./fixtures/loop-provider.mjs", import.meta.url));
+// Inside a Claude Code session the loop's commands add a note about an omitted
+// --host; tests of other behavior run them as a plain shell would.
+const { CLAUDECODE: _sessionMarker, ...plainEnvironment } = process.env;
 const cli = fileURLToPath(new URL("../skills/review-fix-loop/scripts/review-fix-loop.mjs", import.meta.url));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function isolatedAvailable(t) {
@@ -198,10 +201,36 @@ test("external repair adapter errors retain their cause after partial workspace 
   assert.deepEqual(readFileSync(path.join(f.root, ".git/index")), index);
 });
 
+test("CLI init notes an omitted host inside a Claude Code session, beside a created run only", t => {
+  const session = { ...plainEnvironment, CLAUDECODE: "1" };
+  const init = (f, env, ...args) => {
+    const contractFile = path.join(f.directory, "contract.json");
+    writeFileSync(contractFile, JSON.stringify(f.contract));
+    return spawnSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, ...args], { env, encoding: "utf8", timeout: 30000 });
+  };
+  const f = fixture(t), created = init(f, session, "--codex-launcher", "none");
+  assert.equal(created.status, 0, created.stderr);
+  assert.equal(created.stderr, "review-fix-loop: note: CLAUDECODE is set and --host was not given, so the Codex host is assumed. Pass --host claude if Claude Code is running this skill. This run keeps the Codex host's defaults.\n");
+  // The marker never chooses the host: a Codex session started from a Claude Code shell inherits it.
+  const run = loadRun(JSON.parse(created.stdout).run);
+  assert.equal(run.options.review.host, "codex"); assert.deepEqual(run.options.review.reviewers, ["codex"]);
+  // The host is fixed at init: that run is active, so no later init can supply
+  // the flag. A rejected init reports only its error, with or without the flag.
+  for (const args of [["--host", "claude", "--claude-launcher", "none"], ["--codex-launcher", "none"]]) {
+    const refused = init(f, session, ...args);
+    assert.equal(refused.status, 1); assert.equal(refused.stdout, "");
+    assert.equal(refused.stderr, `review-fix-loop: Resume the active run: ${run.directory}\n`);
+  }
+  for (const [env, ...args] of [[session, "--host", "claude", "--claude-launcher", "none"], [session, "--host", "codex", "--codex-launcher", "none"], [plainEnvironment, "--codex-launcher", "none"]]) {
+    const named = init(fixture(t), env, ...args);
+    assert.equal(named.status, 0, named.stderr); assert.equal(named.stderr, "", args.join(" "));
+  }
+});
+
 for (const mode of ["minimal", "balanced", "comprehensive"]) test(`CLI ${mode} repair policy survives native assignment boundaries and resume`, async t => {
   const f = fixture(t), contractFile = path.join(f.directory, "contract.json");
   writeFileSync(contractFile, JSON.stringify(f.contract));
-  const initial = JSON.parse(execFileSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--fix-mode", mode], { encoding: "utf8" }));
+  const initial = JSON.parse(execFileSync(process.execPath, [cli, "init", "--commit-mode", "none", "--cwd", f.root, "--contract", contractFile, "--fix-mode", mode], { env: plainEnvironment, encoding: "utf8" }));
   assert.equal(initial.fixMode, mode);
   const started = loadRun(initial.run), policy = started.fixPolicy;
   assert.ok(policy.length > 0);

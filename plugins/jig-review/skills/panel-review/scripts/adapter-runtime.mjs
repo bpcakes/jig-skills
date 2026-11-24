@@ -1,4 +1,5 @@
 import { captureFingerprint } from "./scope-fingerprint.mjs";
+import { installSignalCancellation } from "./signal-cancellation.mjs";
 import { realpathSync } from "node:fs";
 
 const MAX_FINAL_FINGERPRINT_RESERVE_MS = 5 * 60 * 1000;
@@ -51,33 +52,10 @@ function providerTimeout(deadlineAt, totalTimeoutMs) {
   return remaining;
 }
 
-function installAdapterCancellation() {
-  const controller = new AbortController();
-  let parentSignal = null;
-  const handlers = new Map();
-  for (const signal of ["SIGINT", "SIGTERM"]) {
-    const handler = () => {
-      if (parentSignal) return;
-      parentSignal = signal;
-      controller.abort(Object.assign(
-        new Error(`adapter received ${signal}`),
-        { cancelled: true, parentSignal: signal },
-      ));
-    };
-    handlers.set(signal, handler);
-    process.once(signal, handler);
-  }
-  return {
-    signal: controller.signal,
-    get parentSignal() {
-      return parentSignal;
-    },
-    dispose() {
-      for (const [signal, handler] of handlers) {
-        process.removeListener(signal, handler);
-      }
-    },
-  };
+// Signals cancel the adapter through the returned abort signal; the caller
+// re-raises the first one after the provider group has stopped.
+function installAdapterCancellation(options = {}) {
+  return installSignalCancellation({ subject: "adapter", ...options });
 }
 
 async function verifyScopeFingerprint(

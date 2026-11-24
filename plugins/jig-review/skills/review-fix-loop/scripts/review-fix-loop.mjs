@@ -19,7 +19,7 @@ import { groupRunning, killOwned, ownedAlive } from "./process-ownership.mjs";
 import { assertValidationSandbox, defaultValidationSandbox, validationSandboxCommand } from "./validation-sandbox.mjs";
 import { cancelJob, commandEnvironment, commandSucceeded, executableCommand, launchJob, recoverSettlement, resultEnvelope } from "./job-runtime.mjs";
 import { preflightExecutables, supportsAutoLauncher } from "../../panel-review/scripts/provider-launch.mjs";
-import { assertHostRuntime, codexEfforts, withDefaultLaunchers } from "../../panel-review/scripts/review-options.mjs";
+import { assertHostRuntime, codexEfforts, hostNote, withDefaultLaunchers } from "../../panel-review/scripts/review-options.mjs";
 import { assertResult, resultSchema, SEVERITY_RANK as severity } from "./assignment-schema.mjs";
 import { assertStorage, storageLimits, storedBytes } from "./storage-budget.mjs";
 import { readHandoff, validateHandoff, verifyHandoffScope } from "../../panel-review/scripts/review-handoff.mjs";
@@ -1899,7 +1899,14 @@ async function main(argv) {
   let run;
   if (action === "release") { process.stdout.write(`${JSON.stringify(await release(flags["--run"], flags["--cwd"]), null, 2)}\n`); return; }
   if (action === "prune") { process.stdout.write(`${JSON.stringify(await prune(flags["--run"]), null, 2)}\n`); return; }
-  if (action === "init") run = await createRun({ cwd: flags["--cwd"], contract: readJSON(flags["--contract"]), config: flags["--config"] ? readJSON(flags["--config"]) : {}, options: parseArgs(options), fromReview: flags["--from-review"] ? readHandoff(flags["--from-review"]) : null });
+  if (action === "init") {
+    run = await createRun({ cwd: flags["--cwd"], contract: readJSON(flags["--contract"]), config: flags["--config"] ? readJSON(flags["--config"]) : {}, options: parseArgs(options), fromReview: flags["--from-review"] ? readHandoff(flags["--from-review"]) : null });
+    // An omitted --host earns the option helpers' note here too, beside the
+    // status of a run that was created: a rejected init reports its error
+    // alone. The host is fixed at init, so passing it later cannot change this run.
+    const note = hostNote(options);
+    if (note) process.stderr.write(`review-fix-loop: ${note} This run keeps the Codex host's defaults.\n`);
+  }
   else if (action === "plan-validation") { process.stdout.write(`${JSON.stringify(discoverValidation(flags["--cwd"] ?? process.cwd()), null, 2)}\n`); return; }
   else {
     const directory = path.resolve(flags["--run"]);

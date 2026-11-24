@@ -2,7 +2,7 @@
 
 Accept these reviewer options:
 
-- `--host <codex|claude>` names the agent running the skill. Default: `codex`. The parent passes `--host claude` when it is Claude Code, which has no native Codex subagent: Codex then uses the `cli` runtime, and `--codex-runtime native` is rejected. See [claude-code-host.md](claude-code-host.md).
+- `--host <codex|claude>` names the agent running the skill. Default: `codex`. The parent passes `--host claude` when it is Claude Code, which has no native Codex subagent: Codex then uses the `cli` runtime, and `--codex-runtime native` is rejected. When `CLAUDECODE` is set and `--host` is omitted, the command still assumes Codex but prints a note on stderr: a Claude Code parent reruns it with `--host claude`, while a Codex session started from a Claude Code shell, which inherits that marker, can ignore it. See [claude-code-host.md](claude-code-host.md).
 - `--reviewers <claude,codex,cursor>` selects one or more reviewers. Default: `claude,codex`.
 - `--all-reviewers` selects Claude, Codex, and Cursor. It cannot be combined with `--reviewers`.
 - `--claude-model <model>` and `--claude-effort <low|medium|high|xhigh|max>` configure Claude. Default model: `opus`; effort is not forced by default.

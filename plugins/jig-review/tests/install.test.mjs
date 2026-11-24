@@ -8,6 +8,9 @@ import { fileURLToPath } from "node:url";
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
 const installer = path.join(repo, "scripts/install.sh");
+// Inside a Claude Code session the loop's commands add a note about an omitted
+// --host; tests of other behavior run them as a plain shell would.
+const { CLAUDECODE: _sessionMarker, ...plainEnvironment } = process.env;
 const herdrSkill = '---\nname: herdr\ndescription: Control the installed Herdr release.\n---\n\n# Herdr\nRequire a genuine managed pane before control.\n';
 function legacyReviewOnly(destination) {
   mkdirSync(destination, { recursive: true });
@@ -38,7 +41,7 @@ function assertInstalledParser(destination) {
   const result = JSON.parse(execFileSync(process.execPath, [
     path.join(destination, "review-fix-loop/scripts/loop-options.mjs"),
     "--all-reviewers", "--review-policy", "strict", "--max-rounds", "1", "--fix-mode", "comprehensive",
-  ], { encoding: "utf8" }));
+  ], { env: plainEnvironment, encoding: "utf8" }));
   assert.deepEqual(result.review.reviewers, ["claude", "codex", "cursor"]);
   assert.equal(result.reviewPolicy, "strict");
   assert.equal(result.maxRounds, 1);

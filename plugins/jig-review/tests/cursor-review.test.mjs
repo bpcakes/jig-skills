@@ -5,6 +5,7 @@ import { once } from "node:events";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -332,27 +333,56 @@ test("Cursor process is terminated at the adapter deadline and its prompt is rem
   assert.equal(existsSync(readFileSync(capturePath, "utf8")), false);
 });
 
-test("Cursor prompt is removed when the adapter receives SIGTERM", async (t) => {
+// Starts the adapter with a provider whose descendant ignores SIGTERM, and
+// returns once the provider holds the prompt directory and that descendant has
+// installed its handler: signalled any earlier, it would die like any process
+// and the escalation to SIGKILL would go untested. When the provider is told to
+// stop it records whether the prompt directory still exists, which orders the
+// adapter's cleanup against its termination of the provider without a timer.
+async function startSignalledAdapter(t) {
   const repo = makeRepository();
   const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-cursor-signal-"));
+  const capturePath = path.join(temporaryDirectory, "prompt-directory.txt");
   t.after(() => {
+    // The provider's descendant ignores SIGTERM and never exits by itself, so
+    // it is stopped here even when startup timed out before the test read the
+    // capture. This hook runs first, while the capture file still exists.
+    try {
+      const { providerPid, descendantPid } = JSON.parse(readFileSync(capturePath, "utf8"));
+      for (const pid of [providerPid, descendantPid]) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // Already gone, as the test expects.
+        }
+      }
+    } catch {
+      // The provider never recorded its processes.
+    }
     rmSync(repo, { recursive: true, force: true });
     rmSync(temporaryDirectory, { recursive: true, force: true });
   });
-  const capturePath = path.join(temporaryDirectory, "prompt-directory.txt");
+  const readyPath = path.join(temporaryDirectory, "descendant-ready");
+  const stoppedPath = path.join(temporaryDirectory, "provider-stopped");
+  // The adapter sweeps old evidence from its temporary directory when it
+  // starts; a test must not do that to the developer's.
+  const adapterTemporary = path.join(temporaryDirectory, "tmp");
+  mkdirSync(adapterTemporary);
   const fakeCursor = path.join(temporaryDirectory, "signal-cursor.mjs");
+  const descendant = "process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(process.env.FAKE_CURSOR_READY, ''); setInterval(() => {}, 1000);";
   writeFileSync(
     fakeCursor,
     [
       "#!/usr/bin/env node",
       'import { spawn } from "node:child_process";',
-      'import { writeFileSync } from "node:fs";',
+      'import { existsSync, writeFileSync } from "node:fs";',
       "const argv = process.argv.slice(2);",
       'const promptDirectory = argv[argv.indexOf("--add-dir") + 1];',
-      "const descendant = spawn(process.execPath, [",
-      "  '-e',",
-      "  \"process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);\",",
-      "], { stdio: 'inherit' });",
+      "process.on('SIGTERM', () => {",
+      "  writeFileSync(process.env.FAKE_CURSOR_STOPPED, existsSync(promptDirectory) ? 'prompt present' : 'prompt removed');",
+      "  process.exit(0);",
+      "});",
+      `const descendant = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'inherit' });`,
       "writeFileSync(process.env.FAKE_CURSOR_CAPTURE, JSON.stringify({",
       "  promptDirectory,",
       "  providerPid: process.pid,",
@@ -380,8 +410,11 @@ test("Cursor prompt is removed when the adapter receives SIGTERM", async (t) => 
   ], {
     env: {
       ...process.env,
+      TMPDIR: adapterTemporary,
       JIG_CURSOR_BIN: fakeCursor,
       FAKE_CURSOR_CAPTURE: capturePath,
+      FAKE_CURSOR_READY: readyPath,
+      FAKE_CURSOR_STOPPED: stoppedPath,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -390,18 +423,56 @@ test("Cursor prompt is removed when the adapter receives SIGTERM", async (t) => 
   });
 
   const deadlineAt = Date.now() + 3_000;
-  while (!existsSync(capturePath)) {
+  while (!existsSync(capturePath) || !existsSync(readyPath)) {
     if (Date.now() >= deadlineAt) throw new Error("fake Cursor did not receive the prompt");
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   const capture = JSON.parse(readFileSync(capturePath, "utf8"));
   assert.equal(existsSync(capture.promptDirectory), true);
+  assert.equal(path.dirname(capture.promptDirectory), adapterTemporary);
+  // Resolves with what the provider saw when the adapter told it to stop.
+  const providerStopped = async () => {
+    const stopDeadlineAt = Date.now() + 3_000;
+    while (!existsSync(stoppedPath) || !readFileSync(stoppedPath, "utf8")) {
+      if (Date.now() >= stopDeadlineAt) throw new Error("the provider was not told to stop");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    return readFileSync(stoppedPath, "utf8");
+  };
+  return { child, capture, providerStopped };
+}
+
+// SIGHUP is what closing the terminal sends.
+for (const name of ["SIGTERM", "SIGHUP"]) {
+  test(`${name} removes the Cursor prompt before the provider is stopped, then stops the provider`, async (t) => {
+    const { child, capture, providerStopped } = await startSignalledAdapter(t);
+
+    const exitPromise = once(child, "exit");
+    child.kill(name);
+    // A supervisor may kill the adapter while it waits for the provider, so the
+    // source has to be gone before that wait begins.
+    assert.equal(await providerStopped(), "prompt removed");
+    const [, signal] = await exitPromise;
+
+    assert.equal(signal, name, "the adapter ends by the signal it was sent");
+    assert.equal(existsSync(capture.promptDirectory), false);
+    await waitForProcessGone(capture.providerPid);
+    await waitForProcessGone(capture.descendantPid);
+  });
+}
+
+test("a repeated SIGTERM cannot cut short provider termination and cleanup", async (t) => {
+  const { child, capture, providerStopped } = await startSignalledAdapter(t);
 
   const exitPromise = once(child, "exit");
   child.kill("SIGTERM");
-  await exitPromise;
+  // The provider has been told to stop and its descendant ignores that, so the
+  // adapter is now waiting out the grace period before it sends SIGKILL.
+  await providerStopped();
+  child.kill("SIGTERM");
+  const [, signal] = await exitPromise;
 
-  assert.equal(existsSync(capture.promptDirectory), false);
+  assert.equal(signal, "SIGTERM", "the adapter still ends by the signal it was sent");
   await waitForProcessGone(capture.providerPid);
   await waitForProcessGone(capture.descendantPid);
 });

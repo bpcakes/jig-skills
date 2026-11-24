@@ -16,6 +16,7 @@ import test from "node:test";
 import {
   CREDENTIAL_VARIABLES,
   buildClaudeArgs,
+  claudeFailure,
   collectReviewContext,
   parseArgs,
   parseClaudeResult,
@@ -23,6 +24,7 @@ import {
   runClaudeReview,
 } from "../skills/panel-review/scripts/claude-review.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
+import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -500,7 +502,8 @@ test("adapter terminates a Claude process at its internal deadline", async (t) =
         expectedFingerprint,
         timeoutMs: 5_000,
       },
-      { claudeBin: fakeClaude, providerTimeout: () => 100 },
+      // Long enough for the provider process to start on a slow or loaded host.
+      { claudeBin: fakeClaude, providerTimeout: () => 1_500 },
     ),
     (error) => error.timedOut === true,
   );
@@ -606,4 +609,135 @@ test("a Jig launcher wraps the Claude command, forwards its arguments, and exclu
   for (const name of CREDENTIAL_VARIABLES) assert.equal(captured.env[name], `inherited-${name}`, `${name} is the environment's own account without a selection`);
   for (const name of cloudProviderVariables) assert.equal(captured.env[name], "1", `${name} remains the environment's own routing without a selection`);
   assert.equal(captured.env.ANTHROPIC_BASE_URL, "https://gateway.example.invalid", "a plain launch retains its gateway and credentials together");
+});
+
+// Like `claude -p --output-format json` on a failed request: the explanation is
+// the result object on stdout, the exit status is 1, and stderr holds a tag.
+function failingClaude(directory, { stdout, stderr = "" }) {
+  const file = path.join(directory, "failing-claude.sh");
+  writeFileSync(file, [
+    "#!/bin/sh",
+    "cat > /dev/null",
+    `printf '%s' '${stdout}'`,
+    ...(stderr ? [`printf '%s\\n' '${stderr}' >&2`] : []),
+    "exit 1",
+    "",
+  ].join("\n"));
+  chmodSync(file, 0o755);
+  return file;
+}
+
+test("a failed Claude run reports Claude's own error result", async (t) => {
+  const repo = makeRepository();
+  const scratch = mkdtempSync(path.join(os.tmpdir(), "jig-claude-failure-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
+  });
+  writeFileSync(path.join(repo, "example.js"), "export function value() {\n  return 2;\n}\n");
+  const options = { cwd: repo, scope: "working-tree", base: null, model: "opus", effort: null,
+    expectedFingerprint: await workingTreeFingerprint(repo), timeoutMs: 10_000 };
+
+  const limited = failingClaude(scratch, {
+    stdout: JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "Claude usage limit reached. It resets at 3pm." }),
+    stderr: "[claude-code:usage_limit] {}",
+  });
+  let failure;
+  await assert.rejects(runClaudeReview(options, { claudeBin: limited }), (error) => { failure = error; return true; });
+  assert.equal(failure.providerError, "Claude usage limit reached. It resets at 3pm.");
+  assert.equal(failure.message, "claude exited with 1: Claude usage limit reached. It resets at 3pm.\nclaude stderr: [claude-code:usage_limit] {}");
+  assert.equal(failure.exitCode, 1);
+  assert.equal(failureResult(failure).retryable, false, "Claude's own message classifies the failure");
+
+  // Without a structured result the exit status and stderr remain the diagnostic.
+  const opaque = failingClaude(scratch, { stdout: "usage limit reached, said the repository", stderr: "boom" });
+  await assert.rejects(runClaudeReview(options, { claudeBin: opaque }), (error) => { failure = error; return true; });
+  assert.equal(failure.providerError, undefined);
+  assert.match(failure.message, /exited with 1: boom$/);
+});
+
+test("only a structured error result replaces a command failure", () => {
+  const result = (payload) => Buffer.from(JSON.stringify(payload));
+  const exited = (stdout) => Object.assign(new Error("claude exited with 1"), { exitCode: 1, stderr: "", stdout });
+  const timedOut = Object.assign(new Error("claude timed out"), { timedOut: true, stdout: result({ is_error: true, result: "late" }) });
+  assert.equal(claudeFailure(timedOut), timedOut, "a deadline is not a provider verdict");
+  const completed = exited(result({ is_error: false, result: "A finished report" }));
+  assert.equal(claudeFailure(completed), completed, "a report from a failed process is not accepted");
+  const empty = exited(Buffer.alloc(0));
+  assert.equal(claudeFailure(empty), empty);
+  const reported = claudeFailure(exited(result({ is_error: true, result: "Invalid API key" })));
+  assert.equal(reported.providerError, "Invalid API key");
+  assert.equal(reported.message, "claude exited with 1: Invalid API key");
+});
+
+test("an error result without text leaves the command failure and its stderr to classify", () => {
+  const result = (payload) => Buffer.from(JSON.stringify(payload));
+  const exited = (stdout) => Object.assign(new Error("claude exited with 1: authentication failed"),
+    { exitCode: 1, stderr: "authentication failed", stdout });
+  // Each of these says an error happened and nothing about which.
+  for (const payload of [{ is_error: true }, { is_error: true, result: "" }, { is_error: true, result: "  ", errors: [] },
+    { is_error: true, result: null, errors: [42, ""] }]) {
+    const silent = exited(result(payload));
+    assert.equal(claudeFailure(silent), silent, JSON.stringify(payload));
+    assert.equal(failureResult(silent).retryable, false, "stderr still classifies the failure");
+    assert.throws(() => parseClaudeResult(result(payload)),
+      (error) => error.message === "Claude reported an error." && error.providerError === undefined);
+  }
+});
+
+test("a run's error log explains a failure and never classifies it", () => {
+  const result = (payload) => Buffer.from(JSON.stringify(payload));
+  const exited = (stderr, payload) => Object.assign(new Error(`claude exited with 1${stderr ? `: ${stderr}` : ""}`),
+    { exitCode: 1, stderr, stdout: result(payload) });
+  // A run that ended without a result lists a diagnostic and then whatever it
+  // logged, such as a file the reviewer could not open.
+  const errors = ["[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null",
+    "Error: ENOENT: no such file or directory, open '/repository/.claude/settings.json'", "error: unknown option '--frob'"];
+  const ended = { type: "result", subtype: "error_during_execution", is_error: true, errors };
+  const transient = claudeFailure(exited("", ended));
+  assert.equal(transient.message, `claude exited with 1: ${errors.join("\n")}`);
+  assert.equal(transient.providerError, "claude exited with 1");
+  assert.deepEqual(failureResult(transient), { error: transient.message }, "a logged ENOENT does not disable the reviewer");
+  // stderr classifies, as it does when the result says nothing.
+  const refused = claudeFailure(exited("authentication failed", ended));
+  assert.equal(refused.message, `claude exited with 1: ${errors.join("\n")}\nclaude stderr: authentication failed`);
+  assert.equal(failureResult(refused).retryable, false);
+  // Claude's own statement classifies; the log beside it is detail.
+  const stated = claudeFailure(exited("", { is_error: true, result: "Prompt is too long", errors }));
+  assert.equal(stated.providerError, "Prompt is too long");
+  assert.equal(stated.message, `claude exited with 1: Prompt is too long\n${errors.join("\n")}`);
+  assert.deepEqual(failureResult(stated), { error: stated.message });
+  const limited = claudeFailure(exited("", { is_error: true, result: "Claude usage limit reached.", errors }));
+  assert.equal(failureResult(limited).retryable, false);
+  // The same result from a run that exited normally.
+  let direct;
+  assert.throws(() => parseClaudeResult(result(ended)), (error) => { direct = error; return true; });
+  assert.equal(direct.message, errors.join("\n"));
+  assert.equal(direct.providerError, "");
+  assert.deepEqual(failureResult(direct), { error: direct.message });
+  // Stack traces do not turn the failure message into a transcript.
+  const long = claudeFailure(exited("", { is_error: true, errors: ["first", "x".repeat(64 * 1024)] }));
+  assert.equal(long.message, `claude exited with 1: first\n${"x".repeat(4 * 1024 - 6)}\n[error log truncated]`);
+});
+
+test("an inline review report carries the capture limitations", async (t) => {
+  const repo = makeRepository();
+  const scratch = mkdtempSync(path.join(os.tmpdir(), "jig-claude-inline-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
+  });
+  writeFileSync(path.join(repo, "example.js"), "export function value() {\n  return 2;\n}\n");
+  writeFileSync(path.join(repo, "logo.bin"), Buffer.from([1, 0, 2]));
+  const fakeClaude = path.join(scratch, "quiet-claude.sh");
+  // A reviewer that does not repeat the notice from its prompt.
+  writeFileSync(fakeClaude, "#!/bin/sh\ncat > /dev/null\nprintf '%s' '{\"result\":\"No actionable findings.\"}'\n");
+  chmodSync(fakeClaude, 0o755);
+  const report = await runClaudeReview({ cwd: repo, scope: "working-tree", base: null, model: "opus", effort: null,
+    expectedFingerprint: await workingTreeFingerprint(repo), timeoutMs: 10_000 }, { claudeBin: fakeClaude });
+  assert.equal(report, [
+    "No actionable findings.", "",
+    "Evidence coverage: limited; inline evidence was captured with omissions.",
+    "Capture limitations: Working tree has 1 omitted untracked item(s).",
+  ].join("\n"));
 });

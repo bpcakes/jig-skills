@@ -2,7 +2,7 @@
 
 Read after adjudicating a completed review, or when the user authorizes repairing its findings. This artifact lets the controller reuse discovery while retaining guarded repairs, validation, and fresh post-repair reviews.
 
-Keep the shared brief, its pinned hash, the final matching complete scope capture, and the frozen reviewer reports outside the checkout. Write `review.json` there with only `reviewers` and `findings`:
+Keep the shared brief, its pinned hash, the final matching complete scope capture, and the frozen reviewer reports in the run's private artifact directory outside the checkout; create one with `mktemp -d` if the run has none. Write `review.json` there with only `reviewers` and `findings`:
 
 ```json
 {
@@ -16,7 +16,7 @@ Keep the shared brief, its pinned hash, the final matching complete scope captur
 }
 ```
 
-Use actual selected reviewer outcomes and exact independent attribution; the example is not a provider selection rule. Status is `completed`, `failed`, `timed out`, or `not started`. Coverage is `complete`, `limited`, `reviewer-attested`, or `none`; non-completed reviewers use `none`. Keep omissions and uncertainty in `limitations`, and preserve each completed report verbatim in `report`. Import only final actionable findings, with repository-relative file paths, stable keys, and canonical severities. An empty findings list is valid. Do not invent a report, fingerprint, brief, source attribution, or completed review to fill the schema.
+Use actual selected reviewer outcomes and exact independent attribution; the example is not a provider selection rule. Status is `completed`, `failed`, `timed out`, or `not started`. Coverage is `complete`, `limited`, `reviewer-attested`, or `none`; non-completed reviewers use `none`. Take `limited` and `reviewer-attested` from the adapter's `Evidence coverage` summary; a completed adapter report without one reviewed complete inline evidence and is `complete`. Keep omissions and uncertainty in `limitations`, and preserve each completed report verbatim in `report`. Import only final actionable findings, with repository-relative file paths, stable keys, and canonical severities. An empty findings list is valid. Do not invent a report, fingerprint, brief, source attribution, or completed review to fill the schema.
 
 Include researched answers, their sources, and the resulting suggested correction in each affected finding's `evidence`. Preserve any remaining decision dependency and its effect on the recommendation. These are parent adjudication notes; do not rewrite the frozen reports or original brief, or add a reviewer to `sources` for parent research. When repairs are authorized, carry the established answers and remaining decision boundaries into the repair contract so triage can use the updated recommendations without repeating settled research.
 
@@ -25,7 +25,7 @@ For findings with prior repair or adjudication history, retain the evidence refe
 Create the handoff after the final scope and brief checks:
 
 ```sh
-node <panel-review>/scripts/review-handoff.mjs --capture /tmp/review/capture.json --brief /tmp/review/brief.json --brief-hash <pinned-hash> --review /tmp/review/review.json --output /tmp/review/handoff.json
+node <panel-review>/scripts/review-handoff.mjs --capture <artifacts>/capture.json --brief <artifacts>/brief.json --brief-hash <pinned-hash> --review <artifacts>/review.json --output <artifacts>/handoff.json
 ```
 
 The helper validates the evidence envelope, rechecks the reviewed scope, and creates a new file outside the checkout without overwriting an existing artifact. It requires at least one completed reviewer, rejects attributed findings from failed reviewers or excluded paths, and bounds the artifact to 4 MiB. Hashes detect accidental changes; they do not authenticate a model's claims or establish review quality. Artifact failure must be reported as unavailable handoff evidence; it does not authorize restarting reviewers or fabricating success.

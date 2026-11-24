@@ -4,7 +4,7 @@ Read this when the parent agent is Claude Code. It replaces only the Codex-speci
 
 ## Options
 
-Pass `--host claude` to `review-options.mjs`, to `loop-options.mjs`, and to the review-fix controller's `init`. Claude Code has no native Codex subagent, so Codex always reviews through the `codex-review.mjs` CLI adapter: `codex.runtime` is `cli`, and `--codex-runtime native` is rejected. That reviewer uses the model and reasoning effort from the selected Codex home's `config.toml` unless `--codex-model` or `--codex-effort` is given. Defaults on this host:
+Pass `--host claude` to `review-options.mjs`, to `loop-options.mjs`, and to the review-fix controller's `init`. If one of them prints a note that `--host` was not given, its result used the Codex host's defaults. Rerun `review-options.mjs` or `loop-options.mjs` with `--host claude`. A run that `init` created that way keeps those defaults, and another `init` is refused while that run is active: report it to the user instead of running it. Claude Code has no native Codex subagent, so Codex always reviews through the `codex-review.mjs` CLI adapter: `codex.runtime` is `cli`, and `--codex-runtime native` is rejected. That reviewer uses the model and reasoning effort from the selected Codex home's `config.toml` unless `--codex-model` or `--codex-effort` is given. Defaults on this host:
 
 - panel review: Claude plus Codex;
 - review-fix loop, balanced policy: two independent Claude reviews;
@@ -22,7 +22,7 @@ Prepare the brief, scope capture, and each selected adapter command exactly as [
 2. In a single response, start every selected adapter as its own Bash call with `run_in_background: true`, redirecting stdout to `<artifacts>/<provider>.report` and stderr to `<artifacts>/<provider>.log`. Background execution is required: a foreground Bash call is limited to 10 minutes, below the adapters' 28-minute deadline.
 3. Wait for each command's completion notification. Do not poll with `sleep`, rerun a command, start another reviewer, or edit the checkout while any reviewer runs.
 4. A reviewer completed only when its notification reports exit code 0 and its report file is non-empty. Otherwise mark it failed with a sanitized excerpt of its log that omits home paths. A command without a completion notification is still running; never start a duplicate.
-5. To cancel a reviewer, stop its background task. The adapter receives `SIGTERM`, terminates its provider process group, and removes its private files.
+5. To cancel a reviewer, stop its background task. The adapter receives `SIGTERM`, removes the repository evidence at once, terminates its provider process group, and removes the rest of its private files.
 
 Then collect, verify, and merge the reports as usual.
 

@@ -275,8 +275,23 @@ function parseArgs(argv, parseOptions = {}) {
   return resolved;
 }
 
+// CLAUDECODE marks a command started from a Claude Code session, where an
+// omitted --host most likely means the parent forgot it and is about to use the
+// Codex host's defaults. A Codex session started from such a shell inherits the
+// marker too, so it can neither choose the host nor be an error: it earns a
+// note beside the unchanged result.
+function hostNote(argv, environment = process.env) {
+  return environment.CLAUDECODE && !argv.includes("--host")
+    ? "note: CLAUDECODE is set and --host was not given, so the Codex host is assumed. Pass --host claude if Claude Code is running this skill."
+    : null;
+}
+
 function main() {
-  process.stdout.write(`${JSON.stringify(parseArgs(process.argv.slice(2)), null, 2)}\n`);
+  const argv = process.argv.slice(2);
+  const result = parseArgs(argv);
+  const note = hostNote(argv);
+  if (note) process.stderr.write(`review-options: ${note}\n`);
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 const isMain = process.argv[1]
@@ -300,6 +315,7 @@ export {
   codexEfforts,
   cursorModel,
   defaultLauncherCandidates,
+  hostNote,
   parseArgs,
   readOptionValue,
   resolveCursorOptions,
