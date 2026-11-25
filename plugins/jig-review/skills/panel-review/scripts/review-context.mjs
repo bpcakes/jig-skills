@@ -61,7 +61,9 @@ function signalProcessTree(child, signal) {
 
 // Reviewer instructions differ only in how the provider reads files: Claude Code
 // exposes read-only file tools, while a read-only Codex sandbox reads through
-// shell commands.
+// shell commands. Antigravity has one file-reading tool and, only in its
+// sandboxed mode, a terminal; any action it would have to ask approval for
+// makes its headless run discard the whole report.
 const TOOLING_INSTRUCTIONS = Object.freeze({
   claude: [
     "Do not invoke skills, other agents, external reviewers, or shell commands.",
@@ -71,8 +73,23 @@ const TOOLING_INSTRUCTIONS = Object.freeze({
     "Do not invoke skills, other agents, or external reviewers.",
     "Inspect files only with read-only shell commands such as cat, sed, or rg; the sandbox denies writes and network access.",
   ],
+  antigravity: [
+    "Do not invoke skills, other agents, subagents, external reviewers, web search, or shell commands.",
+    "Inspect files only with your file-reading tool.",
+  ],
+  "antigravity-sandbox": [
+    "Do not invoke skills, other agents, subagents, external reviewers, or web search.",
+    "Inspect files with your file-reading tool or read-only shell commands such as cat, grep, or git log; the sandbox denies network access and writes to the repository.",
+    "Never ask to run a command outside the sandbox: an action that needs approval discards your entire report.",
+  ],
 });
-const READ_INSTRUCTIONS = Object.freeze({ claude: "using Read", codex: "with read-only file commands" });
+const READ_INSTRUCTIONS = Object.freeze({
+  claude: "using Read",
+  codex: "with read-only file commands",
+  antigravity: "with your file-reading tool",
+  "antigravity-sandbox": "with your file-reading tool",
+});
+const MAX_FILE_LISTING_BYTES = 256 * 1024;
 
 function commandError(command, message, properties = {}) {
   return Object.assign(new Error(`${command} failed: ${message}`), properties);
@@ -154,7 +171,8 @@ function runCommand(command, args, options = {}) {
           new Error(
             `${command} exited with ${exitCode ?? `signal ${exitSignal}`}${detail ? `: ${detail}` : ""}`,
           ),
-          { exitCode, stderr: detail },
+          // A CLI may report its failure on stdout; callers can read it there.
+          { exitCode, stderr: detail, stdout: Buffer.concat(stdout) },
         ));
         return;
       }
@@ -287,6 +305,58 @@ async function runGit(cwd, args, options = {}) {
 async function gitText(cwd, args, options = {}) {
   const result = await runGit(cwd, args, options);
   return result.stdout.toString("utf8").trim();
+}
+
+// Whether a listed path can be read without leaving the repository. The index
+// still names files deleted from the working tree, and a symbolic link, or a
+// directory replaced by one, can lead anywhere. Git names a submodule or a
+// nested repository by its directory alone, which cannot be read as a file.
+function listedPathKind(root, entry) {
+  try {
+    const resolved = realpathSync(path.join(root, entry));
+    if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) return "outside";
+    return lstatSync(resolved).isDirectory() ? "directory" : "present";
+  } catch {
+    return "missing";
+  }
+}
+
+// A navigation aid for a reviewer that can read files but cannot list or search
+// them: tracked and unignored untracked paths that exist in the working tree,
+// one per line, relative to the repository root and without the excluded paths.
+// Paths that resolve outside the repository are counted, not listed: reading
+// one would leave the directory the reviewer was granted. A directory carries a
+// trailing slash; the files inside it are not listed.
+async function repositoryFileListing(scope, options = {}) {
+  const result = await runGit(scope.repoRoot, [
+    "ls-files", "-z", "--cached", "--others", "--exclude-standard",
+    ...gitPathspec(scope.excludePaths),
+  ], {
+    deadlineAt: options.deadlineAt,
+    signal: options.signal,
+    maxBuffer: MAX_FILE_LISTING_BYTES,
+    overflow: "truncate",
+  });
+  const entries = splitNull(result.stdout).map((entry) => entry.toString("utf8"));
+  // A truncated listing ends inside a path, unless the limit fell exactly on a
+  // terminator; drop that fragment.
+  if (result.truncated && result.stdout.at(-1) !== 0) entries.pop();
+  const root = realpathSync(scope.repoRoot);
+  const lines = [];
+  let outside = 0;
+  let directories = 0;
+  for (const entry of new Set(entries)) {
+    const kind = listedPathKind(root, entry);
+    if (kind === "outside") outside += 1;
+    if (kind !== "present" && kind !== "directory") continue;
+    if (kind === "directory") directories += 1;
+    const name = kind === "directory" ? `${entry.replace(/\/+$/, "")}/` : entry;
+    lines.push(/[\r\n]/.test(name) ? JSON.stringify(name) : name);
+  }
+  if (directories) lines.push("[A path ending in / is a directory, such as a submodule or a nested repository; its files are not listed.]");
+  if (outside) lines.push(`[${outside} symbolic link${outside === 1 ? "" : "s"} leading outside the repository not listed; do not read them.]`);
+  if (result.truncated) lines.push(`[Listing truncated at ${MAX_FILE_LISTING_BYTES} bytes; more files exist.]`);
+  return { text: `${lines.join("\n")}\n`, truncated: result.truncated };
 }
 
 async function readFileAtRevision(repoRoot, revision, filePath, options = {}) {
@@ -1102,6 +1172,7 @@ function buildReviewPrompt(scope, reviewContext, options = {}) {
         : "Inspect files with read-only commands. The outer execution boundary denies source writes, host access and direct network access.",
       `Retrieve approved orchestration evidence by running /usr/bin/python3 -B /opt/orchestration/communicate.py --json '<JSON request>'. Pass the request as one shell-quoted argument without a pipe or heredoc. Use task_id ${JSON.stringify(options.orchestrationTask)} and the assignment's artifact IDs for artifact_read; continue with next_offset until complete. This is the only authorized communication route.`,
     ] : TOOLING_INSTRUCTIONS[tooling]),
+    ...(options.toolingNotes ?? []),
     "Prioritize correctness, regressions, security, data loss, concurrency, performance cliffs, and missing tests.",
     "Exclude style preferences and speculation without a concrete failure mode.",
     "Distinguish substantive defects from supporting documentation or validation gaps and optional suggestions; classify by effects, not file extension or patch size.",
@@ -1147,7 +1218,9 @@ export {
   decodeUtf8Prefix,
   escapeMarkup,
   formatUntrackedFiles,
+  gitText,
   remainingTimeout,
+  repositoryFileListing,
   resolveScope,
   runCommand,
 };

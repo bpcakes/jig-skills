@@ -97,6 +97,7 @@ test("review exclusion contract reaches every reviewer and verification pass", (
   assert.match(reference("scope"), /Pass the same explicit exclusion arguments to every selected reviewer/);
   assert.match(reference("external-reviewers"), /claude-review\.mjs[^\n]+\[--exclude-path <path>\]\.{3}/);
   assert.match(reference("external-reviewers"), /cursor-review\.mjs[^\n]+\[--exclude-path <path>\]\.{3}/);
+  assert.match(reference("external-reviewers"), /antigravity-review\.mjs[^\n]+\[--exclude-path <path>\]\.{3}/);
   assert.match(runtime, /Rerun the fingerprint helper with the same concrete arguments and every explicit exclusion/);
   assert.match(reference("scope"), /branch cannot hide its own files|cannot hide itself|cannot hide/i);
 });

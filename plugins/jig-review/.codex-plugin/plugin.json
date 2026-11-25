@@ -1,7 +1,7 @@
 {
   "name": "jig-review",
-  "version": "0.20.0",
-  "description": "Configurable parallel reviews and review-fix loops that diagnose stalls and route recovery using Claude Code, Codex, and Cursor Agent.",
+  "version": "0.21.0",
+  "description": "Configurable parallel reviews and review-fix loops that diagnose stalls and route recovery using Claude Code, Codex, Cursor Agent, and Antigravity.",
   "author": {
     "name": "Jig"
   },
@@ -13,6 +13,7 @@
     "claude-code",
     "codex",
     "cursor-agent",
+    "antigravity",
     "grok",
     "codex-skills"
   ],
@@ -20,7 +21,7 @@
   "interface": {
     "displayName": "Jig Review",
     "shortDescription": "Multi-model reviews and fix loops with recovery",
-    "longDescription": "Skills for selecting isolated Claude Code, Codex, and Cursor Agent reviewers, running them in parallel over the same scope, and deduplicating their findings. Includes a persisted review-fix controller with task contracts, balanced causal repairs by default, minimal and comprehensive investigation modes, diagnosed recovery and explicit budgets, validation, recoverable file application, and fresh reviews over working-tree or branch scopes. Panel review defaults to Claude plus Codex; the review-fix loop defaults to the host's own provider: native Codex in Codex, independent Claude reviews in Claude Code.",
+    "longDescription": "Skills for selecting isolated Claude Code, Codex, Cursor Agent, and Antigravity reviewers, running them in parallel over the same scope, and deduplicating their findings. Includes a persisted review-fix controller with task contracts, balanced causal repairs by default, minimal and comprehensive investigation modes, diagnosed recovery and explicit budgets, validation, recoverable file application, and fresh reviews over working-tree or branch scopes. Panel review defaults to Claude plus Codex; the review-fix loop defaults to the host's own provider: native Codex in Codex, independent Claude reviews in Claude Code.",
     "developerName": "Jig",
     "category": "Coding",
     "capabilities": [

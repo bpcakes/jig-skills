@@ -21,7 +21,8 @@ test('workflow detection follows executable positions and shell wrappers', () =>
   for (const command of ['claude -p review', 'pwd && /usr/bin/claude -p review',
     'env TEST=1 command claude', 'exec cursor-agent --mode ask',
     'bash -lc "node .agents/skills/review-fix-loop/scripts/loop-options.mjs"',
-    'echo ok; codex review', '(claude)', 'pwd | cursor-agent']) {
+    'echo ok; codex review', '(claude)', 'pwd | cursor-agent', 'agy --print review',
+    'node scripts/antigravity-review.mjs --scope working-tree']) {
     assert.equal(launchesWorkflow(command), true, command);
   }
   for (const command of ['rg -n claude instructions.md', 'grep -n "codex exec" instructions.md',
@@ -48,13 +49,15 @@ test('availability and information checks do not launch reviewers', () => {
   for (const command of ['command -v claude cursor-agent', 'command -V codex', 'command -pv claude',
     'env TEST=1 command -p -v claude', 'bash -lc "command -v claude"',
     'claude --version', 'claude --help', 'claude -h', 'cursor-agent --version',
-    'cursor-agent --help', 'cursor-agent -h', 'exec claude --version']) {
+    'cursor-agent --help', 'cursor-agent -h', 'exec claude --version', 'agy --version', 'command -v agy',
+    'agy models']) {
     assert.equal(launchesWorkflow(command), false, command);
   }
   for (const command of ['command -v claude && claude -p review',
     'command -- claude -p review', 'command -p claude -p review',
     'claude -p "Explain --help"', 'cursor-agent --mode ask "Explain --version"',
-    'claude --version; codex exec review']) {
+    'claude --version; codex exec review', 'agy models; agy --print review', 'agy --print models',
+    'claude models']) {
     assert.equal(launchesWorkflow(command), true, command);
   }
 });

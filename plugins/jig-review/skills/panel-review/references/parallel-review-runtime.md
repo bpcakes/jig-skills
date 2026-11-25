@@ -15,7 +15,7 @@ On Claude Code, start the adapters as background commands as [claude-code-host.m
 Attempt one transient, context-free child for each selected reviewer before waiting for any result. Use the host option that disables conversation inheritance (`fork_context: false`, `fork_turns: "none"`, or its exact runtime equivalent). Continue spawn attempts after any earlier failure. Never run a selected reviewer in the parent context and never start a reviewer sequentially after showing it another report.
 
 - When Codex is selected with the `native` runtime, read [native-reviewer.md](native-reviewer.md) and construct its self-contained assignment.
-- When Claude or Cursor is selected, or Codex uses the `cli` runtime, read [external-reviewers.md](external-reviewers.md) for the selected provider and give its forwarder the resolved command and polling recipe.
+- When Claude, Cursor, or Antigravity is selected, or Codex uses the `cli` runtime, read [external-reviewers.md](external-reviewers.md) for the selected provider and give its forwarder the resolved command and polling recipe.
 
 ## Collect and merge
 
@@ -29,7 +29,7 @@ When an authorized review-fix loop owns an assignment, its [controller](../../re
 
 Before merging, stop on any child that returned `CAPTURE_INCOMPLETE` or `SCOPE_CHANGED`. Rerun the fingerprint helper with the same concrete arguments and every explicit exclusion, using the first capture's `baseOid` rather than a moving base name. Require complete matching captures; report incomplete evidence or drift instead of merging. Validate the pinned brief again. Then use [the output contract](review-output.md), including conditional staging advice and evidence-coverage limits.
 
-The parent may discard a demonstrably unsupported finding, but must not turn post-hoc validation into independent discovery. Source attribution comes only from matching root causes across the completed frozen reports. Use the exact matching subset in canonical order (`Claude`, `Codex`, `Cursor`); never use `Both` or `All`.
+The parent may discard a demonstrably unsupported finding, but must not turn post-hoc validation into independent discovery. Source attribution comes only from matching root causes across the completed frozen reports. Use the exact matching subset in canonical order (`Claude`, `Codex`, `Cursor`, `Antigravity`); never use `Both` or `All`.
 
 ## Failure handling
 

@@ -23,7 +23,7 @@ test("commit mode defaults to per-round and accepts an explicit non-committing m
 });
 test("strict policy, provider settings and exclusions compose", () => {
   const o = parseArgs(["--review-policy", "strict", "--all-reviewers", "--cursor-speed", "fast", "--exclude-path", ".agents/", "--max-rounds", "2"]);
-  assert.deepEqual(o.review.reviewers, ["claude", "codex", "cursor"]);
+  assert.deepEqual(o.review.reviewers, ["claude", "codex", "cursor", "antigravity"]);
   assert.deepEqual(o.review.excludePaths, [".agents"]); assert.equal(o.maxRounds, 2);
   assert.deepEqual(parseArgs(["--review-policy", "strict"]).review.reviewers, ["claude", "codex"]);
 });

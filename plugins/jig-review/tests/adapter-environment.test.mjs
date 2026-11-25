@@ -17,7 +17,7 @@ function repository(directory, name) {
   writeFileSync(path.join(root, "value.txt"), `${name}_WORKTREE\n`);
   return root;
 }
-for (const provider of ["claude", "cursor"]) for (const redirect of ["repository", "index", "pathspecs"]) {
+for (const provider of ["claude", "cursor", "antigravity"]) for (const redirect of ["repository", "index", "pathspecs"]) {
   test(`${provider} evidence and provider Git commands ignore inherited ${redirect} redirection`, async t => {
     const directory = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-adapter-env-")));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -32,10 +32,12 @@ for (const provider of ["claude", "cursor"]) for (const redirect of ["repository
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
 (async()=>{
 let input='';for await(const chunk of process.stdin)input+=chunk;
-const args=process.argv.slice(2), at=args.indexOf('--add-dir'), dir=at<0?null:args[at+1];
+// Antigravity starts in the private directory and reaches the repository only by its read rule.
+const args=process.argv.slice(2), at=args.indexOf('--add-dir'), st=args.indexOf('--settings'), dir=at>=0?args[at+1]:st>=0?process.cwd():null;
+const repo=st<0?[]:['-C',JSON.parse(args[st+1]).permissions.allow[0].slice('read_file('.length,-1)];
 const pages=dir?fs.readdirSync(dir).filter(n=>n.endsWith('.md')).map(n=>fs.readFileSync(path.join(dir,n),'utf8')).join('\\n'):'';
-fs.writeFileSync(process.env.JIG_TEST_CAPTURE,JSON.stringify({evidence:input+'\\n'+pages,root:cp.execFileSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'}).trim(),staged:cp.execFileSync('git',['diff','--cached'],{encoding:'utf8'}),gitDir:process.env.GIT_DIR,index:process.env.GIT_INDEX_FILE,configCount:process.env.GIT_CONFIG_COUNT,credential:process.env.ANTHROPIC_API_KEY}));
-console.log(${JSON.stringify(provider)}==='claude'?JSON.stringify({result:'No findings.'}):'No findings.');
+fs.writeFileSync(process.env.JIG_TEST_CAPTURE,JSON.stringify({evidence:input+'\\n'+pages,root:cp.execFileSync('git',[...repo,'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim(),staged:cp.execFileSync('git',[...repo,'diff','--cached'],{encoding:'utf8'}),gitDir:process.env.GIT_DIR,index:process.env.GIT_INDEX_FILE,configCount:process.env.GIT_CONFIG_COUNT,credential:process.env.ANTHROPIC_API_KEY}));
+console.log(${JSON.stringify({ claude: JSON.stringify({ result: 'No findings.' }), antigravity: JSON.stringify({ status: 'SUCCESS', response: 'No findings.' }) }[provider] ?? 'No findings.')});
 })();
 `);
     chmodSync(fake, 0o755);
@@ -71,7 +73,7 @@ test("evidence metadata must match every pinned scope field", () => {
   assert.throws(() => assertScopeMatchesFingerprint(scope, { ...pinned, complete: false, issues: ["unavailable submodule"] }), error => error.code === "CAPTURE_INCOMPLETE" && !error.scopeChanged && /unavailable submodule/.test(error.message));
 });
 
-for (const provider of ["claude", "cursor"]) test(`${provider} rejects an unavailable submodule as incomplete capture, without launching the provider`, async t => {
+for (const provider of ["claude", "cursor", "antigravity"]) test(`${provider} rejects an unavailable submodule as incomplete capture, without launching the provider`, async t => {
   const directory = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-partial-adapter-")));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const root = repository(directory, "requested");

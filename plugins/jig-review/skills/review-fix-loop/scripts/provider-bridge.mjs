@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runAntigravityReview } from "../../panel-review/scripts/antigravity-review.mjs";
 import { runClaudeReview } from "../../panel-review/scripts/claude-review.mjs";
 import { runCodexReview } from "../../panel-review/scripts/codex-review.mjs";
 import { runCursorReview } from "../../panel-review/scripts/cursor-review.mjs";
@@ -8,7 +10,7 @@ import { installAdapterCancellation } from "../../panel-review/scripts/adapter-r
 import { assertResult } from "./assignment-schema.mjs";
 import { reviewAdapterTimeout } from "./review-timeouts.mjs";
 
-const RUNNERS = Object.freeze({ claude: runClaudeReview, codex: runCodexReview, cursor: runCursorReview });
+const RUNNERS = Object.freeze({ claude: runClaudeReview, codex: runCodexReview, cursor: runCursorReview, antigravity: runAntigravityReview });
 // A report that is not valid JSON, or not a valid result, is a formatting
 // failure of one attempt, not a provider error: its text (which may quote
 // repository content) must not drive permanent-failure classification.
@@ -38,12 +40,20 @@ function acceptanceContract(assignment) {
   const example = JSON.stringify({ criterionId: criteria[0].id, status: "uncertain", evidence: "...", validationIds: [checks[0].id] });
   return `Include exactly one acceptance entry for each criterion (${ids(criteria)}), each with criterionId, status, evidence, and validationIds. validationIds is a non-empty array naming the required checks (${ids(checks)}) that bear on that criterion; it names checks, not receipts, so include it even when no receipt has been recorded yet. Example entry: ${example}`;
 }
+// The validation logs an assignment lets its reviewer open. They sit in the run
+// directory, which a linked worktree or an assignment copy keeps outside the
+// repository, so an adapter that grants reads path by path has to be given them.
+function validationLogs(assignment) {
+  const checks = Array.isArray(assignment.validationEvidence?.checks) ? assignment.validationEvidence.checks : [];
+  return checks.flatMap(check => [check?.receipt?.log, check?.receipt?.stderrLog])
+    .filter(file => typeof file === "string" && path.isAbsolute(file));
+}
 export async function reviewAssignment(assignment, dependencies = {}) {
-  if (!["review", "adjudicate"].includes(assignment?.role) || !Object.hasOwn(RUNNERS, assignment.provider)) throw new Error("Bridge requires a Claude, Codex, or Cursor review or adjudication assignment.");
+  if (!["review", "adjudicate"].includes(assignment?.role) || !Object.hasOwn(RUNNERS, assignment.provider)) throw new Error("Bridge requires a Claude, Codex, Cursor, or Antigravity review or adjudication assignment.");
   const scope = assignment.scope;
   // runtime is the controller's native-versus-CLI decision, not an adapter option.
   const { runtime, ...providerOptions } = assignment.providerOptions ?? {};
-  const options = { ...providerOptions, cwd: assignment.repository, scope: scope.scope,
+  const options = { ...providerOptions, readPaths: validationLogs(assignment), cwd: assignment.repository, scope: scope.scope,
     base: scope.baseOid, includeWorkingTree: scope.includeWorkingTree === true,
     excludePaths: scope.explicitExcludePaths ?? scope.excludePaths ?? [], expectedFingerprint: assignment.fingerprint,
     timeoutMs: reviewAdapterTimeout(assignment.timeoutMs) };

@@ -103,7 +103,7 @@ test("failed prerequisites stop before any provider executes", async t => {
   assert.equal(run.attempts.length, 0); assert.equal(run.validation[0].exitCode, 9);
 });
 
-for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves scope/options and parses the published wire contract`, async () => {
+for (const provider of ["claude", "cursor", "antigravity"]) test(`${provider} bridge preserves scope/options and parses the published wire contract`, async () => {
   const a = { id: "001-review", role: "review", provider, repository: "/repo", fingerprint: "pinned", providerOptions: { model: "test", effort: "high", speed: "fast", fileAccess: "restricted" },
     scope: { scope: "branch", baseOid: "base", includeWorkingTree: true, explicitExcludePaths: ["private"] },
     contract: { acceptanceCriteria: [{ id: "value" }], requiredValidation: [{ id: "unit" }] } };
@@ -125,6 +125,28 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bridge preserves 
     assert.equal(failure.providerError, "");
     assert.equal(failureResult(failure).retryable, undefined, report);
   }
+});
+
+test("the bridge names the assignment's validation logs for an adapter that grants reads by path", async () => {
+  const logs = ["/main/.git/worktrees/feature/jig/review-fix/run/assignments/002-validate/stdout.log",
+    "/main/.git/worktrees/feature/jig/review-fix/run/assignments/002-validate/stderr.json"];
+  const a = { id: "003-review", role: "review", provider: "antigravity", repository: "/worktrees/feature", fingerprint: "pinned",
+    providerOptions: { model: "gemini-4-neon-high", shell: "none", readPaths: ["/elsewhere"] },
+    scope: { scope: "working-tree", includeWorkingTree: false },
+    contract: { acceptanceCriteria: [{ id: "value" }], requiredValidation: [{ id: "unit" }] },
+    validationEvidence: { checks: [{ checkId: "unit", receipt: { log: logs[0], stderrLog: logs[1] } },
+      { checkId: "optional", receipt: null }, { checkId: "odd", receipt: { log: "relative.log" } }] } };
+  a.resultSchema = resultSchema(a);
+  const result = await reviewAssignment(a, { runner: async (options, dependencies) => {
+    assert.deepEqual(options.readPaths, logs);
+    return dependencies.parseReport(JSON.stringify(vote(a)));
+  } });
+  assert.deepEqual(result, vote(a));
+  // Without recorded receipts there is nothing to name.
+  await reviewAssignment({ ...a, validationEvidence: undefined }, { runner: async (options, dependencies) => {
+    assert.deepEqual(options.readPaths, []);
+    return dependencies.parseReport(JSON.stringify(vote(a)));
+  } });
 });
 
 test("bridge marks only recognized permanent errors non-retryable", () => {
@@ -164,7 +186,7 @@ test("codex bridge forwards launcher and model controls but not the controller's
     return dependencies.parseReport(JSON.stringify(vote(a)));
   } });
   assert.deepEqual(result, vote(a));
-  await assert.rejects(reviewAssignment({ ...a, provider: "gemini" }), /Claude, Codex, or Cursor/);
+  await assert.rejects(reviewAssignment({ ...a, provider: "gemini" }), /Claude, Codex, Cursor, or Antigravity/);
 });
 
 test("launcher-selected bundled bridges preflight the Jig executable instead of the provider CLI", async t => {
@@ -212,6 +234,13 @@ test("review workers inherit every credential their provider CLI honors and noth
   const claude = commandEnvironment({ role: "review", assignment: { provider: "claude" } }, inherited);
   for (const name of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "JIG_LAUNCHER_BIN"]) assert.equal(claude[name], inherited[name], name);
   assert.equal(claude.CODEX_API_KEY, undefined);
+  // An API key travels with the endpoint it belongs to, and default credentials with their quota project.
+  const google = { GEMINI_API_KEY: "gk", GOOGLE_GEMINI_BASE_URL: "https://gateway.example.invalid", AGY_ADC_AUTH: "true",
+    GOOGLE_CLOUD_QUOTA_PROJECT: "quota", GOOGLE_CLOUD_LOCATION: "global" };
+  const antigravity = commandEnvironment({ role: "review", assignment: { provider: "antigravity" } }, { ...inherited, ...google });
+  for (const [name, value] of Object.entries(google)) assert.equal(antigravity[name], value, name);
+  for (const name of ["SECRET_TOKEN", "ANTHROPIC_API_KEY", "CODEX_API_KEY", "CURSOR_API_KEY"]) assert.equal(antigravity[name], undefined, name);
+  assert.equal(commandEnvironment({ role: "review", assignment: { provider: "claude" } }, { ...inherited, ...google }).GEMINI_API_KEY, undefined);
   assert.equal(commandEnvironment({ role: "validate", assignment: {} }, inherited).CODEX_API_KEY, undefined, "validation never receives provider credentials");
 });
 
@@ -235,7 +264,7 @@ test("the CLI Codex runtime without a launcher preflights only the codex executa
 
 for (const [provider, executable, launcher] of [
   ["codex", "codex", false], ["codex", "codex", true],
-  ["claude", "claude", false], ["cursor", "cursor-agent", false],
+  ["claude", "claude", false], ["cursor", "cursor-agent", false], ["antigravity", "agy", false],
 ]) test(`${provider}${launcher ? " with Jig" : ""} preflight honors only forwarded executable overrides`, async t => {
   const f = fixture(t), variable = `JIG_${provider.toUpperCase()}_BIN`;
   const previous = { PATH: process.env.PATH, [variable]: process.env[variable], JIG_LAUNCHER_BIN: process.env.JIG_LAUNCHER_BIN };
@@ -320,12 +349,12 @@ process.stdout.write(JSON.stringify(${permanentFailure ? "{error:'authentication
   return [process.execPath, file];
 }
 
-test("external discovery jobs overlap and explicit three-provider coverage is required", async t => {
+test("external discovery jobs overlap and explicit all-provider coverage is required", async t => {
   const f = fixture(t), command = externalReviewer(f, { overlap: true });
-  const run = await finish(await f.start({ reviewers: ["claude", "codex", "cursor"].map(id => ({ id, command })) }, ["--all-reviewers"]));
+  const run = await finish(await f.start({ reviewers: ["claude", "codex", "cursor", "antigravity"].map(id => ({ id, command })) }, ["--all-reviewers"]));
   assert.equal(run.phase, "CONVERGED", JSON.stringify(run.outcome));
-  assert.deepEqual(status(run).providerCoverage.completed.sort(), ["claude", "codex", "cursor"]);
-  assert.equal(run.attempts.length, 3); assert.equal(run.reports.length, 3);
+  assert.deepEqual(status(run).providerCoverage.completed.sort(), ["antigravity", "claude", "codex", "cursor"]);
+  assert.equal(run.attempts.length, 4); assert.equal(run.reports.length, 4);
 });
 
 test("a known permanent provider failure is retained and never repeatedly dispatched", async t => {
@@ -390,10 +419,11 @@ for (const mutation of ["append", "overwrite", "delete", "chmod", "undeclared", 
   }
 });
 
-for (const provider of ["claude", "cursor"]) test(`${provider} bundled bridge executes a local CLI with the pinned fingerprint and structured result`, async t => {
+for (const provider of ["claude", "cursor", "antigravity"]) test(`${provider} bundled bridge executes a local CLI with the pinned fingerprint and structured result`, async t => {
   const f = fixture(t), run = await runUntilBoundary((await f.start()).directory);
   const a = { ...run.pending.assignment, provider, providerOptions: provider === "claude"
     ? { model: "opus", effort: "high", fileAccess: "restricted", configDir: null }
+    : provider === "antigravity" ? { model: "gemini-4-neon-high", shell: "none" }
     : { effort: "high", speed: "standard" } };
   a.resultSchema = resultSchema(a);
   const executable = path.join(f.root, ".git", "fake-cli.mjs");
@@ -401,14 +431,14 @@ for (const provider of ["claude", "cursor"]) test(`${provider} bundled bridge ex
 import fs from 'node:fs';
 let prompt='';
 if(${JSON.stringify(provider)}==='claude'){ for await(const chunk of process.stdin) prompt+=chunk; }
-else {const arg=process.argv.at(-1);const file=arg.match(/from (.+)\\. Follow/)[1];prompt=fs.readFileSync(file,'utf8');}
+else {const arg=process.argv.find(argument=>/from .+\\. Follow/.test(argument));const file=arg.match(/from (.+)\\. Follow/)[1];prompt=fs.readFileSync(file,'utf8');}
 const assignment=JSON.parse(prompt.split('\\n').findLast(line=>line.startsWith('{')));
 if(!assignment.instructions.includes('read-only')) throw new Error('Role omitted');
 const report=JSON.stringify({assignmentId:assignment.id,fingerprint:assignment.fingerprint,complete:true,findings:[],acceptance:[{criterionId:'value',status:'satisfied',evidence:'Checked source',validationIds:['unit']}]});
-process.stdout.write(${JSON.stringify(provider)}==='claude'?JSON.stringify({type:'result',result:report,is_error:false}):report);
+process.stdout.write({claude:JSON.stringify({type:'result',result:report,is_error:false}),antigravity:JSON.stringify({status:'SUCCESS',response:report})}[${JSON.stringify(provider)}]??report);
 `);
   chmodSync(executable, 0o755);
-  const result = await reviewAssignment(a, provider === "claude" ? { claudeBin: executable } : { cursorBin: executable });
+  const result = await reviewAssignment(a, { [`${provider}Bin`]: executable });
   assert.equal(result.assignmentId, a.id); assert.equal(result.fingerprint, a.fingerprint); assert.equal(result.complete, true);
   // Settle the controller's actual assignments independently of the bridge probe.
   assert.equal((await finish(run)).phase, "CONVERGED");
@@ -461,7 +491,7 @@ test("an explicitly selected unavailable provider fails before any review invoca
 test("a completed sibling frees a concurrency slot before the first reviewer finishes", async t => {
   const f = fixture(t), provider = path.join(f.root, ".git", "ordered-provider.mjs");
   writeFileSync(provider, `import fs from 'node:fs';let input='';for await(const chunk of process.stdin)input+=chunk;const a=JSON.parse(input);const dir=${JSON.stringify(path.join(f.root, ".git"))};fs.writeFileSync(dir+'/'+a.provider+'.started','yes');if(a.provider==='claude'){for(let n=0;!fs.existsSync(dir+'/cursor.started');n++){if(n>1000)throw new Error('Third reviewer waited for the first');await new Promise(r=>setTimeout(r,10));}}process.stdout.write(JSON.stringify({assignmentId:a.id,fingerprint:a.fingerprint,complete:true,findings:[],acceptance:[{criterionId:'value',status:'satisfied',evidence:'Checked',validationIds:['unit']}]}));`);
-  const run = await finish(await f.start({ reviewers: ["claude", "codex", "cursor"].map(id => ({ id, command: [process.execPath, provider] })) }, ["--all-reviewers"]));
+  const run = await finish(await f.start({ reviewers: ["claude", "codex", "cursor"].map(id => ({ id, command: [process.execPath, provider] })) }, ["--reviewers", "claude,codex,cursor"]));
   assert.equal(run.phase, "CONVERGED", JSON.stringify(run.outcome));
   assert.equal(run.reports[0].provider, "codex");
   assert.equal(run.attempts.length, 3);
