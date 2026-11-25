@@ -109,7 +109,9 @@ const localEnvironment = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "L
 // again when a launcher or explicit home selects a different account.
 // JIG_LAUNCHER_BIN names the Jig executable for launcher-selected homes.
 const providerEnvironment = { claude: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "JIG_LAUNCHER_BIN"],
-  codex: ["CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME", "JIG_LAUNCHER_BIN"], cursor: ["CURSOR_API_KEY"] };
+  codex: ["CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME", "JIG_LAUNCHER_BIN"], cursor: ["CURSOR_API_KEY"],
+  antigravity: ["GEMINI_API_KEY", "GOOGLE_GEMINI_BASE_URL", "AGY_ADC_AUTH", "AGY_ACCOUNT", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_QUOTA_PROJECT", "GOOGLE_CLOUD_LOCATION"] };
 export function commandEnvironment(request, inherited = process.env) {
   const names = new Set([...localEnvironment, ...(request.environmentFrom ?? []),
     ...(["review", "adjudicate"].includes(request.role) ? providerEnvironment[request.assignment.provider] ?? [] : [])]);

@@ -11,6 +11,7 @@ import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerp
 import { runClaudeReview } from "../skills/panel-review/scripts/claude-review.mjs";
 import { runCodexReview } from "../skills/panel-review/scripts/codex-review.mjs";
 import { runCursorReview } from "../skills/panel-review/scripts/cursor-review.mjs";
+import { runAntigravityReview } from "../skills/panel-review/scripts/antigravity-review.mjs";
 import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 
 function git(cwd, ...args) {
@@ -147,7 +148,7 @@ test("paged untracked capture still refuses evidence beyond its shared budget", 
     (error) => error.code === "INCOMPLETE_REVIEW_EVIDENCE");
 });
 
-for (const [provider, runner] of [["claude", runClaudeReview], ["codex", runCodexReview], ["cursor", runCursorReview]]) {
+for (const [provider, runner] of [["claude", runClaudeReview], ["codex", runCodexReview], ["cursor", runCursorReview], ["antigravity", runAntigravityReview]]) {
   test(`${provider} refuses incomplete structured evidence before invoking the provider`, async (t) => {
     const repo = repository(t);
     writeFileSync(path.join(repo, "base.txt"), "base\n");
@@ -321,7 +322,11 @@ test("evidence capture observes cancellation and deadlines", (t) => {
   assert.throws(() => expired.add("patch", "text"), (error) => error.timedOut === true);
 });
 
-for (const provider of ["claude", "cursor"]) {
+// Claude and Cursor are handed the evidence directory; Antigravity starts in it.
+const REPORT_FORMATS = { claude: report => JSON.stringify({ result: report }), cursor: report => report,
+  antigravity: report => JSON.stringify({ status: "SUCCESS", response: report }) };
+const EVIDENCE_RUNNERS = { claude: runClaudeReview, cursor: runCursorReview, antigravity: runAntigravityReview };
+for (const provider of ["claude", "cursor", "antigravity"]) {
   test(`${provider} adapter exposes evidence through read-only directory access and cleans it`, async (t) => {
     const repo = aggregateFixture(t);
     const helperDir = mkdtempSync(path.join(os.tmpdir(), "jig-evidence-provider-"));
@@ -332,26 +337,28 @@ for (const provider of ["claude", "cursor"]) {
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 const args = process.argv.slice(2);
-const dir = args[args.indexOf('--add-dir') + 1];
+const dir = args.includes('--add-dir') ? args[args.indexOf('--add-dir') + 1] : process.cwd();
 const manifest = JSON.parse(readFileSync(path.join(dir, 'manifest.json')));
 const pages = readdirSync(dir).filter(n => /^page-\\d+\\.json$/.test(n)).sort().map(n => JSON.parse(readFileSync(path.join(dir,n))));
 writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({args, dir, manifest, pages}));
 process.stdin.resume();
 const report = 'No findings.\\n<review-coverage>' + JSON.stringify({reviewed: pages.map(({id,receipt}) => ({id,receipt}))}) + '</review-coverage>';
-process.stdout.write(${JSON.stringify(provider)} === 'claude' ? JSON.stringify({result: report}) : report);
+process.stdout.write((${REPORT_FORMATS[provider]})(report));
 `);
     chmodSync(fake, 0o755);
     const initial = await captureFingerprint({ cwd: repo, scope: "working-tree" });
     const options = { cwd: repo, scope: "working-tree", model: "opus", effort: "high",
       expectedFingerprint: initial.fingerprint, timeoutMs: 10_000 };
-    const report = provider === "claude"
-      ? await runClaudeReview(options, { claudeBin: fake })
-      : await runCursorReview(options, { cursorBin: fake });
+    const report = await EVIDENCE_RUNNERS[provider](options, { [`${provider}Bin`]: fake });
     const captured = JSON.parse(readFileSync(capturePath));
     assert.ok(captured.pages.length > 1);
     if (provider === "claude") {
       assert.ok(captured.args.includes("--restricted"));
       assert.equal(captured.args[captured.args.indexOf("--tools") + 1], "Read,Glob,Grep");
+    } else if (provider === "antigravity") {
+      const { permissions } = JSON.parse(captured.args[captured.args.indexOf("--settings") + 1]);
+      assert.ok(permissions.deny.includes("write_file(*)") && permissions.deny.includes("command(*)"));
+      assert.equal(captured.args.includes("--sandbox"), false);
     } else {
       assert.equal(captured.args[captured.args.indexOf("--mode") + 1], "ask");
       assert.equal(captured.args[captured.args.indexOf("--sandbox") + 1], "enabled");
@@ -371,10 +378,10 @@ process.stdout.write(${JSON.stringify(provider)} === 'claude' ? JSON.stringify({
       writeFileSync(fake, `#!/usr/bin/env node
 import { writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
-writeFileSync(${JSON.stringify(captured)}, args[args.indexOf('--add-dir') + 1]);
+writeFileSync(${JSON.stringify(captured)}, args.includes('--add-dir') ? args[args.indexOf('--add-dir') + 1] : process.cwd());
 process.stdin.resume();
 ${failure === "provider error" ? "process.exit(1);" : failure === "scope mutation"
-    ? `writeFileSync(${JSON.stringify(path.join(repo, "mutation.txt"))}, 'changed'); process.stdout.write(${JSON.stringify(provider === "claude" ? '{"result":"stale report"}' : 'stale report')});`
+    ? `writeFileSync(${JSON.stringify(path.join(repo, "mutation.txt"))}, 'changed'); process.stdout.write(${JSON.stringify(REPORT_FORMATS[provider]("stale report"))});`
     : "setInterval(() => {}, 1000);"}
 `);
       chmodSync(fake, 0o755);
@@ -383,8 +390,9 @@ ${failure === "provider error" ? "process.exit(1);" : failure === "scope mutatio
       const options = { cwd: repo, scope: "working-tree", model: "opus", effort: "high",
         expectedFingerprint: initial.fingerprint, timeoutMs: 10_000 };
       const dependencies = {
-        claudeBin: fake, cursorBin: fake, signal: controller.signal,
-        ...(failure === "deadline" ? { providerTimeout: () => 300 } : {}),
+        [`${provider}Bin`]: fake, signal: controller.signal,
+        // Long enough for the provider to start and record its directory on a busy machine.
+        ...(failure === "deadline" ? { providerTimeout: () => 1_000 } : {}),
       };
       let timer;
       if (failure === "cancellation") {
@@ -393,8 +401,7 @@ ${failure === "provider error" ? "process.exit(1);" : failure === "scope mutatio
         }, 10);
         t.after(() => clearInterval(timer));
       }
-      await assert.rejects(provider === "claude"
-        ? runClaudeReview(options, dependencies) : runCursorReview(options, dependencies),
+      await assert.rejects(EVIDENCE_RUNNERS[provider](options, dependencies),
       (error) => failure === "deadline" ? error.timedOut === true
         : failure === "cancellation" ? error.cancelled === true
           : failure === "scope mutation" ? error.scopeChanged === true : error.exitCode === 1);

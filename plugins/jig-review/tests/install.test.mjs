@@ -39,7 +39,7 @@ function assertInstalledParser(destination) {
     path.join(destination, "review-fix-loop/scripts/loop-options.mjs"),
     "--all-reviewers", "--review-policy", "strict", "--max-rounds", "1", "--fix-mode", "comprehensive",
   ], { encoding: "utf8" }));
-  assert.deepEqual(result.review.reviewers, ["claude", "codex", "cursor"]);
+  assert.deepEqual(result.review.reviewers, ["claude", "codex", "cursor", "antigravity"]);
   assert.equal(result.reviewPolicy, "strict");
   assert.equal(result.maxRounds, 1);
   assert.equal(result.fixMode, "comprehensive");

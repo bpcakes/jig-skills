@@ -6,7 +6,7 @@
 
 Invoke this skill explicitly by name. Both hosts disable automatic invocation; a request for an adversarial review, first-principles analysis, or ablation tests does not select this workflow.
 
-The default reviewers are Claude Code and Codex. Cursor is optional. Review-only requests stop at the report. Ordinary review-and-fix requests route to [review-fix-loop](review-fix-loop.md) without another authorization question. Explicit “once” or “do not re-review” requests permit one repair phase after all reviewer reports are frozen.
+The default reviewers are Claude Code and Codex. Cursor and Antigravity are optional. Review-only requests stop at the report. Ordinary review-and-fix requests route to [review-fix-loop](review-fix-loop.md) without another authorization question. Explicit “once” or “do not re-review” requests permit one repair phase after all reviewer reports are frozen.
 
 Researching material open questions is part of every review. Reviewers and the parent inspect available evidence, incorporate the answers into findings and suggested fixes, and flag only the decisions or missing evidence that still need user input. The report explains what was checked and which recommendation depends on the answer. Research does not authorize applying fixes.
 
@@ -14,23 +14,26 @@ Researching material open questions is part of every review. Reviewers and the p
 
 Install `jig-review` using the marketplace instructions for [Codex](../README.md#install-with-codex) or [Claude Code](../README.md#install-with-claude-code). You need Node.js 22 or newer. External adapters support Linux, macOS, and Windows through WSL.
 
-Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries the selected account's `auth.json` and the model settings in its `config.toml`, with its instructions, skills, and MCP servers left out. These passes consume provider usage. A native Codex-only review in Codex does not need any external CLI; in Claude Code, every Codex pass needs the `codex` CLI. When compatible Jig is available, omitted Claude and Codex launchers default to `auto` (Codex uses the CLI runtime). Explicit `none` disables detection; a Claude config directory or explicit native Codex runtime preserves that choice. Native-only Codex effort also preserves native execution. With automatic launchers, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
+Each selected external reviewer needs its installed, authenticated CLI: `claude` for Claude Code, `cursor-agent` for Cursor, `agy` for Antigravity, and `codex` when Codex runs with `--codex-runtime cli`, which reviews from a private home that carries the selected account's `auth.json` and the model settings in its `config.toml`, with its instructions, skills, and MCP servers left out. These passes consume provider usage. A native Codex-only review in Codex does not need any external CLI; in Claude Code, every Codex pass needs the `codex` CLI. When compatible Jig is available, omitted Claude and Codex launchers default to `auto` (Codex uses the CLI runtime). Explicit `none` disables detection; a Claude config directory or explicit native Codex runtime preserves that choice. Native-only Codex effort also preserves native execution. With automatic launchers, [Jig](https://github.com/bpcakes/jig-sh) selects the home with the most remaining subscription headroom for each launch; it needs the `jig` executable from a release that includes `launch --auto`.
 
 Enter these prompts in Codex from the repository being reviewed. In Claude Code, use `/jig-review:panel-review` with the same options:
 
 | Task | Prompt |
 |---|---|
 | Review working changes with the defaults | `$jig-review:panel-review` |
-| Review with all three providers | `$jig-review:panel-review --all-reviewers` |
+| Review with all four providers | `$jig-review:panel-review --all-reviewers` |
 | Store final findings in Beads | `$jig-review:panel-review --log-to-beads` |
 | Use only native Codex | `$jig-review:panel-review --reviewers codex --codex-runtime native` |
 | Add Cursor | `$jig-review:panel-review --reviewers claude,codex,cursor` |
 | Use Codex and Cursor | `$jig-review:panel-review --reviewers codex,cursor` |
+| Add Antigravity | `$jig-review:panel-review --reviewers claude,codex,antigravity` |
 | Review a branch against a named base | `$jig-review:panel-review --base main` |
 | Review a branch together with local changes | `$jig-review:panel-review --base main --include-working-tree` |
 | Choose a Cursor model by ID | `$jig-review:panel-review --reviewers cursor --cursor-model sonnet-4-thinking` |
 | Choose Cursor effort | `$jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh` |
 | Enable Cursor fast mode | `$jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast` |
+| Choose an Antigravity model by ID | `$jig-review:panel-review --reviewers antigravity --antigravity-model gemini-4-neon-xhigh` |
+| Let Antigravity run sandboxed commands | `$jig-review:panel-review --reviewers codex,antigravity --antigravity-shell sandbox` |
 | Set native Codex effort | `$jig-review:panel-review --reviewers codex --codex-runtime native --codex-effort high` |
 | Select Astra explicitly | `$jig-review:panel-review --reviewers codex --codex-model gpt-6-astra --codex-effort high` |
 | Use a separate Claude profile | `$jig-review:panel-review --claude-config-dir ~/.claude-appleid` |
@@ -41,9 +44,9 @@ Enter these prompts in Codex from the repository being reviewed. In Claude Code,
 
 For a direct-copy install, replace `$jig-review:panel-review` with `$panel-review` in Codex or `/panel-review` in Claude Code. In Claude Code, the skill runs Codex only through its CLI adapter: `--codex-runtime native` is rejected, and `--codex-effort` uses the CLI range `minimal|low|medium|high|xhigh`.
 
-Native Codex model and effort inherit the host when omitted. Explicit overrides require host/account support; the parser accepting a value does not prove provider availability. Preserve Claude and Cursor selections independently. See the [evaluation guide](skill-evaluations.md) for controlled Astra trials and the distinction between requested and reported configuration.
+Native Codex model and effort inherit the host when omitted. Explicit overrides require host/account support; the parser accepting a value does not prove provider availability. Preserve Claude, Cursor, and Antigravity selections independently. See the [evaluation guide](skill-evaluations.md) for controlled Astra trials and the distinction between requested and reported configuration.
 
-`--all-reviewers` is shorthand for `--reviewers claude,codex,cursor`. Do not combine the two selection forms. Reviewer-specific controls still apply, for example:
+`--all-reviewers` is shorthand for `--reviewers claude,codex,cursor,antigravity`. Do not combine the two selection forms. Reviewer-specific controls still apply, for example:
 
 ```text
 $jig-review:panel-review --all-reviewers --cursor-effort xhigh --cursor-speed fast
@@ -100,7 +103,7 @@ Use `--claude-config-dir <absolute-path|~/path>` to select a Claude Code profile
 $jig-review:panel-review --reviewers claude,codex --claude-config-dir ~/.claude-appleid
 ```
 
-The adapter expands `~/`, then sets `CLAUDE_CONFIG_DIR` only for the spawned Claude process. Relative paths and `~other-user` forms are rejected. This option requires Claude in `--reviewers`; it does not affect Codex or Cursor. Claude Code uses that directory for its settings, session history, and plugins, as documented in the [Claude Code settings guide](https://code.claude.com/docs/en/settings).
+The adapter expands `~/`, then sets `CLAUDE_CONFIG_DIR` only for the spawned Claude process. Relative paths and `~other-user` forms are rejected. This option requires Claude in `--reviewers`; it does not affect Codex, Cursor, or Antigravity. Claude Code uses that directory for its settings, session history, and plugins, as documented in the [Claude Code settings guide](https://code.claude.com/docs/en/settings).
 
 When the review intentionally requires access elsewhere on the machine, request:
 
@@ -120,6 +123,18 @@ With the preset flags, Cursor defaults to `cursor-grok-4.6-high`. For example, t
 $jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh --cursor-speed fast
 ```
 
+Antigravity runs `agy --print` in a private temporary directory, never in the repository. Antigravity loads and runs the rules, hooks, MCP servers, and skills of whatever directory it works in, so the adapter gives it the repository only through a read rule: the reviewer can read the files, and nothing in the repository configures the session. For the same reason the review fails before it starts when your temporary directory (`TMPDIR`) is inside the repository. Writes, MCP tools, and URL tools are denied.
+
+By default the Antigravity reviewer cannot run commands. It reads files with its file tool and receives a listing of the repository's files, because that tool cannot list or search. `--antigravity-shell sandbox` adds commands such as `grep` and `git log`, confined by Antigravity's terminal sandbox, which blocks network access. The adapter also takes away the sandbox's own write access to tool caches such as `~/.cache`, so commands can write only to a scratch directory that is deleted after the review. On Linux that sandbox needs unprivileged user namespaces; keep the default where they are restricted.
+
+Use `agy models` to see the model IDs available to your account. Each ID includes its effort level. The default is `gemini-4-neon-high`:
+
+```text
+$jig-review:panel-review --reviewers codex,antigravity --antigravity-model gemini-4-neon-xhigh
+```
+
+Two limits apply to every Antigravity review. Your own global Antigravity customizations (rules, hooks, MCP servers, and skills in your home directory) still load, because the CLI has no option to turn them off for one run. Each review is also kept in your local Antigravity conversation history.
+
 ## Troubleshooting
 
 | Symptom | What to do |
@@ -133,6 +148,7 @@ $jig-review:panel-review --reviewers codex,cursor --cursor-effort xhigh --cursor
 | Evidence coverage is limited | Read the reported omissions or missing pages. Narrow the change set and rerun if fuller coverage is needed. |
 | Scope fingerprint changes | Finish other edits or background writers, then rerun the review over a stable scope. |
 | A model, effort, or speed is rejected | Choose a supported value explicitly. The skill does not silently substitute models, effort levels, or Cursor speed. |
+| Antigravity fails with “discarded its report because an action needed approval” | The reviewer tried something the read-only rules would have to ask about, such as reading outside the repository, and headless Antigravity then drops the whole report. Rerun the review; if it recurs with `--antigravity-shell sandbox`, use the default shell mode. |
 | Cursor still requests interactive workspace trust | Check that the installed `jig-review` includes the `--trust` adapter change; follow the [plugin update steps](../README.md#update-marketplace-plugins). |
 
 The [skill entrypoint](../plugins/jig-review/skills/panel-review/SKILL.md) defines routing and the overall workflow. The [reviewer controls](../plugins/jig-review/skills/panel-review/references/reviewer-options.md) and [report contract](../plugins/jig-review/skills/panel-review/references/review-output.md) have dedicated references. The [runtime reference](../plugins/jig-review/skills/panel-review/references/parallel-review-runtime.md) documents orchestration and evidence handling for maintainers.

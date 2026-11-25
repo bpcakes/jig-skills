@@ -123,25 +123,25 @@ for (const acceptance of ["satisfied", "uncertain"]) test(`default per-round pre
 
 function fakeCli(t, f, provider, slow = false) {
   const bin = path.join(f.root, ".git/bin"); mkdirSync(bin);
-  const cli = path.join(bin, provider === "claude" ? "claude" : "cursor-agent");
+  const cli = path.join(bin, { claude: "claude", antigravity: "agy" }[provider] ?? "cursor-agent");
   const module = path.join(bin, "fake-cli.mjs");
   writeFileSync(module, `#!${process.execPath}
 import fs from 'node:fs';
 let prompt='';
 if(${JSON.stringify(provider)}==='claude'){for await(const chunk of process.stdin)prompt+=chunk;}
-else {prompt=fs.readFileSync(process.argv.at(-1).match(/from (.+)\\. Follow/)[1],'utf8');}
+else {prompt=fs.readFileSync(process.argv.find(argument=>/from .+\\. Follow/.test(argument)).match(/from (.+)\\. Follow/)[1],'utf8');}
 const a=JSON.parse(prompt.split('\\n').findLast(line=>line.startsWith('{')));
 fs.writeFileSync(${JSON.stringify(path.join(f.root, ".git/bridge-input.json"))},JSON.stringify(a));
 ${slow ? "await new Promise(resolve=>setTimeout(resolve,60000));" : ""}
 const report=JSON.stringify({assignmentId:a.id,fingerprint:a.fingerprint,complete:true,findings:[],acceptance:[{criterionId:'value',status:'satisfied',evidence:'Export assertion and source inspected',validationIds:['unit']}]});
-process.stdout.write(${JSON.stringify(provider)}==='claude'?JSON.stringify({type:'result',result:report,is_error:false}):report);
+process.stdout.write({claude:JSON.stringify({type:'result',result:report,is_error:false}),antigravity:JSON.stringify({status:'SUCCESS',response:report})}[${JSON.stringify(provider)}]??report);
 `);
   chmodSync(module, 0o755); symlinkSync(module, cli);
   const prior = process.env.PATH; process.env.PATH = `${bin}${path.delimiter}${prior}`;
   t.after(() => { process.env.PATH = prior; });
 }
 
-for (const provider of ["claude", "cursor"]) for (const timeoutMs of [undefined, 20000]) {
+for (const provider of ["claude", "cursor", "antigravity"]) for (const timeoutMs of [undefined, 20000]) {
   test(`${provider} bundled worker preserves budget (${timeoutMs ?? "default"}) over a committed range`, async t => {
     const f = fixture(t); fakeCli(t, f, provider);
     let run = await f.start({ ...(timeoutMs ? { timeoutMs } : {}), reviewConcurrency: 1 }, ["--reviewers", provider]);

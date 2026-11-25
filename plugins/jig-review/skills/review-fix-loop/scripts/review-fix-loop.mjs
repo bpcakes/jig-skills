@@ -212,7 +212,7 @@ function assertLegacyAdmission(root, runsRoot) {
 // a configured native entry cannot silently drop a requested launcher, and a
 // configured CLI entry cannot admit a native-only effort. A Claude Code host has
 // no Codex subagent, so a native entry there would be a mislabeled Claude review.
-const BUNDLED_EXECUTABLES = Object.freeze({ claude: "claude", codex: "codex", cursor: "cursor-agent" });
+const BUNDLED_EXECUTABLES = Object.freeze({ claude: "claude", codex: "codex", cursor: "cursor-agent", antigravity: "agy" });
 function codexRuntime(provider, options) {
   const selected = options.review.codex ?? {};
   const runtime = provider.runtime ?? selected.runtime ?? "native";

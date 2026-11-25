@@ -138,10 +138,10 @@ Plugin: `jig-review` · [Browse files](plugins/jig-review)
 
 | Skill | Use it for | Default result |
 |---|---|---|
-| [panel-review](plugins/jig-review/skills/panel-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor is opt-in. | Combined findings |
+| [panel-review](plugins/jig-review/skills/panel-review/SKILL.md) | Runs independent reviews over the same Git changes and merges their findings. Claude plus Codex is the default; Cursor and Antigravity are opt-in. | Combined findings |
 | [review-fix-loop](plugins/jig-review/skills/review-fix-loop/SKILL.md) | Runs a persisted controller for ordinary review-and-fix requests, with a pinned task contract, one commit per repair round by default, local validation, and independent terminal reviews of the full fixed-base range. | Code changes and run record |
 
-Both skills run in Codex and Claude Code. In Codex, the Codex reviewer defaults to a native subagent; in Claude Code, every reviewer, including Codex, runs as an independent CLI process. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks. See [panel review setup](docs/panel-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
+Both skills run in Codex and Claude Code. In Codex, the Codex reviewer defaults to a native subagent; in Claude Code, every reviewer, including Codex, runs as an independent CLI process. External reviewers require authenticated CLIs and consume provider usage. Reviews report coverage limitations; Cursor workspace trust does not isolate project hooks, and Antigravity still loads the user's own global customizations. See [panel review setup](docs/panel-review.md) and [review-fix loop usage](docs/review-fix-loop.md).
 
 ## Installation
 
@@ -278,6 +278,7 @@ Start with an authenticated Codex or Claude Code installation. Marketplace insta
 | Codex CLI pass in panel review (`--codex-runtime cli`, and every Codex pass in Claude Code) | Installed, authenticated Codex CLI with file-based credentials (`auth.json`) in the selected home |
 | Account selection per launch (`--claude-launcher`, `--codex-launcher`) | [Jig](https://github.com/bpcakes/jig-sh) `jig` CLI from a release that includes `launch --auto` (newer than 0.8.0) |
 | Cursor pass in panel review | Installed, authenticated [Cursor Agent](https://cursor.com/) CLI |
+| Antigravity pass in panel review | Installed, authenticated [Antigravity](https://antigravity.google/) CLI (`agy`). The optional sandboxed shell needs unprivileged user namespaces on Linux. |
 
 Scanners generate investigation leads; the agent validates them against source and consumers. Project builds and tests require that project's own toolchain and dependencies. See individual skill documentation for scanner commands and constraints.
 

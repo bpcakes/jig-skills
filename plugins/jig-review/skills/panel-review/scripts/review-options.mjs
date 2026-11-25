@@ -6,7 +6,7 @@ import { normalizeClaudeConfigDir } from "./claude-config.mjs";
 import { normalizeLauncher, supportsAutoLauncher } from "./provider-launch.mjs";
 import { normalizeExcludePaths } from "./review-exclusions.mjs";
 
-const REVIEWER_ORDER = ["claude", "codex", "cursor"];
+const REVIEWER_ORDER = ["claude", "codex", "cursor", "antigravity"];
 const REVIEWERS = new Set(REVIEWER_ORDER);
 const CLAUDE_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const CLAUDE_FILE_ACCESS = new Set(["restricted", "host"]);
@@ -23,6 +23,10 @@ const CURSOR_MODELS = Object.freeze({
   xhigh: "cursor-grok-4.6-xhigh",
 });
 const CURSOR_SPEEDS = new Set(["standard", "fast"]);
+// Antigravity model IDs carry their effort level. The reviewer has no shell by
+// default; "sandbox" adds terminal commands confined by the Antigravity sandbox.
+const ANTIGRAVITY_DEFAULT_MODEL = "gemini-4-neon-high";
+const ANTIGRAVITY_SHELLS = new Set(["none", "sandbox"]);
 const REVIEW_VALUE_FLAGS = new Map([
   ["--host", "host"],
   ["--reviewers", "reviewers"],
@@ -38,6 +42,8 @@ const REVIEW_VALUE_FLAGS = new Map([
   ["--cursor-model", "cursorModel"],
   ["--cursor-effort", "cursorEffort"],
   ["--cursor-speed", "cursorSpeed"],
+  ["--antigravity-model", "antigravityModel"],
+  ["--antigravity-shell", "antigravityShell"],
   ["--exclude-path", "excludePaths"],
 ]);
 
@@ -74,18 +80,29 @@ function effort(flag, value, supported) {
   return normalized;
 }
 
+function modelId(flag, value) {
+  const id = nonblank(flag, value);
+  if (id.startsWith("-")) throw new Error(`${flag} requires a model ID, got "${id}".`);
+  return id;
+}
+
 function resolveCursorOptions({ model, effort: effortLevel, speed }, prefix) {
   if (model != null) {
     if (effortLevel != null || speed != null) {
       throw new Error(`${prefix}model cannot be combined with ${prefix}effort or ${prefix}speed.`);
     }
-    const id = nonblank(`${prefix}model`, model);
-    if (id.startsWith("-")) throw new Error(`${prefix}model requires a model ID, got "${id}".`);
-    return { effort: null, speed: null, model: id };
+    return { effort: null, speed: null, model: modelId(`${prefix}model`, model) };
   }
   const cursorEffort = effort(`${prefix}effort`, effortLevel ?? "high", new Set(Object.keys(CURSOR_MODELS)));
   const cursorSpeed = effort(`${prefix}speed`, speed ?? "standard", CURSOR_SPEEDS);
   return { effort: cursorEffort, speed: cursorSpeed, model: cursorModel(cursorEffort, cursorSpeed) };
+}
+
+function resolveAntigravityOptions({ model, shell }, prefix) {
+  return {
+    model: modelId(`${prefix}model`, model ?? ANTIGRAVITY_DEFAULT_MODEL),
+    shell: effort(`${prefix}shell`, shell ?? "none", ANTIGRAVITY_SHELLS),
+  };
 }
 
 function parseReviewers(value) {
@@ -96,7 +113,7 @@ function parseReviewers(value) {
   const selected = new Set();
   for (const reviewer of values) {
     if (!REVIEWERS.has(reviewer)) {
-      throw new Error(`Unknown reviewer "${reviewer}". Use claude, codex, or cursor.`);
+      throw new Error(`Unknown reviewer "${reviewer}". Use claude, codex, cursor, or antigravity.`);
     }
     if (selected.has(reviewer)) throw new Error(`Duplicate reviewer "${reviewer}".`);
     selected.add(reviewer);
@@ -188,6 +205,8 @@ function parseArgs(argv, parseOptions = {}) {
     cursorModel: null,
     cursorEffort: null,
     cursorSpeed: null,
+    antigravityModel: null,
+    antigravityShell: null,
     excludePaths: [],
   };
   const provided = new Set();
@@ -228,6 +247,7 @@ function parseArgs(argv, parseOptions = {}) {
     ],
     codex: ["--codex-model", "--codex-effort", "--codex-runtime", "--codex-launcher"],
     cursor: ["--cursor-model", "--cursor-effort", "--cursor-speed"],
+    antigravity: ["--antigravity-model", "--antigravity-shell"],
   };
   for (const [reviewer, configurationFlags] of Object.entries(reviewerFlags)) {
     if (selected.has(reviewer)) continue;
@@ -257,6 +277,9 @@ function parseArgs(argv, parseOptions = {}) {
   const cursor = selected.has("cursor")
     ? resolveCursorOptions({ model: raw.cursorModel, effort: raw.cursorEffort, speed: raw.cursorSpeed }, "--cursor-")
     : null;
+  const antigravity = selected.has("antigravity")
+    ? resolveAntigravityOptions({ model: raw.antigravityModel, shell: raw.antigravityShell }, "--antigravity-")
+    : null;
 
   const review = {
     ...(provided.has("--log-to-beads") ? { logToBeads: true } : {}),
@@ -265,6 +288,7 @@ function parseArgs(argv, parseOptions = {}) {
     claude,
     codex,
     cursor,
+    antigravity,
     excludePaths: normalizeExcludePaths(raw.excludePaths),
   };
   const resolved = parseOptions.deferLauncherDefaults ? review
@@ -292,6 +316,8 @@ if (isMain) {
 }
 
 export {
+  ANTIGRAVITY_DEFAULT_MODEL,
+  ANTIGRAVITY_SHELLS,
   CODEX_CLI_EFFORTS,
   CODEX_EFFORTS,
   CURSOR_MODELS,
@@ -302,6 +328,7 @@ export {
   defaultLauncherCandidates,
   parseArgs,
   readOptionValue,
+  resolveAntigravityOptions,
   resolveCursorOptions,
   reviewOptionTakesValue,
   withDefaultLaunchers,

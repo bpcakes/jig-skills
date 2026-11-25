@@ -153,9 +153,11 @@ export function launchesWorkflow(command, depth = 0, reviewersOnly = false) {
     const args = unwrappedCommandArgs(original);
     if (!args) return false;
     const executable = path.basename(args.shift() ?? '');
-    if (['claude', 'cursor-agent'].includes(executable)) {
+    if (['claude', 'cursor-agent', 'agy'].includes(executable)) {
       // Recognize plain CLI information queries, not flag-looking prompt data.
-      return !(args.length === 1 && ['--version', '--help', '-h'].includes(args[0]));
+      // agy takes its prompt as a flag value, so a lone `models` lists model IDs.
+      return !(args.length === 1 && (['--version', '--help', '-h'].includes(args[0])
+        || (executable === 'agy' && args[0] === 'models')));
     }
     if (executable === 'codex') return ['exec', 'e', 'review'].includes(codexSubcommand(args));
     if (['sh', 'bash', 'zsh', 'dash'].includes(executable)) {
@@ -164,8 +166,8 @@ export function launchesWorkflow(command, depth = 0, reviewersOnly = false) {
     }
     if (executable === 'node' || executable === 'nodejs') {
       const script = args.find(a => !a.startsWith('-')) ?? '';
-      return (reviewersOnly ? /^(claude-review|cursor-review)\.mjs$/
-        : /^(loop-options|review-options|claude-review|cursor-review|scope-fingerprint)\.mjs$/).test(path.basename(script));
+      return (reviewersOnly ? /^(claude-review|cursor-review|antigravity-review)\.mjs$/
+        : /^(loop-options|review-options|claude-review|cursor-review|antigravity-review|scope-fingerprint)\.mjs$/).test(path.basename(script));
     }
     return false;
   });

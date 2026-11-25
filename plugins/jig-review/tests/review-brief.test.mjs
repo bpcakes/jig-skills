@@ -9,6 +9,7 @@ import { parseArgs } from '../skills/panel-review/scripts/review-options.mjs';
 import { parseArgs as loopArgs } from '../skills/review-fix-loop/scripts/loop-options.mjs';
 import { runClaudeReview } from '../skills/panel-review/scripts/claude-review.mjs';
 import { runCursorReview } from '../skills/panel-review/scripts/cursor-review.mjs';
+import { runAntigravityReview } from '../skills/panel-review/scripts/antigravity-review.mjs';
 
 const brief = { goal: 'Expose cancellation', requirements: [{ id: 'R1', text: 'Queued jobs can be cancelled.', source: 'User request' }], constraints: ['Retain running-job behavior'], nonGoals: [], unknowns: ['Persistence requirements unavailable'] };
 test('native and external reviewers receive exactly the same pinned task context', t => {
@@ -34,7 +35,7 @@ test('Beads flag is opt-in, duplicate-safe, and cannot be silently lost by the c
   assert.throws(() => loopArgs(['--log-to-beads']), /panel-review parent/);
 });
 
-for (const run of [runClaudeReview, runCursorReview]) {
+for (const run of [runClaudeReview, runCursorReview, runAntigravityReview]) {
   test(`${run.name} refuses an unpinned brief before launching a provider`, async () => {
     await assert.rejects(run({ expectedFingerprint: 'a'.repeat(64), taskBrief: '/missing/brief.json' }), /must be supplied together/);
     await assert.rejects(run({ expectedFingerprint: 'a'.repeat(64), taskBriefHash: 'b'.repeat(64) }), /must be supplied together/);

@@ -97,7 +97,7 @@ function validateFindings(findings) {
     ) || !Object.hasOwn(priorities, finding.severity)
       || !['substantive defect', 'supporting obligation'].includes(finding.kind)
       || !Array.isArray(finding.sources) || !finding.sources.length
-      || finding.sources.some(source => !['Claude', 'Codex', 'Cursor'].includes(source))
+      || finding.sources.some(source => !['Claude', 'Codex', 'Cursor', 'Antigravity'].includes(source))
       || (finding.reuseIssueId != null && (typeof finding.reuseIssueId !== 'string' || !finding.reuseIssueId.trim()))) {
       throw new Error('Invalid final finding: causalKey, title, location, rootCause, impact, recommendation, evidence, severity, kind, and sources required.');
     }

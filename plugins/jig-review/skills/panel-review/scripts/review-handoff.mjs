@@ -8,6 +8,7 @@ import { reviewApplicability } from "./review-applicability.mjs";
 import { captureFingerprint } from "./scope-fingerprint.mjs";
 import { isExcludedPath, normalizeExcludePaths } from "./review-exclusions.mjs";
 
+const REVIEWER_NAMES = ["Claude", "Codex", "Cursor", "Antigravity"];
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const text = value => typeof value === "string" && value.trim().length > 0;
 const hex = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -39,14 +40,14 @@ export function validateHandoff(handoff) {
   fields(p.brief, ["hash", "brief"]);
   if (!hex(p.brief.hash)) fail("Invalid brief hash.");
   validateBrief(p.brief.brief);
-  if (!Array.isArray(p.reviewers) || !p.reviewers.length || p.reviewers.length > 3) fail("Reviewer outcomes are required.");
+  if (!Array.isArray(p.reviewers) || !p.reviewers.length || p.reviewers.length > REVIEWER_NAMES.length) fail("Reviewer outcomes are required.");
   const completed = new Set(), names = new Set();
   for (const r of p.reviewers) {
     fields(r, ["name", "status", "coverage", "limitations", "report", ...(handoff.version === 2 && r && Object.hasOwn(r, "identity") ? ["identity"] : [])]);
     if (r.identity !== undefined && (!r.identity || Array.isArray(r.identity) || typeof r.identity !== "object"
         || !Object.keys(r.identity).length || Object.entries(r.identity).some(([key, value]) =>
           !["model", "effort", "runtime", "toolVersion", "assignmentId"].includes(key) || !text(value)))) fail("Invalid reviewer identity.");
-    if (!["Claude", "Codex", "Cursor"].includes(r.name) || names.has(r.name)
+    if (!REVIEWER_NAMES.includes(r.name) || names.has(r.name)
         || !["completed", "failed", "timed out", "not started"].includes(r.status)
         || !["complete", "limited", "reviewer-attested", "none"].includes(r.coverage)
         || !Array.isArray(r.limitations) || !r.limitations.every(text) || typeof r.report !== "string") fail("Invalid reviewer outcome.");

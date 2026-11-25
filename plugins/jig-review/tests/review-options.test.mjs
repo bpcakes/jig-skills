@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  ANTIGRAVITY_DEFAULT_MODEL,
   CURSOR_MODELS,
   parseArgs as parseReviewArgs,
 } from "../skills/panel-review/scripts/review-options.mjs";
@@ -28,6 +29,7 @@ test("default reviewers remain Claude and Codex", () => {
     },
     codex: { model: null, effort: null, runtime: "native", launcher: "none" },
     cursor: null,
+    antigravity: null,
     excludePaths: [],
   });
 });
@@ -43,7 +45,7 @@ test("all-reviewers selects every provider in canonical order", () => {
     ]),
     {
       host: "codex",
-      reviewers: ["claude", "codex", "cursor"],
+      reviewers: ["claude", "codex", "cursor", "antigravity"],
       claude: {
         model: "opus",
         effort: null,
@@ -57,6 +59,7 @@ test("all-reviewers selects every provider in canonical order", () => {
         speed: "fast",
         model: "cursor-grok-4.6-xhigh-fast",
       },
+      antigravity: { model: "gemini-4-neon-high", shell: "none" },
       excludePaths: [],
     },
   );
@@ -98,6 +101,7 @@ test("reviewers and namespaced model settings are normalized", () => {
         speed: "fast",
         model: "cursor-grok-4.6-xhigh-fast",
       },
+      antigravity: null,
       excludePaths: [],
     },
   );
@@ -118,6 +122,7 @@ test("single-reviewer selection does not configure or require other CLIs", () =>
       speed: "standard",
       model: "cursor-grok-4.6-low",
     },
+    antigravity: null,
     excludePaths: [],
   });
 });
@@ -130,6 +135,31 @@ test("an explicit Cursor model selects the exact ID and excludes Grok preset fla
   assert.throws(() => parseArgs([...args, "--cursor-speed", "standard"]), /cannot be combined/);
   assert.throws(() => parseArgs(["--cursor-model", model]), /requires selecting cursor/);
   assert.throws(() => parseArgs(["--reviewers", "cursor", "--cursor-model", "  "]), /blank/);
+});
+
+test("Antigravity is opt-in, defaults to no shell, and passes a model ID through", () => {
+  assert.equal(parseArgs([]).antigravity, null);
+  assert.deepEqual(parseArgs(["--reviewers", "antigravity"]), {
+    host: "codex",
+    reviewers: ["antigravity"],
+    claude: null,
+    codex: null,
+    cursor: null,
+    antigravity: { model: ANTIGRAVITY_DEFAULT_MODEL, shell: "none" },
+    excludePaths: [],
+  });
+  assert.deepEqual(parseArgs(["--reviewers", "antigravity,claude"]).reviewers, ["claude", "antigravity"]);
+  const args = ["--reviewers", "antigravity", "--antigravity-model"];
+  assert.deepEqual(
+    parseArgs([...args, "claude-opus-5-5-high", "--antigravity-shell", "sandbox"]).antigravity,
+    { model: "claude-opus-5-5-high", shell: "sandbox" },
+  );
+  assert.throws(() => parseArgs([...args, "  "]), /blank/);
+  assert.throws(() => parseArgs(args), /Missing value/);
+  assert.throws(() => parseArgs(["--reviewers", "antigravity", "--antigravity-shell", "host"]), /Unsupported --antigravity-shell/);
+  assert.throws(() => parseArgs(["--antigravity-model", "gemini-4-neon-low"]), /requires selecting antigravity/);
+  assert.throws(() => parseArgs(["--antigravity-shell", "sandbox"]), /requires selecting antigravity/);
+  assert.throws(() => parseArgs(["--reviewers", "gemini"]), /Use claude, codex, cursor, or antigravity/);
 });
 
 test("review exclusions are repeatable, normalized, and deduplicated", () => {
@@ -269,6 +299,7 @@ test("CLI entrypoint works when the skill directory is reached through a symlink
       speed: "fast",
       model: "cursor-grok-4.6-medium-fast",
     },
+    antigravity: null,
     excludePaths: [],
   });
 });

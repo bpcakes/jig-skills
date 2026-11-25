@@ -19,4 +19,4 @@ The Codex child performs only the native review. Its self-contained prompt inclu
 - a requirement to ground findings in file and line references where possible; and
 - structured output containing severity, location, root cause, impact, and recommendation for each actionable finding, incorporating researched answers and their evidence; followed by questions still unresolved after investigation (what was checked, exact missing input, and affected conclusion or recommendation) and test gaps.
 
-Do not include Claude or Cursor output, suspected defects, or findings to confirm.
+Do not include Claude, Cursor, or Antigravity output, suspected defects, or findings to confirm.

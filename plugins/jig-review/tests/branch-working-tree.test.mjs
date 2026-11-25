@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { captureFingerprint, parseArgs as parseFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
 import { buildReviewPrompt, collectReviewContext, resolveScope } from "../skills/panel-review/scripts/review-context.mjs";
+import { parseArgs as parseAntigravity, runAntigravityReview } from "../skills/panel-review/scripts/antigravity-review.mjs";
 import { parseArgs as parseClaude, runClaudeReview } from "../skills/panel-review/scripts/claude-review.mjs";
 import { parseArgs as parseCursor, runCursorReview } from "../skills/panel-review/scripts/cursor-review.mjs";
 
@@ -42,7 +43,7 @@ function branchAndRepairs(options) {
 }
 
 test("combined branch scope is explicit and branch-only in every CLI", () => {
-  for (const parse of [parseFingerprint, parseClaude, parseCursor]) {
+  for (const parse of [parseFingerprint, parseClaude, parseCursor, parseAntigravity]) {
     const extra = parse === parseFingerprint ? [] : ["--expected-fingerprint", "a".repeat(64)];
     const args = ["--scope", "branch", "--base", "main", ...extra];
     assert.equal(parse(args).includeWorkingTree, false);
@@ -215,8 +216,8 @@ test("combined scope preserves coverage limitations", async (t) => {
   await assert.rejects(captureFingerprint({ ...options, base: "missing-base" }));
 });
 
-test("both adapters transport the combined scope and reject checkout drift", async (t) => {
-  for (const provider of ["claude", "cursor"]) {
+test("the adapters transport the combined scope and reject checkout drift", async (t) => {
+  for (const provider of ["claude", "cursor", "antigravity"]) {
     await t.test(provider, async (subtest) => {
       const options = repository(subtest);
       branchAndRepairs(options);
@@ -226,10 +227,14 @@ test("both adapters transport the combined scope and reject checkout drift", asy
       const binary = path.join(captureDir, "provider.mjs");
       const promptReader = provider === "claude"
         ? 'let prompt = ""; for await (const chunk of process.stdin) prompt += chunk;'
-        : 'const argv = process.argv.slice(2); const prompt = readFileSync(path.join(argv[argv.indexOf("--add-dir") + 1], "review-prompt.md"), "utf8");';
+        : provider === "antigravity"
+          ? 'const prompt = readFileSync(path.join(process.cwd(), "review-prompt.md"), "utf8");'
+          : 'const argv = process.argv.slice(2); const prompt = readFileSync(path.join(argv[argv.indexOf("--add-dir") + 1], "review-prompt.md"), "utf8");';
       const response = provider === "claude"
         ? 'process.stdout.write(JSON.stringify({result: "Transport complete"}));'
-        : 'process.stdout.write("Transport complete");';
+        : provider === "antigravity"
+          ? 'process.stdout.write(JSON.stringify({status: "SUCCESS", response: "Transport complete"}));'
+          : 'process.stdout.write("Transport complete");';
       const script = [
         "#!/usr/bin/env node",
         'import { readFileSync, writeFileSync } from "node:fs";',
@@ -242,10 +247,9 @@ test("both adapters transport the combined scope and reject checkout drift", asy
       const fingerprint = await captureFingerprint(options);
       const args = ["--cwd", options.cwd, "--scope", "branch", "--base", fingerprint.baseOid,
         "--include-working-tree", "--expected-fingerprint", fingerprint.fingerprint, "--timeout-ms", "10000"];
-      const parsed = (provider === "claude" ? parseClaude : parseCursor)(args);
-      const run = () => provider === "claude"
-        ? runClaudeReview(parsed, { claudeBin: binary })
-        : runCursorReview(parsed, { cursorBin: binary });
+      const parsed = { claude: parseClaude, cursor: parseCursor, antigravity: parseAntigravity }[provider](args);
+      const run = () => ({ claude: runClaudeReview, cursor: runCursorReview, antigravity: runAntigravityReview })[provider](
+        parsed, { [`${provider}Bin`]: binary });
       assert.equal(await run(), "Transport complete");
       const prompt = readFileSync(capture, "utf8");
       for (const evidence of ["COMMITTED-DEFECT", "OTHER-BRANCH-DEFECT", "STAGED-CORRECTION", "FINAL-CORRECTION", "UNTRACKED-REGRESSION-CASE"]) {

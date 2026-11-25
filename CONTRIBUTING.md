@@ -54,10 +54,10 @@ JIG_REVIEW_REQUIRE_BEADS=1 node --test plugins/jig-review/tests/beads-findings.t
 
 These tests create temporary trackers and need no authentication. They do not use the repository's tracker.
 
-The ordinary review suite skips authenticated CLI checks. To verify real Claude and Cursor evidence access, explicitly opt in:
+The ordinary review suite skips authenticated CLI checks. To verify real Claude, Cursor, Codex, and Antigravity evidence access, explicitly opt in:
 
 ```sh
-JIG_REVIEW_LIVE=claude,cursor,codex node --test plugins/jig-review/tests/review-evidence-live.test.mjs
+JIG_REVIEW_LIVE=claude,cursor,codex,antigravity node --test plugins/jig-review/tests/review-evidence-live.test.mjs
 ```
 
 These checks require authenticated CLIs and consume provider usage. Select only the providers you intend to test. See the [runtime reference](plugins/jig-review/skills/panel-review/references/parallel-review-runtime.md) for what they verify.
