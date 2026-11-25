@@ -171,7 +171,8 @@ function runCommand(command, args, options = {}) {
           new Error(
             `${command} exited with ${exitCode ?? `signal ${exitSignal}`}${detail ? `: ${detail}` : ""}`,
           ),
-          { exitCode, stderr: detail },
+          // A CLI may report its failure on stdout; callers can read it there.
+          { exitCode, stderr: detail, stdout: Buffer.concat(stdout) },
         ));
         return;
       }

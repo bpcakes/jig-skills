@@ -3,10 +3,13 @@
 import { readBrief } from "./review-brief.mjs";
 
 import {
+  accessSync,
+  constants,
   mkdirSync,
   readdirSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -129,11 +132,18 @@ function parseArgs(argv) {
   return { ...options, ...resolveAntigravityOptions(options, "--") };
 }
 
+// A setup that cannot isolate the session fails the same way on every attempt,
+// so it is reported as a stable configuration failure, not a transient one.
+function isolationError(message) {
+  const detail = `Antigravity isolation incomplete: ${message}`;
+  return Object.assign(new Error(detail), { providerError: detail });
+}
+
 // A permission rule names its target between parentheses and treats * as a
 // wildcard, so a path that contains rule syntax cannot be granted exactly.
 function rulePath(directory) {
   if (RULE_SYNTAX.test(directory)) {
-    throw new Error(`Antigravity permission rules cannot name the path ${JSON.stringify(directory)}; it contains rule syntax.`);
+    throw isolationError(`permission rules cannot name the path ${JSON.stringify(directory)}; it contains rule syntax.`);
   }
   return directory;
 }
@@ -180,10 +190,47 @@ function grantedReadPaths(paths, repoRoot) {
 function assertOutsideRepository(directory, repoRoot) {
   const [resolved, root] = [directory, repoRoot].map((entry) => realpathSync(entry));
   if (isWithin(resolved, root)) {
-    throw new Error(
+    throw isolationError(
       `The temporary directory ${JSON.stringify(path.dirname(directory))} is inside the reviewed repository, so Antigravity would load the repository's own configuration. Set TMPDIR outside the repository.`,
     );
   }
+}
+
+// The same holds for any other Git work tree around the private directory, such
+// as the main checkout of a reviewed linked worktree or a superproject: its
+// .agents configuration would configure the session.
+async function assertOutsideWorkTrees(directory, options) {
+  let toplevel = "";
+  try {
+    toplevel = await gitText(directory, ["rev-parse", "--show-toplevel"], options);
+  } catch (error) {
+    if (error.exitCode === 128) return;
+    throw error;
+  }
+  if (toplevel) {
+    throw isolationError(
+      `The temporary directory ${JSON.stringify(path.dirname(directory))} is inside the Git work tree ${JSON.stringify(toplevel)}, so Antigravity would load that checkout's configuration. Set TMPDIR outside every checkout.`,
+    );
+  }
+}
+
+// Capability preflight resolves a relative executable, and a relative PATH
+// entry, against the reviewed repository, where the other adapters run.
+// Antigravity starts in the private directory instead, so such a file is named
+// absolutely; anything else is left to the ordinary PATH search.
+function resolveExecutable(executable, repoRoot, environment = process.env) {
+  if (executable.includes("/")) return path.resolve(repoRoot, executable);
+  for (const directory of (environment.PATH ?? "/usr/bin:/bin").split(path.delimiter)) {
+    const candidate = path.resolve(repoRoot, directory, executable);
+    try {
+      accessSync(candidate, constants.X_OK);
+      if (!statSync(candidate).isFile()) continue;
+    } catch {
+      continue;
+    }
+    return path.isAbsolute(directory) ? executable : candidate;
+  }
+  return executable;
 }
 
 // Whatever the write rules say, the terminal sandbox lets commands write to
@@ -223,7 +270,9 @@ function buildAntigravitySettings(options, scope, {
     for (const names of sandboxWritableLocations(platform, home)) {
       const forms = withRealPaths(names);
       if (needed.some((directory) => forms.some((form) => isWithin(directory, form)))) continue;
-      deny.push(...names.map((name) => `write_file(${rulePath(name)})`));
+      // A rule matches the name it gives, so a location reached through a
+      // symbolic link is closed under its resolved name as well.
+      deny.push(...forms.map((name) => `write_file(${rulePath(name)})`));
     }
   } else {
     deny.push("command(*)");
@@ -333,6 +382,20 @@ function parseAntigravityResult(stdout) {
   return report;
 }
 
+// A CLI that exits with a failure status still prints its JSON result, whose
+// error names the cause; without it the failure would carry only the status.
+function reportedFailure(error) {
+  if (error.exitCode == null || !error.stdout?.length) return null;
+  try {
+    parseAntigravityResult(error.stdout);
+  } catch (reported) {
+    if (!reported.providerError) return null;
+    const providerError = [reported.providerError, error.stderr].filter(Boolean).join("\n");
+    return Object.assign(reported, { exitCode: error.exitCode, stderr: error.stderr, providerError });
+  }
+  return null;
+}
+
 async function runAntigravityReview(options, dependencies = {}) {
   assertSupportedAdapterPlatform();
   if (!options.expectedFingerprint) {
@@ -367,6 +430,7 @@ async function runAntigravityReview(options, dependencies = {}) {
     // Antigravity is given names the private directory the way the CLI sees it.
     const workspace = realpathSync(evidence.directory);
     assertOutsideRepository(workspace, scope.repoRoot);
+    await assertOutsideWorkTrees(workspace, { deadlineAt, signal });
     const promptPath = path.join(workspace, "review-prompt.md");
     const readPaths = grantedReadPaths(options.readPaths, scope.repoRoot);
     const settings = buildAntigravitySettings(options, scope, {
@@ -399,7 +463,10 @@ async function runAntigravityReview(options, dependencies = {}) {
       toolingNotes: toolingNotes(options, scope, workspace, listing, readPaths),
     }) + (dependencies.promptSuffix ?? "");
     writeFileSync(promptPath, prompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    const antigravityBin = dependencies.antigravityBin ?? process.env.JIG_ANTIGRAVITY_BIN ?? "agy";
+    const antigravityBin = resolveExecutable(
+      dependencies.antigravityBin ?? process.env.JIG_ANTIGRAVITY_BIN ?? "agy",
+      scope.repoRoot,
+    );
     const allocateProviderTimeout = dependencies.providerTimeout ?? providerTimeout;
     const result = await runCommand(
       antigravityBin,
@@ -424,7 +491,7 @@ async function runAntigravityReview(options, dependencies = {}) {
           { exitCode: error.exitCode, providerError: "authentication required" },
         );
       }
-      throw error;
+      throw reportedFailure(error) ?? error;
     });
     await verifyScopeFingerprint(
       options,

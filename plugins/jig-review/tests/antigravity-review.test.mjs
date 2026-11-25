@@ -29,6 +29,7 @@ import {
 import { repositoryFileListing, resolveScope } from "../skills/panel-review/scripts/review-context.mjs";
 import { parseArgs as parseReviewOptions } from "../skills/panel-review/scripts/review-options.mjs";
 import { captureFingerprint } from "../skills/panel-review/scripts/scope-fingerprint.mjs";
+import { failureResult } from "../skills/review-fix-loop/scripts/provider-bridge.mjs";
 
 const antigravityScript = fileURLToPath(new URL(
   "../skills/panel-review/scripts/antigravity-review.mjs",
@@ -714,4 +715,83 @@ test("Antigravity prompt is removed when the adapter receives SIGTERM", async (t
   assert.equal(existsSync(capture.promptDirectory), false);
   await waitForProcessGone(capture.providerPid);
   await waitForProcessGone(capture.descendantPid);
+});
+
+test("a tool-cache location reached through a symbolic link is closed under both names", (t) => {
+  const home = realpathSync(mkdtempSync(path.join(os.tmpdir(), "jig-antigravity-linked-home-")));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const target = path.join(home, "elsewhere-cache");
+  mkdirSync(target);
+  symlinkSync(target, path.join(home, ".cache"));
+  const { deny } = buildAntigravitySettings(
+    { shell: "sandbox" }, { repoRoot: "/work/repo" }, { evidenceDirectory: "/var/evidence", platform: "linux", home },
+  ).permissions;
+  assert.ok(deny.includes(`write_file(${path.join(home, ".cache")})`));
+  assert.ok(deny.includes(`write_file(${target})`));
+});
+
+test("setup that cannot isolate the session is a stable configuration failure", async (t) => {
+  assert.throws(
+    () => buildAntigravitySettings({ shell: "none" }, { repoRoot: "/work/re*po" }, { platform: "linux" }),
+    (error) => failureResult(error).retryable === false,
+  );
+  // Another checkout around the temporary directory would configure the session
+  // just as the reviewed repository would.
+  const outer = makeRepository();
+  const repo = makeRepository();
+  const captureDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-antigravity-capture-"));
+  t.after(() => {
+    for (const directory of [outer, repo, captureDirectory]) rmSync(directory, { recursive: true, force: true });
+  });
+  const scratch = path.join(outer, "scratch");
+  mkdirSync(scratch);
+  const capturePath = path.join(captureDirectory, "capture.json");
+  const fake = writeFakeAntigravity(captureDirectory);
+  const expectedFingerprint = await workingTreeFingerprint(repo);
+  setEnvironment(t, { FAKE_ANTIGRAVITY_CAPTURE: capturePath, TMPDIR: scratch });
+  await assert.rejects(
+    runAntigravityReview({ cwd: repo, scope: "working-tree", base: null, expectedFingerprint, timeoutMs: 5_000 },
+      { antigravityBin: fake }),
+    (error) => /inside the Git work tree/.test(error.message) && failureResult(error).retryable === false,
+  );
+  assert.equal(existsSync(capturePath), false, "provider must not launch inside another checkout");
+  assert.deepEqual(readdirSync(scratch), [], "the private directory is removed");
+});
+
+test("a relative executable names a file in the repository, as preflight resolves it", async (t) => {
+  const repo = makeRepository();
+  const captureDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-antigravity-capture-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(captureDirectory, { recursive: true, force: true });
+  });
+  writeFileSync(path.join(repo, ".gitignore"), "tools/\n");
+  mkdirSync(path.join(repo, "tools"));
+  writeFakeAntigravity(path.join(repo, "tools"), "agy");
+  setEnvironment(t, { FAKE_ANTIGRAVITY_CAPTURE: path.join(captureDirectory, "capture.json") });
+  const options = { cwd: repo, scope: "working-tree", base: null, expectedFingerprint: await workingTreeFingerprint(repo), timeoutMs: 5_000 };
+  assert.equal(await runAntigravityReview(options, { antigravityBin: "tools/agy" }), "No actionable findings from Antigravity.");
+  setEnvironment(t, { PATH: `tools${path.delimiter}${process.env.PATH}` });
+  assert.equal(await runAntigravityReview(options, { antigravityBin: "agy" }), "No actionable findings from Antigravity.");
+});
+
+test("a failing CLI's JSON error classifies the failure", async (t) => {
+  const repo = makeRepository();
+  const captureDirectory = mkdtempSync(path.join(os.tmpdir(), "jig-antigravity-capture-"));
+  t.after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(captureDirectory, { recursive: true, force: true });
+  });
+  const failing = path.join(captureDirectory, "failing-agy.mjs");
+  writeFileSync(failing, [
+    "#!/usr/bin/env node",
+    "process.stdout.write(JSON.stringify({ status: 'ERROR', error: 'quota exceeded for this account' }));",
+    "process.exitCode = 1;",
+    "",
+  ].join("\n"));
+  chmodSync(failing, 0o755);
+  await assert.rejects(runAntigravityReview({
+    cwd: repo, scope: "working-tree", base: null, expectedFingerprint: await workingTreeFingerprint(repo), timeoutMs: 5_000,
+  }, { antigravityBin: failing }), (error) => /reported "ERROR": quota exceeded/.test(error.message)
+    && error.exitCode === 1 && failureResult(error).retryable === false);
 });

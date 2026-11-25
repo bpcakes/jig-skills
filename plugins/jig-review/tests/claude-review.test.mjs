@@ -500,7 +500,8 @@ test("adapter terminates a Claude process at its internal deadline", async (t) =
         expectedFingerprint,
         timeoutMs: 5_000,
       },
-      { claudeBin: fakeClaude, providerTimeout: () => 100 },
+      // Long enough for the provider to start and record its PID on a busy machine.
+      { claudeBin: fakeClaude, providerTimeout: () => 1_000 },
     ),
     (error) => error.timedOut === true,
   );
